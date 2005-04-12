@@ -1,0 +1,5 @@
+#!/usr/bic/bin/python
+if __name__ == "__main__":
+    from varian.tools import DumpHeader
+    DumpHeader.cli()
+    
