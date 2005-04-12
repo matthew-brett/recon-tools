@@ -1,0 +1,3 @@
+#!/usr/bic/bin/python
+import recon.tools.ReconEpi
+recon.tools.ReconEpi.run()
