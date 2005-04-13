@@ -255,7 +255,7 @@ def run():
 
     phs_vol = zeros((zdim,ydim,xdim)).astype(Float32)
     tmp     = zeros((N_fe_true)).astype(Complex32)
-    blk_cor = zeros((tdim,zdim*N_pe_true,N_fe_true)).astype(Complex32)
+    blk_cor = zeros((tdim,zdim*N_pe_true,N_fe_true),Complex)
 
     time_rev = N_fe_true - 1 - arange(N_fe_true)
     frame = options.sfn - 1
@@ -306,7 +306,6 @@ def run():
         fname1 = "blk_mag_%d.4dfp.img" % (vol)
         dump_image(fname1,abs(reshape(blk,(nslice*N_pe,N_fe_true))),N_fe_true,N_pe,nslice,1,1,1,1,0,0)
 
-        phasecor_total = zeros((nslice*N_pe,N_fe_true)).astype(Complex32)
         if vol== 0 and options.phase_correct:  
             # Compute correction for Nyquist ghosts.
             # First and/or last block contains phase correction data.  Process it.
@@ -348,7 +347,7 @@ def run():
                         ii = line_index(slice,nslice,seg,nseg,pe_per_seg,pulse_sequence,n_nav_echo)
                         jj = line_index(slice,nslice,seg,nseg,N_pe_true/nseg,pulse_sequence,n_nav_echo)
                         for pe in range(N_pe/nseg):
-                            if pe == 0 and n_nav_echo > 0 and not options.linear_phase_corr:
+                            if pe == 0 and n_nav_echo > 0 and not options.linear_phase_corr and not options.ignore_nav:
                                 # The first line is a navigator echo, compute the difference  in 
                                 # phase (dphs) due to B0 inhomogeneities using navigator echo.
                                 dphs,nav_mag = compute_menon_navigator_correction(blk,tmp,slice,seg,pe,ii,nseg,N_pe,N_fe_true,bias,phs_correction,dork_data)
@@ -360,11 +359,11 @@ def run():
     #                                blk_cor[vol-1,pe-n_nav_echo+jj,:] = blk_cor[vol-1,pe+ii,:]
     #                            else:
     #                                print slice,seg,pe,pe-n_nav_echo+jj,pe+ii,shape(blk_cor) 
-                                    blk_cor[vol-1,pe-n_nav_echo+jj,:] = correct_phs_menon(blk,phs_correction,dphs,n_nav_echo,slice,N_pe,N_fe,pe,ii,tmp,bias,phasecor_total,time0,time1,te,nav_mag,phasecor_ftmag,options)
+                                    blk_cor[vol-1,pe-n_nav_echo+jj,:] = correct_phs_menon(blk,phs_correction,dphs,n_nav_echo,slice,N_pe,N_fe,pe,ii,tmp,bias,time0,time1,te,nav_mag,phasecor_ftmag,options)
 
             if options.debug:
                 dump_image("data_uncor.4dfp.img",abs(reshape(blk,(nslice*N_pe,N_fe_true))),N_fe_true,N_pe,nslice,1,1,1,1,0,0)
-                phs_test = zeros((N_pe,N_fe_true)).astype(Complex32)
+                phs_test = zeros((N_pe,N_fe_true),Complex)
                 f_phsdata = open("data_cor.4dfp.img","w")
                 for slice in range(nslice):
                     for seg in range(nseg):
