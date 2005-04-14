@@ -548,9 +548,6 @@ def reorder_slices(image,ksp_vol,ksp_image,slice_order,options,xdim_out,ydim_out
         image = MLab.fliplr(image)
     if options.flip_top_bottom:
         image = MLab.flipud(image)
-    if options.phase_cor_nav_file and options.phase_correct:
-        phasecor_total = reshape(phasecor_total,(zdim,N_pe,xdim))
-
 
     # Reorder the slices from inferior to superior.
     if nslice % 2:
@@ -564,8 +561,6 @@ def reorder_slices(image,ksp_vol,ksp_image,slice_order,options,xdim_out,ydim_out
             z = nslice-2*slice-1
         if options.lcksp:
             ksp_vol[vol,z,:,:] = ksp_image[slice,:,:].astype(Complex32)
-        if (options.phase_cor_nav_file and (vol ==1)):
-            f_phscor_nav.write((phasecor_total[z,:,:].astype(Float32)).byteswapped().tostring())
     else:
         if options.flip_slices:
             z = 2*(slice-midpoint) + 1
@@ -573,8 +568,6 @@ def reorder_slices(image,ksp_vol,ksp_image,slice_order,options,xdim_out,ydim_out
             z = nslice-2*(slice-midpoint)-2
         if options.lcksp:
             ksp_vol[vol,z,:,:] = ksp_image[slice,:,:].astype(Complex32)
-        if options.phase_cor_nav_file and options.phase_correct:
-            f_phscor_nav.write((phasecor_total[z,:,:].astype(Float32)).byteswapped().tostring())
     slice_order[z] = slice
     if options.field_map_file:
         img_vol.real[vol,z,:,:] = image
@@ -615,12 +608,12 @@ def unwrap_phase(phase,len,verbose):
 def detect_fid_format(filename,nframe,nseg,nslice,N_pe,N_fe,datasize,time_interp,phase_correct,pulse_sequence):
 #-----------------------------------------------------------------------------------
     """
-    #   Purpose:  Determine format of fid file from its length.
-    #    nframe: Number of frames specified in procpar file.
-    #    nslice: Number of slices.
-    #    N_pe: Number of phase encodes including navigator echoes.
-    #    N_fe: Number of frequency codes. 
-    #    datasize: Number of bytes per value.
+    Purpose:  Determine format of fid file from its length.
+    nframe: Number of frames specified in procpar file.
+    nslice: Number of slices.
+    N_pe: Number of phase encodes including navigator echoes.
+    N_fe: Number of frequency codes. 
+    datasize: Number of bytes per value.
     """
     MAIN_HDR= 32
     SUB_HDR= 28
@@ -823,19 +816,13 @@ class Recon_IO:
                 self.f_ksp_phs.close()
 
 
-#------------------------------------------------------------------------------------------
-def compute_linear_offset(phase_data,nslice,nseg,N_pe_seg,N_fe,N_nav,options,mode=0):
-#------------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------
+def compute_linear_offset(phase_data,nslice,nseg,N_pe_seg,N_fe,N_nav,options):
+#------------------------------------------------------------------------------------
     """
     The central pixel of each line drifts linearly with line number. This routine 
     uses the reference phase data to estimate the linear drift.
     """
-
-# mode: Sets method used.
-#       0: Do a two stage estimate for first two lines, then use odd-even differences to compute a 
-#          per-line offset.  Accumulate these to form final offsets.
-#       1: Used for refining estimate.
-
 
 #   First compute the slope of the phase difference between two adjacent lines.
     THRESH = 0.00 # Need for threshold eliminated by weighted least squares in linfit. 
@@ -862,21 +849,24 @@ def compute_linear_offset(phase_data,nslice,nseg,N_pe_seg,N_fe,N_nav,options,mod
         ddphi_phs_ref = zeros((nslice,nseg,N_pe_seg,N_fe),Float)
     for slice in range(nslice):
         for seg in range(nseg):
-            linem1[:] = inverse_fft(phase_data[slice,seg,0,:])
-            line[:] = inverse_fft(phase_data[slice,seg,1,:])
+            line0 = inverse_fft(phase_data[slice,seg,0,:])
+            line1 = inverse_fft(phase_data[slice,seg,1,:])
+            f0[slice,seg,0] = 0
+            line[:] = line1
             dphi_phs_sum[:] = 0.
             d_sum[:] = 0.
             for pe in range(N_pe_seg-1):
-                if pe == 0:
-                    linem2[:] = inverse_fft(phase_data[slice,seg,0,:])
-                    line[:] = inverse_fft(phase_data[slice,seg,1,:])
-                elif nseg == 1:
-                    linem2[:] = line[:]
+                if nseg == 1:
+                    linem2[:] = line
                     line[:] = inverse_fft(phase_data[slice,seg,pe+1,:])
-                else:
-                    linem2[:] = linem1[:]
-                    linem1[:] = line[:]
-                    line[:] = inverse_fft(phase_data[slice,seg,pe+1,:])
+                elif nseg == 2:
+                    if pe == 0:
+                        linem1[:] = line0
+                        line[:] = line1
+                    else:
+                        linem2[:] = linem1[:]
+                        linem1[:] = line[:]
+                        line[:] = inverse_fft(phase_data[slice,seg,pe+1,:])
 
                 ma = abs(line)
                 mb = abs(linem2)
@@ -884,11 +874,8 @@ def compute_linear_offset(phase_data,nslice,nseg,N_pe_seg,N_fe,N_nav,options,mod
                 msk = d > THRESH*d[argmax(d)]
                 d = d/sum(d)
                 nz = nonzero(msk)
-#               Take difference between the phase at points on adjacent lines.
-                dphi = msk*line*conjugate(linem2)/(d + (1 - msk)) # Subtract angles
-                dphi_phs[:] = arctan2(dphi.imag,dphi.real)
 
-                if pe == 0 and mode == 0:
+                if pe == 0:
                     # Get rough estimate of misalignment between first and second line.
                     offset_even = 0.
                     xcor = cross_correlate(abs(phase_data[slice,seg,0,:]),abs(phase_data[slice,seg,1,:]),1)
@@ -910,26 +897,19 @@ def compute_linear_offset(phase_data,nslice,nseg,N_pe_seg,N_fe,N_nav,options,mod
                     f0[slice,seg,0] = offset_even 
                     f0[slice,seg,1] = offset_odd  + f00
                 else:
-                    if mode == 0:
-                        (f00,intercept) = fit_line(take(ramps,nzd),take(dphi_phs[:],nzd),take(dmsk,nzd))
-                        if nseg == 2:
-                            f0[slice,seg,pe+1] =  f0[slice,seg,pe-1] - f00
-                        else:
-                            f0[slice,seg,pe+1] =  f0[slice,seg,pe] - f00
-                    elif mode == 1 and pe > 2:
-                        dphi_phs_sum = dphi_phs_sum + dphi_phs/float(N_pe_seg-3.)
-                        d_sum = d_sum + d/float(N_pe_seg-3.)
+#                   Take difference between the phase at points on adjacent lines.
+                    dphi = msk*line*conjugate(linem2)/(d + (1 - msk)) # Subtract angles
+                    dphi_phs[:] = arctan2(dphi.imag,dphi.real)
+                    (f00,intercept) = fit_line(take(ramps,nzd),take(dphi_phs[:],nzd),take(dmsk,nzd))
+                    if nseg == 2:
+                        f0[slice,seg,pe+1] =  f0[slice,seg,pe-1] - f00
+                    else:
+                        f0[slice,seg,pe+1] =  f0[slice,seg,pe] - f00
 
                 if options.debug:
                     dphi_phs_ref[slice,seg,pe+1,:] = dphi_phs[:]
                     ddphi_phs_ref[slice,seg,pe+1,:] = d_sum
 
-            if mode == 1:
-                (f00,intercept) = fit_line(take(ramps,nzd),take(dphi_phs_sum[:],nzd),take(dmsk,nzd))
-                f0[slice,seg,0] = 0.
-                for pe in range(N_pe_seg-1):
-                    f0[slice,seg,pe+1] =  f0[slice,seg,pe] - f00/2
-    
 #           Filter offset coefficients.
             f0[slice,seg,:] = filter_coefficient(f0[slice,seg,:],N_pe_seg,N_nav)
 
@@ -970,7 +950,7 @@ def compute_linear_phase_corr(ref_data,bias,nslice,nseg,N_pe_seg,N_fe,N_nav,opti
     phase_data_corr = reshape(phase_data_corr,(nslice,nseg,N_pe_seg,N_fe))
     mask = zeros((nslice,nseg,N_pe_seg,N_fe),Float)
     mask[:,:,:,N_fe/4:3*N_fe/4] = 1
-    f0_ref2 = compute_linear_offset(mask*phase_data_corr,nslice,nseg,N_pe_seg,N_fe,N_nav,options,0)
+    f0_ref2 = compute_linear_offset(mask*phase_data_corr,nslice,nseg,N_pe_seg,N_fe,N_nav,options)
     f0_ref = f0_ref + f0_ref2
 
 #   Compute the final correction terms excluding the navigator echo stuff.
@@ -988,7 +968,6 @@ def compute_linear_phase_corr(ref_data,bias,nslice,nseg,N_pe_seg,N_fe,N_nav,opti
 #   navigator echo and the dc line in the refrence data, the second line is the dc line in the
 #   reference data.
     if N_nav > 0:
-#        phi_ref_N[slice,seg,:] = phase_data_corr[slice,seg,0,:]/abs(phase_data_corr[slice,seg,0,:])
         phi_ref_dc[slice,seg,:] = phase_data_corr[slice,seg,N_nav,:]/abs(phase_data_corr[slice,seg,N_nav,:])
         dphi_ref_N_dc[slice,seg,:] = phase_data_corr[slice,seg,0,:]*conjugate(phase_data_corr[slice,seg,N_nav,:])/abs(phase_data_corr[slice,seg,N_nav,:]*phase_data_corr[slice,seg,0,:])
     dork_data = (phi_ref_dc,dphi_ref_N_dc)
@@ -1048,6 +1027,11 @@ def correct_phase_errors_linear(bk,bias,offset_corr,theta_corr,nslice,nseg,N_pe,
 
 #   lc_calc = 1 implies that returned array will include the navigator echos because scatter 
 #               correction is being calculated.
+    """
+    Correct for two phyical effects in the data: First, estimate the offset of the center
+    of the fid from the center of the line; Second, correct for the phase difference at
+    each line due to a constant phase evolution.
+    """
 
     N_pe_true = N_pe - nseg*N_nav
     if lc_calc:
@@ -1124,7 +1108,12 @@ def correct_phase_errors_linear(bk,bias,offset_corr,theta_corr,nslice,nseg,N_pe,
 def filter_coefficient(f0,N_pe_seg,N_nav):
 #----------------------------------------------
 #
-# Extract forward and reverse time readout directions for each segment.
+    """
+    Process the offset at each line in the reference scan.  This processing consists of
+    fitting a straight line to the offsets and then setting the offsets equal to the
+    value of the regression line.  There might be a better way.
+    """
+
     idx = arange(N_pe_seg-N_nav)
     idx_fit = arange((N_pe_seg-N_nav)/2)
     idx_out = arange((N_pe_seg-N_nav)/2)
@@ -1161,20 +1150,22 @@ def filter_coefficient(f0,N_pe_seg,N_nav):
 def compute_menon_phase_correction(blk,nslice,nseg,N_pe,N_fe_true,bias,nvol_r,options,n_nav_echo,petab,reorder_segments,reorder_dump_slices,pulse_sequence):
 #-----------------------------------------------------------------------
 
-#   Compute point-by-point phase correction copied from epi2fid.c
+    """
+    Compute point-by-point phase correction copied from epi2fid.c
+    This correction simply computes the phase of the reference data and subtracts
+    it from the data at eac frame.  epi2fid masks off the higher frequencies but that 
+    doesn't seem to be necessary so it was omitted.
+    """
 
     # Compute correction for Nyquist ghosts.
     # First and/or last block contains phase correction data.  Process it.
     N_pe_true = N_pe - nseg*n_nav_echo
-    correction = zeros((nslice*N_pe,N_fe_true)).astype(Float)
-    dork_data = zeros((nslice,nseg,2,N_fe_true)).astype(Float)
-    phasedat_phs = zeros((nslice*N_pe,N_fe_true)).astype(Float32)
-    phasedat_mag = zeros((nslice*N_pe,N_fe_true)).astype(Float32)
-    phasecor_ftmag = zeros((nslice*N_pe,N_fe_true)).astype(Float32)
-    phs_correction = zeros((nslice*N_pe,N_fe_true)).astype(Float32)
-    slopes = zeros((nslice,nseg)).astype(Float32)
-    phs_test = zeros((N_pe,N_fe_true)).astype(Complex32)
-    tmp     = zeros((N_fe_true)).astype(Complex32)
+    dork_data = zeros((nslice,nseg,2,N_fe_true),Complex)
+    phasecor_ftmag = zeros((nslice*N_pe,N_fe_true),Float)
+    phs_correction = zeros((nslice*N_pe,N_fe_true),Complex)
+    slopes = zeros((nslice,nseg),Float)
+    phs_test = zeros((N_pe,N_fe_true),Float)
+    tmp     = zeros((N_fe_true),Complex)
     if options.debug:
         dump_complex_image(blk,"phasedata",N_pe_true,N_fe_true,nseg,nslice,n_nav_echo,petab,reorder_segments,reorder_dump_slices,pulse_sequence,0,1)
     # Compute point-by-point phase correction
@@ -1182,60 +1173,40 @@ def compute_menon_phase_correction(blk,nslice,nseg,N_pe,N_fe_true,bias,nvol_r,op
         slice = pe/N_pe
         seg = ((pe - slice*N_pe)*nseg)/N_pe
         pep = pe - slice*N_pe - seg*N_pe/nseg
-        tmp[:] = (blk[pe,:] - bias[slice]).astype(Complex32)
+
+#       The Ravi phase correction.
+        tmp[:] = (blk[pe,:] - bias[slice])
         shift(tmp,0,N_fe_true/2)
         ft_blk = inverse_fft(tmp)
-        shift(ft_blk,0,N_fe_true/2)
-        msk = where(equal(ft_blk.real,0.),1.,0.)
-        phs = (1.-msk)*arctan(ft_blk.imag/(ft_blk.real+msk))
-        phasecor_ftmag[pe,:] = abs(ft_blk).astype(Float32)
-        phasedat_mag[pe,:] = abs(blk[pe,:]).astype(Float32)
+        phasecor_ftmag[pe,:] = abs(ft_blk)
+        msk = where(equal(phasecor_ftmag[pe,:],0.),1.,0.)
+        phs_correction[pe,:] = (1.-msk)*ft_blk/(abs(ft_blk)+msk)
 
-        # Create mask for threshold of MAG_THRESH for magnitudes.
-        phasecor_ftmag_abs = abs(phasecor_ftmag[pe,:])
-        mag_thresh = .2*phasecor_ftmag_abs.flat[argmax(phasecor_ftmag_abs.flat)]
-        mag_thresh = MAG_THRESH
-        mag_msk = where(phasecor_ftmag_abs>mag_thresh,1.,0.)
-
-        # Convert to 4 quadrant arctan and set cor to zero for low magnitude voxels.
-        pos_msk = where(phs>0,1.,0.)
-        msk1 = pos_msk*where(ft_blk.imag<0,pi,0.)   # Re > 0, Im < 0
-        msk2 = (1-pos_msk)*where(ft_blk.imag<0,2.*pi,pi) # Re < 0, Im < 0
-        phs = mag_msk*(phs + msk1 + msk2)
-        phs_correction[pe,:] = phs[:].astype(Float32)
         if pep == 0:
-            dork_data[slice,seg,0,:] = phs
-        elif pe == 1:
-            dork_data[slice,seg,1,:] = phs
+            dork_data[slice,seg,0,:] = phs_correction[pe,:]
+        elif pep == 1:
+            dork_data[slice,seg,1,:] = phs_correction[pe,:]
+    phs_correction = conjugate(phs_correction)
 
     if options.debug:
-        dump_image("phsdata_cor.4dfp.img",phasedat_mag,N_fe_true,N_pe,nslice,1,1,1,1,reorder_dump_slices,0)
-        tmp_image = zeros((nslice*N_pe_true,N_fe_true)).astype(Complex32)
+        tmp_image = zeros((nslice*N_pe_true,N_fe_true),Complex)
         for slice in range(nslice):
             # Correction for all echos.
             for seg in range(nseg):
                 ii = line_index(slice,nslice,seg,nseg,N_pe/nseg,pulse_sequence,n_nav_echo)
                 jj = slice*N_pe_true + seg*(N_pe_true/nseg)
                 for pe in range(N_pe/nseg):
-                    theta = -phs_correction[pe+ii,:]
-                    cor = cos(theta) + 1.j*sin(theta)
 
                     # Do the phase correction.
                     tmp[:] = blk[pe+ii,:]
                     shift(tmp,0,N_fe_true/2)
-                    echo = inverse_fft(tmp - bias[slice])
-                    shift(echo,0,N_fe_true/2)
 
-                    # Shift echo time by adding phase shift.
-                    echo = echo*cor
-
-                    shift(echo,0,N_fe_true/2)
-                    tmp = (fft(echo)).astype(Complex32)
-                    shift(tmp,0,N_fe_true/2)
+                    xy = inverse_fft(tmp - bias[slice])*phs_correction[pe+ii,:]
+                    ksp = (fft(xy))
+                    shift(ksp,0,N_fe_true/2)
                     if pe > 0:
-                        tmp_image[pe-n_nav_echo+jj,:] = tmp
+                        tmp_image[pe-n_nav_echo+jj,:] = ksp
         dump_complex_image(tmp_image,"phasedata_cor_final",N_pe_true,N_fe_true,nseg,nslice,n_nav_echo,petab,0,reorder_dump_slices,pulse_sequence,0,1)
-    phasedat_phs = phase(blk)
 
     return(phs_correction,phasecor_ftmag,dork_data)
 
@@ -1244,92 +1215,93 @@ def compute_menon_phase_correction(blk,nslice,nseg,N_pe,N_fe_true,bias,nvol_r,op
 def compute_menon_navigator_correction(blk,tmp,slice,seg,pe,ii,nseg,N_pe,N_fe_true,bias,phs_correction,dork_data):
 #-------------------------------------------------------------------------------
 
+    """
+    Store the phase of the navigator echo and first line in each segment.
+    """
+
+    dphs = zeros((2,N_fe_true),Complex)
+    slice1 = ii/N_pe
+    seg1 = ((ii - slice1*N_pe)*nseg)/N_pe
 #   The first line is a navigator echo, compute the difference  in 
 #   phase (dphs) due to B0 inhomogeneities using navigator echo.
     tmp[:] = blk[ii,:]
     shift(tmp,0,N_fe_true/2)
-    nav_echo = (inverse_fft(tmp - bias[slice])).astype(Complex32)
-    shift(nav_echo,0,N_fe_true/2)
-    nav_mag = abs(nav_echo)
-    phs = phase(nav_echo)
+    nav_echo = (inverse_fft(tmp - bias[slice]))
+
 #   Create mask for threshold of MAG_THRESH for magnitudes.
-    dphs = zeros((2,N_fe_true),Float)
+    nav_mag = abs(nav_echo)
     mag_msk = where(nav_mag>MAG_THRESH,1,0)
-    nav_phs = mag_msk*phs
-    slice1 = ii/N_pe
-    seg1 = ((ii - slice1*N_pe)*nseg)/N_pe
-    dphs[0,:] = (dork_data[slice1,seg1,0,:] - nav_phs)
-    msk1 = where(dphs[0,:]<-pi, 2.*pi,0)
-    msk2 = where(dphs[0,:] > pi,-2.*pi,0)
-    dphs[0,:] = dphs[0,:] + msk1 + msk2 
+    nav_phs = mag_msk*nav_echo/(nav_mag + (1-mag_msk)) + (1 - mag_msk)
+    dphs[0,:] = dork_data[slice1,seg1,0,:]*conjugate(nav_phs)
 
 # Now do the same thing for the ky=0 line in k-space.
-    tmp[:] = blk[ii+1,:] # Only true for two-shot sequence.
+    tmp[:] = blk[ii+1,:]
     shift(tmp,0,N_fe_true/2)
-    echo = (inverse_fft(tmp - bias[slice])).astype(Complex32)
-    shift(echo,0,N_fe_true/2)
-    mag = abs(echo)
-    phs = phase(echo)
-
-#    mag_msk = where(mag>MAG_THRESH,1,0)
-    phs = mag_msk*phs
-    dphs[1,:] = (dork_data[slice1,seg1,0,:] - phs)
-    msk1 = where(dphs[1,:]<-pi, 2.*pi,0)
-    msk2 = where(dphs[1,:] > pi,-2.*pi,0)
-    dphs[1,:] = dphs[1,:] + msk1 + msk2 
+    xy = (inverse_fft(tmp - bias[slice]))
+    mag = abs(xy)
+    mag_msk = where(mag>MAG_THRESH,1,0)
+    dc_phs = mag_msk*xy/(mag + (1-mag_msk)) + (1 - mag_msk)
+    dphs[1,:] = dork_data[slice1,seg1,1,:]*conjugate(dc_phs)
 
     return(dphs,nav_mag)
 
 
 #-------------------------------------------------------------------------------------
-def correct_phs_menon(blk,phs_correction,dphs,n_nav_echo,slice,N_pe,N_fe,pe,ii,tmp,bias,phasecor_total,time0,time1,te,nav_mag,phasecor_ftmag,options):
+def correct_phs_menon(blk,phs_correction,dphs,n_nav_echo,slice,N_pe,N_fe,pe,ii,tmp,bias,time0,time1,te,nav_mag,phasecor_ftmag,options):
 #-------------------------------------------------------------------------------------
 
-#   Correct phase of data using the method Ravi Menon used in epi2fid.
-#   The full_dork and partial_dork methods correct for respiratory artifacts.
-#   See Pfeuffer et al., "Correction of physiologically induced global off-resonance effects in dynamic echo-planar and spiral functional imaging," MRM 47:344-353 (2003)
+    """
+    Correct phase of data using the method Ravi Menon used in epi2fid.
+    The full_dork and partial_dork methods correct for respiratory artifacts.
+    See Pfeuffer et al., "Correction of physiologically induced global off-resonance 
+    effects in dynamic echo-planar and spiral functional imaging," MRM 47:344-353 (2003)
+    In a nutshell, here is what they do:
+ 
+    NERD: scale the phase difference of the navigator echo at the current frame and the 
+        navigator echo in the reference scan.  The reason for this choice of scale
+        factor is obscure.
+    PARTIAL_DORK: Same as the NERD method with the scale factor being the ratio of the 
+        time from the navigator echo to the current line over the time from the 
+        excitation pulse and the navigator echo.
+    FULL_DORK: Uses the navigator echo and the DC line to compute the constant phase
+        shift as well as the rate of change. See the paper for details.
+    """
 
     if n_nav_echo > 0 and not options.ignore_nav:
+#       Compute the navigator correction.
         if options.navcor_type == NERD:
             nav_scl = (time0 + pe*time1)/time0
-            nav_cor = nav_scl*dphs[0,:]
+            nav_cor = pow(dphs[0,:],nav_scl)
         elif options.navcor_type == PARTIAL_DORK:
             nav_scl = pe*time1/te
-            nav_cor = nav_scl*dphs[0]
+            nav_cor = pow(dphs[0,:],nav_scl)
         elif options.navcor_type == FULL_DORK:
             timex = time1*float((N_pe - 1))/2.
-            domega = (dphs[1,:] - dphs[0,:])/timex
-            dphi = (te*dphs[0,:] - (te - timex)*dphs[1,:])/timex
-            nav_cor = dphi + pe*time1*domega
-        theta = -(phs_correction[pe+ii,:] - nav_cor[N_fe/4])
-        msk1 = where(theta<0.,2.*pi,0)
-        theta = theta + msk1
-        scl = cos(theta) + 1.j*sin(theta)
+#            domega = (dphs[1,:] - dphs[0,:])/timex
+            domega = pow(dphs[1,:]*conjugate(dphs[0,:]),1./timex)
+#            dphi = (te*dphs[0,:] - (te - timex)*dphs[1,:])/timex
+            dphi = pow(dphs[0,:],te/timex)*conjugate(pow(dphs[1,:],(te - timex)/timex))
+#            nav_cor = dphi + pe*time1*domega
+            nav_cor = dphi*pow(domega,pe*time1)
+
         msk = where(nav_mag==0.,1,0)
         mag_ratio = (1-msk)*phasecor_ftmag[pe+ii,:]/(nav_mag + msk)
         msk1 = (where((mag_ratio>1.05),0.,1.))
         msk2 = (where((mag_ratio<.95),0.,1.))
         msk = msk1*msk2
         msk = (1-msk) + msk*mag_ratio
-        cor = scl*msk
+        cor = phs_correction[pe+ii,:]*nav_cor[0]
     else:
-        theta = -phs_correction[pe+ii,:]
-        cor = cos(theta) + 1.j*sin(theta)
-    phasecor_total[pe+ii,:] = theta.astype(Float32)
+#       No navigator correction.
+        cor = phs_correction[pe+ii,:]
 
     # Do the phase correction.
-    tmp[:] = blk[pe+ii,:]
-    shift(tmp,0,N_fe/4)
-    echo = inverse_fft(tmp - bias[slice])
-    shift(echo,0,N_fe/4)
-
-    # Shift echo time by adding phase shift.
-    echo = echo*cor
-
-    shift(echo,0,N_fe/4)
-    tmp = (fft(echo)).astype(Complex32)
-    shift(tmp,0,N_fe/4)
-    return(tmp)
+    ksp = blk[pe+ii,:]
+    shift(ksp,0,N_fe/4)
+    xy = inverse_fft(ksp - bias[slice])*cor
+    ksp = (fft(xy))
+    shift(ksp,0,N_fe/4)
+    return(ksp)
 
 #****************
 def polar(image):
