@@ -1,6 +1,6 @@
 #!/bin/bash
 ROOT=/raid0/despo/jjo
 export PATH="${ROOT}/python/bin:$PATH"
-export PYTHONPATH=/usr/bic/python/jjo:/usr/bic/python/lib/python2.1/site-packages
+export PYTHONPATH=/usr/bic/python/jjo
 export LD_LIBRARY_PATH=/usr/lib:/usr/bic/matlab/extern/lib/glnx86 
 export TABLIB=/usr/bic/lib/tablib
