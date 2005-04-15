@@ -199,7 +199,7 @@ def run():
     params['nseg'] = nseg
     date = os.popen("date").readlines()
     params['date'] = date[0]
-    rev_string = "$Id: recon_epi 490 2005-02-08 04:44:41Z solar $"
+    rev_string = "$Id$"
     rev_string = rev_string.split()
     params['recon_rev'] = rev_string[2] + " " + rev_string[3]
 
