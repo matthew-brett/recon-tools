@@ -1,92 +1,99 @@
 """
-Program: recon-epi
+Tool: recon-epi
 Perform MRI image reconstruction.
 Read data from fid, phase correct, take FFT, and write to disk.
+
+svn-Id: $Id$
 """
 
+# constant symbols representing values for some command-line flags
+# These should move to a globally accessible spot (like the recon package),
+# then be referred to instead of using the string values directly in
+# client code.
+
+FIDL_FORMAT = "fidl"
+VOXBO_FORMAT = "voxbo"
+SPM_FORMAT = "spm"
+NONE = "none"
+SINC = "sinc"
+LINEAR = "linear"
+
+# Types of navigator echo corrections:
+NERD = "nerd"
+NO_DORK = "no_dork"
+PARTIAL_DORK = "partial_dork"
+FULL_DORK = "full_dork"
+
+#-------------------- parse command-line options -------------------------
+from optparse import OptionParser
+optparser = OptionParser("usage: %prog [options] fid_file procpar output_image")
+optparser.add_option( "-n", "--nvol", action="store", dest="nvol_to_read", type="int",
+  default=0, help="Number of volumes within run to reconstruct." )
+optparser.add_option( "-s", "--frames-to-skip", action="store", dest="frames_to_skip", type="int",
+  default=0, help="Number of frames to skip at beginning of run." )
+optparser.add_option( "-k", "--save-kspace", action="store_true", dest="lcksp",
+  help="Save k-space magnitude and phase." )
+optparser.add_option( "-p", "--save-phase", action="store_true", dest="lcphs",
+  help="Save phase as well as magnitude of reconstructed images." )
+optparser.add_option( "-f", "--file-format", action="store", dest="file_format",
+  type="choice", choices=(FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT), default=FIDL_FORMAT,
+  help="""{fidl | voxbo | spm}
+  fidl: save floating point file with interfile and 4D analyze headers.
+  spm: Save individual image for each frame in analyze format.
+  voxbo: Save in tes format.""" )
+optparser.add_option( "-N", "--nav-cor", action="store", dest="navcor_type",
+  type="choice", choices=(NERD, NO_DORK, PARTIAL_DORK, FULL_DORK), default=NERD,
+  help="""{no_dork | nerd | partial_dork | full_dork}
+  nerd: The Near-DORK correction originally used in epi2fid and recon_epi.
+     Valid only for the two-shot Ravi sequence.
+  partial_dork: The partial DORK correction that does not need a navigator echo.
+     Works for any sequence.
+  full_dork: The full DORK correction that corrects for frequency and phase
+     error. Only available for sequences with a navigator echo, such as the
+     Ravi Menon sequence.""" )
+optparser.add_option( "-v", "--save-first", action="store_true", dest="save_first",
+  help="Save first frame in file named 'EPIs.cub'." )
+optparser.add_option( "-g", "--ignore-nav-echo", action="store_true", dest="ignore_nav",
+  help="Do not use navigator in phase correction." )
+optparser.add_option( "-t", "--time-interp", action="store", dest="time_interp",
+  type="choice", choices=(NONE, SINC, LINEAR), default=NONE,
+  help="{none | sinc | linear} Interpolate to increase temporal resolution by a factor equal to the number of shots in the acquistions." )
+optparser.add_option( "-w", "--fix-time-skew", action="store_true", dest="lc_fixskew",
+  help="Correct for varying acquisition times of slices within a frame." )
+optparser.add_option( "-z", "--zoom-by-two", action="store_true", dest="zoom",
+  help="Spatially zoom images by a factor of two." )
+optparser.add_option( "-c", "--skip-phase-corr", action="store_false", dest="phase_correct",
+  default=True,
+  help="Do not apply phase correction. (use when reconstructing fid files processed with epi2fid)" )
+optparser.add_option( "-l", "--phase-last", action="store_true", dest="phase_last",
+  help="Use phase information stored at the end of the data file." )
+optparser.add_option( "-d", "--debug", action="store_true", dest="debug",
+  help="Save images of correction arrays." )
+optparser.add_option( "-o", "--phase-corr-total", action="store", dest="phase_cor_nav_file",
+  help="Save phase correction nav to the specified file." )
+optparser.add_option( "-i", "--linear-phase-corr", action="store_true", dest="linear_phase_corr",
+  help="Use linear fit to compute Nyquist ghost correction." )
+optparser.add_option( "-e", "--tr", action="store", dest="TR", type="float",
+  help="Use the TR given here rather than the one in the procpar." )
+optparser.add_option( "-x", "--starting-frame-number", action="store", dest="sfn",
+  type="int", metavar="<starting frame number>", default=0,
+  help="Specify starting frame number for analyze format output." )
+optparser.add_option( "-m", "--field-map", action="store", dest="field_map_file",
+  help="File containing asems field map computed with compute fmap.  This file is used for undistorting linear one-shot sequences." )
+optparser.add_option( "-u", "--undistortion-matrix", action="store", dest="undistortion_file",
+  help="File containing undistortion matrix computed by compute_fmap.  (used to undistort the reconstructed images)" )
+optparser.add_option( "-b", "--flip-top-bottom", action="store_true", dest="flip_top_bottom",
+  help="Flip image about the  horizontal axis." )
+optparser.add_option( "-j", "--flip-left-right", action="store_true", dest="flip_left_right",
+  help="Flip image about the vertical axis." )
+optparser.add_option( "-q", "--flip-slices", action="store_true", dest="flip_slices",
+  help="Reorders slices." )
+optparser.add_option( "-y", "--output-data-type", action="store", dest="output_data_type",
+  type="choice", choices=("mag", "complex"), default="mag",
+  help="{mag | complex}  Specifies whether output images should contain only magnitude or both the real and imaginary components.  (only valid for analyze format)" )
+
+
 def run():
-
-    # constant symbols representing values for some command-line flags
-    # These should move to a globally accessible spot (like the recon package),
-    # then be referred to instead of using the string values directly in
-    # client code.
-
-    FIDL_FORMAT = "fidl"
-    VOXBO_FORMAT = "voxbo"
-    SPM_FORMAT = "spm"
-    NONE = "none"
-    SINC = "sinc"
-    LINEAR = "linear"
-
-    # Types of navigator echo corrections:
-    NERD = "nerd"
-    NO_DORK = "no_dork"
-    PARTIAL_DORK = "partial_dork"
-    FULL_DORK = "full_dork"
-
-    #-------------------- parse command-line options -------------------------
-    from optparse import OptionParser
-    optparser = OptionParser("usage: %prog [options] fid_file procpar output_image")
-    optparser.add_option( "-n", "--nvol", action="store", dest="nvol_to_read", type="int",
-      default=0, help="Number of volumes within run to reconstruct." )
-    optparser.add_option( "-s", "--frames-to-skip", action="store", dest="frames_to_skip", type="int",
-      default=0, help="Number of frames to skip at beginning of run." )
-    optparser.add_option( "-k", "--save-kspace", action="store_true", dest="lcksp",
-      help="Save k-space magnitude and phase." )
-    optparser.add_option( "-p", "--save-phase", action="store_true", dest="lcphs",
-      help="Save phase as well as magnitude of reconstructed images." )
-    optparser.add_option( "-f", "--file-format", action="store", dest="file_format",
-      type="choice", choices=(FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT), default=FIDL_FORMAT,
-      help="""{fidl | voxbo | spm}
-      fidl: save floating point file with interfile and 4D analyze headers.
-      spm: Save individual image for each frame in analyze format.
-      voxbo: Save in tes format.""" )
-    optparser.add_option( "-N", "--nav-cor", action="store", dest="navcor_type",
-      type="choice", choices=(NERD, NO_DORK, PARTIAL_DORK, FULL_DORK), default=NERD,
-      help="""{no_dork | nerd | partial_dork | full_dork}
-      nerd: The Near-DORK correction originally used in epi2fid and recon_epi. Valid only for the two-shot Ravi sequence.
-      partial_dork: The partial DORK correction that does not need a navigator echo.  Works for any sequence.
-      full_dork: The full DORK correction that corrects for frequency and phase error. Only available for sequences with a navigator echo, such as the Ravi Menon sequence.""" )
-    optparser.add_option( "-v", "--save-first", action="store_true", dest="save_first",
-      help="Save first frame in file named 'EPIs.cub'." )
-    optparser.add_option( "-g", "--ignore-nav-echo", action="store_true", dest="ignore_nav",
-      help="Do not use navigator in phase correction." )
-    optparser.add_option( "-t", "--time-interp", action="store", dest="time_interp",
-      type="choice", choices=(NONE, SINC, LINEAR), default=NONE,
-      help="{none | sinc | linear} Interpolate to increase temporal resolution by a factor equal to the number of shots in the acquistions." )
-    optparser.add_option( "-w", "--fix-time-skew", action="store_true", dest="lc_fixskew",
-      help="Correct for varying acquisition times of slices within a frame." )
-    optparser.add_option( "-z", "--zoom-by-two", action="store_true", dest="zoom",
-      help="Spatially zoom images by a factor of two." )
-    optparser.add_option( "-c", "--skip-phase-corr", action="store_false", dest="phase_correct",
-      default=True,
-      help="Do not apply phase correction. (use when reconstructing fid files processed with epi2fid)" )
-    optparser.add_option( "-l", "--phase-last", action="store_true", dest="phase_last",
-      help="Use phase information stored at the end of the data file." )
-    optparser.add_option( "-d", "--debug", action="store_true", dest="debug",
-      help="Save images of correction arrays." )
-    optparser.add_option( "-o", "--phase-corr-total", action="store", dest="phase_cor_nav_file",
-      help="Save phase correction nav to the specified file." )
-    optparser.add_option( "-i", "--linear-phase-corr", action="store_true", dest="linear_phase_corr",
-      help="Use linear fit to compute Nyquist ghost correction." )
-    optparser.add_option( "-e", "--tr", action="store", dest="TR", type="float",
-      help="Use the TR given here rather than the one in the procpar." )
-    optparser.add_option( "-x", "--starting-frame-number", action="store", dest="sfn",
-      type="int", metavar="<starting frame number>", default=0,
-      help="Specify starting frame number for analyze format output." )
-    optparser.add_option( "-m", "--field-map", action="store", dest="field_map_file",
-      help="File containing asems field map computed with compute fmap.  This file is used for undistorting linear one-shot sequences." )
-    optparser.add_option( "-u", "--undistortion-matrix", action="store", dest="undistortion_file",
-      help="File containing undistortion matrix computed by compute_fmap.  (used to undistort the reconstructed images)" )
-    optparser.add_option( "-b", "--flip-top-bottom", action="store_true", dest="flip_top_bottom",
-      help="Flip image about the  horizontal axis." )
-    optparser.add_option( "-j", "--flip-left-right", action="store_true", dest="flip_left_right",
-      help="Flip image about the vertical axis." )
-    optparser.add_option( "-q", "--flip-slices", action="store_true", dest="flip_slices",
-      help="Reorders slices." )
-    optparser.add_option( "-y", "--output-data-type", action="store", dest="output_data_type",
-      type="choice", choices=("mag", "complex"), default="mag",
-      help="{mag | complex}  Specifies whether output images should contain only magnitude or both the real and imaginary components.  (only valid for analyze format)" )
     options, args = optparser.parse_args()
     if len(args) != 3: optparser.error( "Expecting 3 arguments" )
     fid_file, procpar_file, img_file = args
