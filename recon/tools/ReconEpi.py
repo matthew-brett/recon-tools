@@ -149,7 +149,7 @@ def run():
     vol_rng = range(nvol_r)
 
     if N_pe % 32:
-    #   Must be a navigator echo.
+        # Must be a navigator echo.
         n_nav_echo = 1
         print "Data acquired with navigator echos."
     else:
