@@ -1,0 +1,156 @@
+#!/usr/bic/bin/python
+"""
+Program: epi_recon, Read data from fid, take FFT, and write to disk.
+
+One of the first chores of recon_epi is to organize the data into a conventional 
+ordering of the data so that various operations may be performed upon the data 
+in a manner independent of the order of collection of the phase-encode lines of 
+data.
+
+Because Python does not allow indices of arrays (or lists) to start at negative 
+values the convention in recon_epi is to number the phase-encode lines as 0 
+through 2N-1 where we assume there are 2N phase encode lines (2N = n_pe_true). 
+With this convention the phase-encode gradient has zero magnitude at line N-1. 
+The following diagram makes this convention clear for the first and second slices 
+within a volume (block) of slices:
+
+
+                        Recon_epi Line Numbering Convention
+                       ===================================== 
+
+       recon_epi line                                        k-space k_pe value
+      ----------------                                      --------------------
+
+         ^                             ^
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :                                
+          \ ____                       | 
+          /                            |
+         | 4N - 1  <-------------------|------------------->  k_pe = N*del_k
+         |                             |
+         | 4N - 2  <-------------------|------------------->  k_pe = (N-1)*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   N     <-------------------|------------------->  k_pe = del_k
+         |                             |
+slice 1 -| N - 1   <-------------------|------------------->  k_pe = 0
+         |                             |
+         | N - 2   <-------------------|------------------->  k_pe = -del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         | 2N + 1  <-------------------|------------------->  k_pe = -(N-2)*del_k
+         |                             |
+         |   2N    <-------------------|------------------->  k_pe = -(N-1)*del_k
+          \___                         |
+          /                            |
+         | 2N - 1  <-------------------|------------------->  k_pe = N*del_k
+         |                             |
+         | 2N - 2  <-------------------|------------------->  k_pe = (N-1)*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   N     <-------------------|------------------->  k_pe = del_k
+         |                             |
+slice 0 -| N - 1   <-------------------|------------------->  k_pe = 0
+         |                             |
+         | N - 2   <-------------------|------------------->  k_pe = -del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   1     <-------------------|------------------->  k_pe = -(N-2)*del_k
+         |                             |
+         |   0     <-------------------|------------------->  k_pe = -(N-1)*del_k
+          \___                         |
+                                       |
+                                       v
+
+
+The phase-encode-tables used by recon_epi are created by hand from the scanner-
+vendor's phase-encode-table files. While we could use the vendors phase-encode-
+tables directly a coding simplification is acheived by using our own file format 
+for the phase-encode-tables. Since this need be done only once it is of no great 
+cost given benefits. The recon_epi phase-encode-table files are stored in a 
+directory named "recon_epi_pettabs".
+
+The different vendors will store their phase-encode tables in different system 
+directories. The Varian scanner has the phase-encode tables stored in a directory 
+named tablib. 
+"""
+import sys
+from epi_recon_modules import get_data, get_options, get_params, save_data
+
+# In case you forget where the modules are
+#print "path to module %s" % sys.modules['file_io']  
+
+
+#*****************************************************************************
+class EpiRecon (object):
+
+    def initialize_params( self ):
+        from Numeric import zeros, Complex32
+        nvol = self.params['nvol']
+        nslice = self.params['nslice']
+        nseg = self.params['nseg']
+        n_nav_echo = self.params['n_nav_echo']
+        n_pe_true = self.params['n_pe_true']
+        n_fe_true = self.params['n_fe_true']
+        # !!!! SHOULD FIND A WAY TO REUSE THE !!!!!#
+        # !!!! ksp_data ARRAY TO CONSERVE MEMORY !!!!!#
+        def czeros(tup): return zeros(tup).astype(Complex32)
+        self.ksp_data = czeros((nvol, nslice, n_pe_true, n_fe_true))
+        self.ksp_nav_data = czeros((nvol, nslice, nseg, n_fe_true))
+        self.ref_data = czeros((nslice, n_pe_true, n_fe_true))
+        self.ref_nav_data = czeros((nslice, nseg, n_fe_true))
+        self.imag_data_complex = czeros((nvol, nslice, n_pe_true, n_fe_true))
+
+    def log_params( self ):
+        print "Phase encode table: %(petable)s\n"\
+              "FID file format: %(fid_type)s\n"\
+              "Pulse sequence: %(pulse_sequence)s\n"\
+              "Number of navigator echoes per segment: %(n_nav_echo)d\n"\
+              "Number of frequency encodes: %(n_fe_true)d\n"\
+              "Number of phase encodes: %(n_pe)d\n"\
+              "Number of slices: %(nslice)d\n"\
+              "Number of frames: %(nvol)d\n"\
+              "Total number of volumes acquired (image & phase): %(nvol)d\n"\
+              "Number of segments: %(nseg)d\n"\
+              "Orientation: %(orient)s\n"\
+              "Pixel size: %(xsize)7.2f\n"\
+              "Slice thickness: %(zsize)7.2f\n" % self.params
+        print "Number of frames to skip: %d\n" % self.options.skip
+
+    def run(self):
+        # Get the filename names and options from the command line
+        options = self.options = get_options()
+
+        # Get the imaging parameters from the vendor dependent parameter file
+        self.params = get_params(options)
+
+        # Print some of these values of the options and parameters to the screen 
+        self.log_params()
+
+        # Allocate and initialize some arrays
+        self.initialize_params()
+
+        # Get the signal data and organize it in vendor-independent arrays
+        #get_data(params, options, ksp_data, ksp_nav_data, ref_data, ref_nav_data)
+        get_data( self )
+
+        # Now apply the various data manipulation and artifact correction
+        # operations to the time-domain (k-space) data which is stored in the
+        # arrays ksp_data and imag_nav_data as well as the ancillary data
+        # arrays nav_data and ref_data. The operations are applied by looping
+        # over the list of operations that the user chooses on the command.
+        # Each operation acts in a independent manner upon the data arrays.
+        for operation in options.operations: operation( self )
+
+        # Save data to disk.
+        save_data( self )
+
+
+#*****************************************************************************
+if __name__ == "__main__":
+    EpiRecon().run()
