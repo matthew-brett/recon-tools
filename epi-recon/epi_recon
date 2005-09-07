@@ -80,7 +80,6 @@ directories. The Varian scanner has the phase-encode tables stored in a director
 named tablib. 
 """
 import sys
-#from epi_recon_modules import get_data, get_options, get_params, save_image_data
 from epi_recon_modules import *
 
 
