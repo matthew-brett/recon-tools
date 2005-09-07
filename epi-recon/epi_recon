@@ -80,77 +80,62 @@ directories. The Varian scanner has the phase-encode tables stored in a director
 named tablib. 
 """
 import sys
-from epi_recon_modules import get_data, get_options, get_params, save_data
-
-# In case you forget where the modules are
-#print "path to module %s" % sys.modules['file_io']  
+#from epi_recon_modules import get_data, get_options, get_params, save_image_data
+from epi_recon_modules import *
 
 
 #*****************************************************************************
-class EpiRecon (object):
+def log_params(params, options):
+    """
+    Print some of the values of the options and parameters dictionaries to the
+    screen. 
+    """
+    print ""
+    print "Phase encode table: ", params['petable']
+    print "Pulse sequence: %s" % params['pulse_sequence']
+    print "Number of navigator echoes per segment: %d" % params['nav_per_seg']
+    print "Number of frequency encodes: %d" % params['n_fe_true']
+    print "Number of phase encodes (including navigators if present): %d" % params['n_pe']
+    print "Data type: ", params['num_type']
+    print "Number of slices: %d" % params['nslice']
+    print "Number of frames: %d" % params['nvol']
+    print "Number of segments: %d" % params['nseg']
+    print "Number of frames to skip: %d" % options.skip
+    print "Orientation: %s" % params['orient']
+    print "Pixel size (phase-encode direction): %7.2f" % params['xsize'] 
+    print "Pixel size (frequency-encode direction): %7.2f" % params['ysize']
+    print "Slice thickness: %7.2f" % params['zsize']
+    print ""
 
-    def initialize_params( self ):
-        from Numeric import zeros, Complex32
-        nvol = self.params['nvol']
-        nslice = self.params['nslice']
-        nseg = self.params['nseg']
-        n_nav_echo = self.params['n_nav_echo']
-        n_pe_true = self.params['n_pe_true']
-        n_fe_true = self.params['n_fe_true']
-        # !!!! SHOULD FIND A WAY TO REUSE THE !!!!!#
-        # !!!! ksp_data ARRAY TO CONSERVE MEMORY !!!!!#
-        def czeros(tup): return zeros(tup).astype(Complex32)
-        self.ksp_data = czeros((nvol, nslice, n_pe_true, n_fe_true))
-        self.ksp_nav_data = czeros((nvol, nslice, nseg, n_fe_true))
-        self.ref_data = czeros((nslice, n_pe_true, n_fe_true))
-        self.ref_nav_data = czeros((nslice, nseg, n_fe_true))
-        self.imag_data_complex = czeros((nvol, nslice, n_pe_true, n_fe_true))
 
-    def log_params( self ):
-        print "Phase encode table: %(petable)s\n"\
-              "FID file format: %(fid_type)s\n"\
-              "Pulse sequence: %(pulse_sequence)s\n"\
-              "Number of navigator echoes per segment: %(n_nav_echo)d\n"\
-              "Number of frequency encodes: %(n_fe_true)d\n"\
-              "Number of phase encodes: %(n_pe)d\n"\
-              "Number of slices: %(nslice)d\n"\
-              "Number of frames: %(nvol)d\n"\
-              "Total number of volumes acquired (image & phase): %(nvol)d\n"\
-              "Number of segments: %(nseg)d\n"\
-              "Orientation: %(orient)s\n"\
-              "Pixel size: %(xsize)7.2f\n"\
-              "Slice thickness: %(zsize)7.2f\n" % self.params
-        print "Number of frames to skip: %d\n" % self.options.skip
+#*****************************************************************************
+def run():
+    "Run the epi_recon tool."
 
-    def run(self):
-        # Get the filename names and options from the command line
-        options = self.options = get_options()
+    # Get the filename names and options from the command line.
+    options = get_options()
 
-        # Get the imaging parameters from the vendor dependent parameter file
-        self.params = get_params(options)
+    # Get the imaging parameters from the vendor dependent parameter file.
+    params = get_params(options)
 
-        # Print some of these values of the options and parameters to the screen 
-        self.log_params()
+    # Log some parameter info to the console.
+    log_params(params, options)
 
-        # Allocate and initialize some arrays
-        self.initialize_params()
+    # Load data from the fid file.
+    data = get_data(params, options)
 
-        # Get the signal data and organize it in vendor-independent arrays
-        #get_data(params, options, ksp_data, ksp_nav_data, ref_data, ref_nav_data)
-        get_data( self )
+    # Now apply the various data manipulation and artifact correction operations
+    # to the time-domain (k-space) data which is stored in the arrays
+    # data_matrix and nav_data as well as the ancillary data arrays ref_data and
+    # ref_anv_data. The operations are applied by looping over the list of
+    # operations that the user chooses on the command line. Each operation acts
+    # in a independent manner upon the data arrays.
+    for operation in options.operations: operation(params, options, data)
 
-        # Now apply the various data manipulation and artifact correction
-        # operations to the time-domain (k-space) data which is stored in the
-        # arrays ksp_data and imag_nav_data as well as the ancillary data
-        # arrays nav_data and ref_data. The operations are applied by looping
-        # over the list of operations that the user chooses on the command.
-        # Each operation acts in a independent manner upon the data arrays.
-        for operation in options.operations: operation( self )
-
-        # Save data to disk.
-        save_data( self )
+    # Save data to disk.
+    save_image_data(data.data_matrix, params, options)
 
 
 #*****************************************************************************
 if __name__ == "__main__":
-    EpiRecon().run()
+    run()
