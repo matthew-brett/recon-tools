@@ -112,13 +112,13 @@ def run():
     "Run the epi_recon tool."
 
     # Get the filename names and options from the command line.
-    options = get_options()
+    options = EpiReconOptionParser().getOptions()
 
     # Get the imaging parameters from the vendor dependent parameter file.
     params = get_params(options)
 
     # Log some parameter info to the console.
-    log_params(params, options)
+    #log_params(params, options)
 
     # Load data from the fid file.
     data = get_data(params, options)
@@ -129,7 +129,10 @@ def run():
     # ref_anv_data. The operations are applied by looping over the list of
     # operations that the user chooses on the command line. Each operation acts
     # in a independent manner upon the data arrays.
-    for operation in options.operations: operation(params, options, data)
+    for operation, args in options.operations:
+        if type(operation) == type(Operation) and issubclass(operation, Operation):
+            operation(**args).run(params, options, data)
+        else: operation(params, options, data)
 
     # Save data to disk.
     save_image_data(data.data_matrix, params, options)
