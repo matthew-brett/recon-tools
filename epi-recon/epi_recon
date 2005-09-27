@@ -130,9 +130,7 @@ def run():
     # operations that the user chooses on the command line. Each operation acts
     # in a independent manner upon the data arrays.
     for operation, args in options.operations:
-        if type(operation) == type(Operation) and issubclass(operation, Operation):
-            operation(**args).run(params, options, data)
-        else: operation(params, options, data)
+        operation(**args).run(params, options, data)
 
     # Save data to disk.
     save_image_data(data.data_matrix, params, options)

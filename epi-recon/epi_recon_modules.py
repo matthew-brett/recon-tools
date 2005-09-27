@@ -23,9 +23,14 @@ output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
 
 
 #*****************************************************************************
-class Operation (object):
-    "Base class for data operations.  Doesn't do a whole lot right now."
+class EmptyObject (object):
+    "Takes whatever attributes are passed as keyword args when initialized."
     def __init__(self, **kwargs): self.__dict__.update(kwargs)
+
+
+#*****************************************************************************
+class Operation (EmptyObject):
+    "Base class for data operations.  Doesn't do a whole lot right now."
 
 
 #*****************************************************************************
@@ -42,9 +47,9 @@ class OperationManager (object):
     class ArgumentError (Exception): pass
 
     _operation_names = (
-      "PhaseCorrelation",
-      "fermi_filter",
-      "fft_data")
+      "PhaseCorrection",
+      "FermiFilter",
+      "InverseFFT")
 
     def getOperationNames(self):
         "@return list of valid operation names."
@@ -99,6 +104,12 @@ class EpiReconOptionParser (OptionParser):
             "order.  Available operation names are {%s}.  If this option is "\
             "not given, all available operations will be performed in the "\
             "order shown with their default argument values."%"|".join(opnames)),
+          Option( "-r", "--vol-range", dest="vol_range", type="string", default=":",
+            action="store",
+            help="Which volumes to reconstruct.  Format is start:end, where "\
+            "either start or end may be omitted, indicating to start with the "\
+            "first or end with the last respectively.  The index of the first "\
+            "volume is 0."),
           Option( "-n", "--nvol", dest="nvol_to_read", type="int", default=0,
             action="store",
             help="Number of volumes within run to reconstruct." ),
@@ -115,15 +126,11 @@ class EpiReconOptionParser (OptionParser):
             help="Dan, please describe the action of this option..."),
           Option( "-a", "--save-first", dest="save_first", action="store_true",
             help="Save first frame in file named 'EPIs.cub'." ),
-          #Option( "-g", "--ignore-nav-echo", dest="ignore_nav", action="store_true",
-          #  help="Do not use navigator in phase correction." ),
           Option( "-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar." ),
           Option( "-x", "--starting-frame-number", dest="sfn", type="int",
             default=0, action="store", metavar="<starting frame number>",
             help="Specify starting frame number for analyze format output." ),
-          Option( "-b", "--flip-top-bottom", dest="flip_top_bottom",
-            action="store_true", help="Flip image about the  horizontal axis." ),
           Option( "-l", "--flip-left-right", dest="flip_left_right",
             action="store_true", help="Flip image about the vertical axis." ),
           Option( "-q", "--flip-slices", dest="flip_slices", action="store_true",
@@ -161,11 +168,22 @@ class EpiReconOptionParser (OptionParser):
         # treat the raw args as named options
         options.fid_file, options.procpar_file, options.img_file = args
 
+        # parse vol-range
+        parts = options.vol_range.split(":")
+        if len(parts) < 2: self.error(
+          "The specification of vol-range must contain a colon separating "\
+          "the start index from the end index.")
+        try: options.vol_start = int(parts[0] or 0)
+        except ValueError: self.error(
+          "Bad vol-range start index '%s'.  Must be an integer."%parts[0])
+        try: options.vol_start = int(parts[1] or -1)
+        except ValueError: self.error(
+          "Bad vol-range end index '%s'. Must be an integer."%spargs[1])
+
         # resolve operations
         options.operations = self.resolveOperations(options.operations)
 
-        # is this necessary?
-        #if options.save_first: options.ignore_nav = true
+        #options.ignore_nav = false
 
         return options
 
@@ -432,13 +450,11 @@ def initialize_data(params):
     n_nav = params['nseg']*params['nav_per_seg']
     n_pe_true = params['n_pe_true']
     n_fe_true = params['n_fe_true']
-    class Data (object): pass
-    data = Data()
-    data.data_matrix = zeros((nvol, nslice, n_pe_true, n_fe_true)).astype(Complex32)
-    data.nav_data = zeros((nvol, nslice, n_nav, n_fe_true)).astype(Complex32)
-    data.ref_data = zeros((nslice, n_pe_true, n_fe_true)).astype(Complex32)
-    data.ref_nav_data = zeros((nslice, n_nav, n_fe_true)).astype(Complex32)
-    return data
+    return EmptyObject(
+      data_matrix = zeros((nvol, nslice, n_pe_true, n_fe_true)).astype(Complex32),
+      nav_data = zeros((nvol, nslice, n_nav, n_fe_true)).astype(Complex32),
+      ref_data = zeros((nslice, n_pe_true, n_fe_true)).astype(Complex32),
+      ref_nav_data = zeros((nslice, n_nav, n_fe_true)).astype(Complex32))
 
 
 #*****************************************************************************
@@ -712,73 +728,60 @@ def get_data(params, options):
 
 
 #*****************************************************************************
-def fermi_filter(params, options, data):
-    ksp_data = data.data_matrix
-    nav_per_seg = params['nav_per_seg']
-    nseg = params['nseg']
-    n_pe = params['n_pe']
-    n_pe_true = params['n_pe_true']
-    n_fe = params['n_fe']
-    n_fe_true = params['n_fe_true']
-    nslice =  params['nslice']
-    nvol = params['nvol']
-   
-    # Create Fermi filter kernel.
-    Fermi = zeros((n_pe_true,n_fe_true)).astype(Float32)
-    cutoff = 0.9
-    for j in range(n_pe_true/2):
-        r2 = j/(0.5*n_pe_true)
-        for k in range(n_fe_true/2):
-            r3 = k/(0.5*n_fe_true)
-            r = r2*r2 + r3*r3
-            filter = 1.0/(1.0 + exp((r-cutoff)*50.0))
-            Fermi[n_pe_true/2  -j,n_fe_true/2-1+k] = filter
-            Fermi[n_pe_true/2-1+j,n_fe_true/2  -k] = filter
-            Fermi[n_pe_true/2  -j,n_fe_true/2  -k] = filter
-            Fermi[n_pe_true/2-1+j,n_fe_true/2-1+k] = filter
+class FermiFilter (Operation):
+    "Apply a Fermi filter to the k-space data."
 
-    # Fermi Filter the data.
-    for vol in range(nvol):
-        for slice in range(nslice):
-            for pe in range(n_pe_true):
-                    ksp_data[vol,slice,pe,:] = ksp_data[vol,slice,pe,:]*Fermi[pe,:]
+    def kernel(self, rows, cols, cutoff, trans_width):
+        "Create a Fermi filter kernel."
+        from matplotlib.mlab import frange, meshgrid
+        row_end = (rows-1)/2.0; col_end = (cols-1)/2.0
+        row_vals = frange(-row_end, row_end)**2
+        col_vals = frange(-col_end, col_end)**2
+        X, Y = meshgrid(row_vals, col_vals)
+        return 1/(1 + exp((sqrt(X + Y) - cutoff)/trans_width))
+
+    def run(self, params, options, data):
+        rows, cols = data.data_matrix.shape[-2:]
+        kernel = self.kernel(rows, cols, 0.95*cols/2.0, .3).astype(Float32)
+
+        # multiply each slice in every volume by the filter kernel
+        for volume in data.data_matrix:
+            for slice in volume: slice *= kernel
 
 
 #*****************************************************************************
-def fft_data(params, options, data):
-    nav_per_seg = params['nav_per_seg']
-    nseg = params['nseg']
-    n_pe = params['n_pe']
-    n_pe_true = params['n_pe_true']
-    n_fe = params['n_fe']
-    n_fe_true = params['n_fe_true']
-    nslice =  params['nslice']
-    nvol = params['nvol']
+class InverseFFT (Operation):
+    "Perform an inverse 2D fft on each slice of each k-space volume."
 
-    print "Taking FFTs. Please Wait"
-    for vol in range(nvol):
-        tmp_vol = zeros((nslice,n_pe_true,n_fe_true)).astype(Complex32)
-        for slice in range(nslice):
-            ksp = zeros((n_pe_true,n_fe_true)).astype(Complex32)
-            ksp[0:n_pe_true,0:n_fe_true] = data.data_matrix[vol,slice,:,:]
-            image = FFT.inverse_fft2d(ksp)
+    def run(self, params, options, data):
+        n_pe_true = params['n_pe_true']
+        n_fe_true = params['n_fe_true']
+        nslice =  params['nslice']
 
-            # The following shift is required because the frequency space data were not
-            # put into standard ordering for FFT.
-            idl.shift(image,0,n_fe_true/2) 
-            idl.shift(image,1,n_pe_true/2)  
-         
-            # Reorder the slices from inferior to superior.
-            if nslice % 2: midpoint = nslice/2 + 1
-            else: midpoint = nslice/2
-            if slice < midpoint:
-                if options.flip_slices: z = 2*slice
-                else: z = nslice - 2*slice - 1
-            else:
-                if options.flip_slices: z = 2*(slice - midpoint) + 1
-                else: z = nslice - 2*(slice - midpoint) - 2
-            tmp_vol[z,:,:] = image[:,:].astype(Complex32)
-        data.data_matrix[vol,:,:,:] = tmp_vol[:,:,:]
+        print "Taking FFTs. Please Wait"
+        for vol in range(params['nvol']):
+            tmp_vol = zeros((nslice,n_pe_true,n_fe_true)).astype(Complex32)
+            for slice in range(nslice):
+                ksp = zeros((n_pe_true,n_fe_true)).astype(Complex32)
+                ksp[0:n_pe_true,0:n_fe_true] = data.data_matrix[vol,slice,:,:]
+                image = FFT.inverse_fft2d(ksp)
+
+                # The following shift is required because the frequency space
+                # data were not put into standard ordering for FFT.
+                idl.shift(image,0,n_fe_true/2) 
+                idl.shift(image,1,n_pe_true/2)  
+             
+                # Reorder the slices from inferior to superior.
+                if nslice % 2: midpoint = nslice/2 + 1
+                else: midpoint = nslice/2
+                if slice < midpoint:
+                    if options.flip_slices: z = 2*slice
+                    else: z = nslice - 2*slice - 1
+                else:
+                    if options.flip_slices: z = 2*(slice - midpoint) + 1
+                    else: z = nslice - 2*(slice - midpoint) - 2
+                tmp_vol[z,:,:] = image[:,:].astype(Complex32)
+            data.data_matrix[vol,:,:,:] = tmp_vol[:,:,:]
 
 
 #*****************************************************************************
@@ -798,7 +801,6 @@ def save_image_data(data_matrix, params, options):
     n_fe_true = params['n_fe_true']
     nslice =  params['nslice']
     pulse_sequence = params['pulse_sequence']
-    nvol = params['nvol']
     xsize = params['xsize'] 
     ysize = params['ysize']
     zsize = params['zsize']
@@ -830,7 +832,8 @@ def save_image_data(data_matrix, params, options):
     # Save data to disk
     print "Saving to disk. Please Wait"
     tmp_vol = zeros((nslice,n_pe_true,n_fe_true)).astype(Complex32)
-    vol_rng = range(frame_start, nvol)
+    vol_rng = range(frame_start, params['nvol'])
+    print "data shape:",data_matrix.shape,", vol range:",frame_start,params['nvol']
     for vol in vol_rng:
         if options.save_first and vol == 0:  #!!!! DO WE NEED THIS SECTION !!!!!
             img = zeros((nslice,n_fe_true,n_pe_true)).astype(Float32)
@@ -873,7 +876,6 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
     n_fe_true = params['n_fe_true']
     nslice =  params['nslice']
     pulse_sequence = params['pulse_sequence']
-    nvol = params['nvol']
     xsize = params['xsize'] 
     ysize = params['xsize']
     zsize = params['zsize']
@@ -901,7 +903,7 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
 
     # Save data to disk
     print "Saving to disk. Please Wait"
-    vol_rng = range(nvol)
+    vol_rng = range(params['nvol'])
     for vol in vol_rng:
         if  options.file_format == SPM_FORMAT:
             # Open files for this volume.
@@ -915,43 +917,18 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
 
 
 #*****************************************************************************
-class PhaseCorrelation (Operation):
+class PhaseCorrection (Operation):
     # Default values for toy test args
     type = "nonlinear"
     foo = 15
 
     def run(self, params, options, data):
-        print "PhaseCorrelation operation:  test args [type=%s, foo=%d]"\
-          %(self.type, self.foo)
         ref_data = data.ref_data
         ksp_data = data.data_matrix
-        ref_nav_data = data.ref_nav_data
-        ksp_nav_data = data.nav_data
-        nvol = params['nvol']
         nslice = params['nslice']
-        nseg = params['nseg']
-        nav_per_seg = params['nav_per_seg']
-        n_pe = params['n_pe']
         n_pe_true = params['n_pe_true']
         n_fe = params['n_fe']
         n_fe_true = params['n_fe_true']
-        te = string.atof(params['te'])
-        trise = string.atof(params['trise'])
-        gro = string.atof(params['gro'])
-        gmax = string.atof(params['gmax'])
-        at = string.atof(params['at'])
-
-
-    # !!!!!!!!!!!!! IS THIS CONDITIONAL NEEDED. AFTERALL "alt" AS A DESIGNATION FOR A petable_file IS USED NOWHERE ELSE IN THE CODE
-    # !!!!!!!!!!!!! UNCOMMENT PARTS THAT ARE NEEDED 
-    #    if(string.find(petable_file,"alt") >= 0):
-    #        time0 = te - 2.0*abs(gro)*trise/gmax - at
-    #    else:
-    #        time0 = te - (math.floor(nv/nseg)/2.0)*((2.0*abs(gro)*trise)/gmax + at)
-    #    time1 = 2.0*abs(gro)*trise/gmax + at
-    #    if nav_per_seg > 0:
-    #        print "Data acquired with navigator echo time of %f" % (time0)
-    #        print "Data acquired with echo spacing of %f" % (time1)
 
         # Compute correction for Nyquist ghosts.
         # First and/or last block contains phase correction data.  Process it.
@@ -983,74 +960,10 @@ class PhaseCorrelation (Operation):
                 phasecor_phs[slice,pe,:] = phs[:].astype(Float32)
 
         # Apply the phase correction to the image data.
-        pe_per_seg = n_pe/nseg
+        pe_per_seg = params['n_pe']/params['nseg']
         dphs = zeros(n_pe_true).astype(Float32)
-        for vol in range(nvol):
+        for vol in range(params['nvol']):
             for slice in range(nslice):
-    # I HAVE COMMENTED THE SECTIONS INVOLVING THE NAV ECHO WHICH WOULD APPEAR DON'T HAVE A LOT OF IMPACT.
-    # I CAN PUT THIS BACK IN LATER AFTER THE REST IS WORKING CORRECTLY.
-    #            for seg in range(nseg):
-    #                if nseg > 0:
-    #                    # The first data frame is a navigator echo, compute the difference  in 
-    #                    # phase (dphs) due to B0 inhomogeneities using navigator echo.
-    #                    tmp[:] = ksp_nav_data[vol,slice,seg,:] 
-    #                    idl.shift(tmp,0,n_fe/4)
-    #                    nav_echo = (FFT.inverse_fft(tmp)).astype(Complex32)
-    #                    idl.shift(nav_echo,0,n_fe/4)
-    #                    nav_mag = abs(nav_echo)
-    #                    msk = where(equal(nav_echo.real,0.),1.,0.)
-    #                    phs = (1.0 - msk)*arctan(nav_echo.imag/(nav_echo.real + msk))
-    #
-    #                    # Convert to 4 quadrant arctan.
-    #                    pos_msk = where(phs > 0,1,0)
-    #                    msk1 = pos_msk*where(nav_echo.imag < 0, math.pi, 0)
-    #                    msk2 = (1 - pos_msk)*where(nav_echo.imag < 0, 2.0*math.pi, math.pi)
-    #                    msk  = where((msk1 + msk2) == 0,1,0)
-    #                    phs = phs + msk1 + msk2
-    #
-    #                    # Create mask for threshold of MAG_THRESH for magnitudes.
-    #                    mag_msk = where(nav_mag > 0.0, 1, 0)
-    #                    nav_phs = mag_msk*phs
-    #                    dphs = (phasecor_phs[slice,seg,:] - nav_phs)
-    #                    msk1 = where(dphs < -math.pi, 2.0*math.pi, 0)
-    #                    msk2 = where(dphs > math.pi, -2.0*math.pi, 0)
-    #                    nav_mask = where(nav_mag > 0.75*MLab.max(nav_mag), 1.0, 0.0)
-    #                    dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
-    #
-    #                for pe in range(n_pe_true/nseg):
-    #                    # Calculate the phase correction.
-    #                    time = time0 + pe*time1
-    #                    if nseg > 0 and not ignore_nav:
-    #                        theta = -(phasecor_phs[slice,pe,:] - dphs*time/time0)
-    #                        msk1 = where(theta < 0.0, 2.0*math.pi, 0)
-    #                        theta = theta + msk1
-    #                        scl = cos(theta) + 1.0j*sin(theta)
-    #                        msk = where(nav_mag == 0.0, 1, 0)
-    #                        mag_ratio = (1 - msk)*phasecor_ftmag[slice,pe,:]/(nav_mag + msk)
-    #                        msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
-    #                        msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
-    #                        msk = msk1*msk2
-    #                        msk = (1 - msk) + msk*mag_ratio
-    #                        cor = scl*msk
-    #                    else:
-    #                        theta = -phasecor_phs[slice,pe,:]
-    #                        cor = cos(theta) + 1.j*sin(theta)
-    #                    phasecor_total[slice,pe,:] = theta.astype(Float32)
-    #                    
-    #                    # Do the phase correction.
-    #                    tmp[:] = ksp_data[vol,slice,pe,:] 
-    #                    idl.shift(tmp, 0, n_fe/4)
-    #                    echo = FFT.inverse_fft(tmp)
-    #                    idl.shift(echo, 0, n_fe/4)
-    #
-    #                    # Shift echo time by adding phase shift.
-    #                    echo = echo*cor
-    #
-    #                    idl.shift(echo, 0, n_fe/4)
-    #                    tmp = (FFT.fft(echo)).astype(Complex32)
-    #                    idl.shift(tmp, 0, n_fe/4)
-    #                    ksp_data[vol, slice, pe, :] = tmp
-
                 for pe in range(n_pe_true):
                     theta = -phasecor_phs[slice,pe,:]
                     cor = cos(theta) + 1.0j*sin(theta)
@@ -1068,3 +981,114 @@ class PhaseCorrelation (Operation):
                     tmp = (FFT.fft(echo)).astype(Complex32)
                     idl.shift(tmp, 0, n_fe/4)
                     ksp_data[vol, slice, pe, :] = tmp
+
+
+#*****************************************************************************
+def fi_phase_corr(params, options, data):
+    "Correct for Nyquist ghosting due to field inhomogeneity."
+
+    # Read the inhomogeneity field-map data from disk (Calculated using compute_fmap).
+   
+    # Loop over each phase-encode line of uncorrected data S'_mn.
+       
+        # Perform FFT of S'_mn with respect to n (frequency-encode direction) to
+        # obtain S'_m(x).
+
+        # Loop over each point x.
+
+            # Calculate the perturbation kernel K_mm'(x) at x by: 
+            # (1) Performing FFT with respect to y' of exp(i*2*pi*phi(x,y')*Delta t)
+            #     and exp(i*2*pi*phi(x,y')*Delta t).
+            # (2)  
+
+            # Invert perturbation operator to obtain correction operator at x.
+
+            # Apply correction operator at x to the distorted data S'_m(x) to
+            # obtain the corrected data S_m(x).
+
+        # Perform an inverse FFT in the read direction to obtain the corrected
+        # k-space data S_mn.
+
+
+#*****************************************************************************
+def segmentation_corr(params, options, data):
+    """
+    Correct for the Nyquist ghosting in segmented scans due to mismatches
+    between segments.
+    """
+#    ksp_data = data.data_matrix
+#    ksp_nav_data = data.nav_data
+#    nseg = params['nseg']
+#    n_pe_true = params['n_pe_true']
+#    n_fe = params['n_fe']
+
+#    if(string.find(petable_file,"alt") >= 0):
+#        time0 = te - 2.0*abs(gro)*trise/gmax - at
+#    else:
+#        time0 = te - (math.floor(nv/nseg)/2.0)*((2.0*abs(gro)*trise)/gmax + at)
+#    time1 = 2.0*abs(gro)*trise/gmax + at
+#    print "Data acquired with navigator echo time of %f" % (time0)
+#    print "Data acquired with echo spacing of %f" % (time1)
+
+
+#    for seg in range(nseg):
+#        if nseg > 0:
+#            # The first data frame is a navigator echo, compute the difference  in 
+#            # phase (dphs) due to B0 inhomogeneities using navigator echo.
+#            tmp[:] = ksp_nav_data[vol,slice,seg,:] 
+#            idl.shift(tmp,0,n_fe/4)
+#            nav_echo = (FFT.inverse_fft(tmp)).astype(Complex32)
+#            idl.shift(nav_echo,0,n_fe/4)
+#            nav_mag = abs(nav_echo)
+#            msk = where(equal(nav_echo.real,0.),1.,0.)
+#            phs = (1.0 - msk)*arctan(nav_echo.imag/(nav_echo.real + msk))
+#
+#            # Convert to 4 quadrant arctan.
+#            pos_msk = where(phs > 0,1,0)
+#            msk1 = pos_msk*where(nav_echo.imag < 0, math.pi, 0)
+#            msk2 = (1 - pos_msk)*where(nav_echo.imag < 0, 2.0*math.pi, math.pi)
+#            msk  = where((msk1 + msk2) == 0,1,0)
+#            phs = phs + msk1 + msk2
+#
+#            # Create mask for threshold of MAG_THRESH for magnitudes.
+#            mag_msk = where(nav_mag > 0.0, 1, 0)
+#            nav_phs = mag_msk*phs
+#            dphs = (phasecor_phs[slice,seg,:] - nav_phs)
+#            msk1 = where(dphs < -math.pi, 2.0*math.pi, 0)
+#            msk2 = where(dphs > math.pi, -2.0*math.pi, 0)
+#            nav_mask = where(nav_mag > 0.75*MLab.max(nav_mag), 1.0, 0.0)
+#            dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
+#
+#        for pe in range(n_pe_true/nseg):
+#            # Calculate the phase correction.
+#            time = time0 + pe*time1
+#            if nseg > 0 and not ignore_nav:
+#                theta = -(phasecor_phs[slice,pe,:] - dphs*time/time0)
+#                msk1 = where(theta < 0.0, 2.0*math.pi, 0)
+#                theta = theta + msk1
+#                scl = cos(theta) + 1.0j*sin(theta)
+#                msk = where(nav_mag == 0.0, 1, 0)
+#                mag_ratio = (1 - msk)*phasecor_ftmag[slice,pe,:]/(nav_mag + msk)
+#                msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
+#                msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
+#                msk = msk1*msk2
+#                msk = (1 - msk) + msk*mag_ratio
+#                cor = scl*msk
+#            else:
+#                theta = -phasecor_phs[slice,pe,:]
+#                cor = cos(theta) + 1.j*sin(theta)
+#            phasecor_total[slice,pe,:] = theta.astype(Float32)
+#                    
+#            # Do the phase correction.
+#            tmp[:] = ksp_data[vol,slice,pe,:] 
+#            idl.shift(tmp, 0, n_fe/4)
+#            echo = FFT.inverse_fft(tmp)
+#            idl.shift(echo, 0, n_fe/4)
+#
+#            # Shift echo time by adding phase shift.
+#            echo = echo*cor
+#
+#            idl.shift(echo, 0, n_fe/4)
+#            tmp = (FFT.fft(echo)).astype(Complex32)
+#            idl.shift(tmp, 0, n_fe/4)
+#            ksp_data[vol, slice, pe, :] = tmp
