@@ -3,14 +3,16 @@ import string
 import os
 from Numeric import *
 import file_io
-import FFT
 import struct
 from ConfigParser import SafeConfigParser
 from types import TypeType, BooleanType
 from optparse import OptionParser, Option
 from VolumeViewer import VolumeViewer
-from pylab import pi, fliplr, amax
-
+from FFT import inverse_fft, inverse_fft2d
+from pylab import (
+  pi, mlab, fft, frange, fliplr, amax, meshgrid, floor, zeros, squeeze,
+  fromstring)
+from prompt import prompt
 
 FIDL_FORMAT = "fidl"
 VOXBO_FORMAT = "voxbo"
@@ -22,7 +24,7 @@ output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT)
 output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
 
 
-#*****************************************************************************
+#-----------------------------------------------------------------------------
 def shift(matrix, axis, shft):
     """
     axis: Axis of shift: 0=x (rows), 1=y (columns),2=z
@@ -76,7 +78,36 @@ def shift(matrix, axis, shft):
         print "shift() only support 1D, 2D, and 3D arrays."
         sys.exit(1)
 
-    return
+
+#-----------------------------------------------------------------------------
+def shifted_fft(a):
+    tmp = a.copy()
+    shift_width = a.shape[0]/2
+    shift(tmp, 0, shift_width)
+    tmp = fft(tmp)
+    shift(tmp, 0, shift_width)
+    return tmp
+
+
+#-----------------------------------------------------------------------------
+def shifted_inverse_fft(a):
+    tmp = a.copy()
+    shift_width = a.shape[0]/2
+    shift(tmp, 0, shift_width)
+    tmp = inverse_fft(tmp)
+    shift(tmp, 0, shift_width)
+    return tmp
+
+
+#-----------------------------------------------------------------------------
+def atan2(a):
+    x = a.real; y=a.imag
+    msk = where(equal(x, 0.0), 1.0, 0.0)
+    phs = (1.0 - msk)*arctan(y/(x + msk))
+    pos_msk = where(phs > 0.0, 1.0, 0.0)
+    msk1 = pos_msk*where(y < 0, pi, 0.0)   # Re > 0, Im < 0
+    msk2 = (1.0 - pos_msk)*where(y < 0, 2.0*pi, pi) # Re < 0, Im < 0
+    return phs + msk1 + msk2
 
 
 #*****************************************************************************
@@ -984,54 +1015,210 @@ class PhaseCorrection (Operation):
         # Compute correction for Nyquist ghosts.
         # First and/or last block contains phase correction data.  Process it.
         phasecor_phs = zeros((nslice, n_pe_true, n_fe_true)).astype(Float)
-        phasecor_ftmag = zeros((nslice, n_pe_true, n_fe_true)).astype(Float32)
-        phasecor_total = zeros((nslice, n_pe_true, n_fe_true)).astype(Complex32)
-        tmp = zeros(n_fe_true).astype(Complex32)
-        temp = zeros(n_fe_true).astype(Complex32)
+
         # Compute point-by-point phase correction
-        for slice in range(nslice):
-            for pe in range(n_pe_true):
-                tmp[:] = ref_data[slice,pe,:].astype(Complex32)
-                shift(tmp, 0, n_fe_true/2)  # IS THIS NEEDED? NOTICE THIS IS n_fe_true
-                ft_blk = FFT.inverse_fft(tmp)
-                shift(ft_blk, 0, n_fe/4)  # IS THIS NEEDED? NOTICE THIS IS n_fe
-                msk = where(equal(ft_blk.real, 0.0), 1.0, 0.0)
-                phs = (1.0 - msk)*arctan(ft_blk.imag/(ft_blk.real + msk))
-                phasecor_ftmag[slice,pe,:] = abs(ft_blk).astype(Float32)
-
-                # Create mask for threshold of zero for magnitudes.
-                phasecor_ftmag_abs = abs(phasecor_ftmag[slice,pe,:])
-                mag_msk = where(phasecor_ftmag_abs > 0.0, 1.0, 0.0) 
-
-                # Convert to 4 quadrant arctan and set cor to zero for low magnitude voxels.
-                pos_msk = where(phs > 0.0, 1.0, 0.0)
-                msk1 = pos_msk*where(ft_blk.imag < 0, pi, 0.0)   # Re > 0, Im < 0
-                msk2 = (1.0 - pos_msk)*where(ft_blk.imag < 0, 2.0*pi, pi) # Re < 0, Im < 0
-                phs = mag_msk*(phs + msk1 + msk2) 
-                phasecor_phs[slice,pe,:] = phs[:].astype(Float32)
+        for slice, phscor_slice in zip(ref_data, phasecor_phs):
+            for pe, theta in zip(slice, phscor_slice):
+                # Convert inverse fourier transformed pe to 4 quadrant arctan.
+                theta[:] = atan2(shifted_inverse_fft(pe))
 
         # Apply the phase correction to the image data.
-        pe_per_seg = params['n_pe']/params['nseg']
-        dphs = zeros(n_pe_true).astype(Float32)
-        for vol in range(params['nvol']):
-            for slice in range(nslice):
-                for pe in range(n_pe_true):
-                    theta = -phasecor_phs[slice,pe,:]
-                    cor = cos(theta) + 1.0j*sin(theta)
-                    phasecor_total[slice,pe,:] = theta.astype(Float32)
-
-                    # Do the phase correction.
-                    tmp[:] = ksp_data[vol,slice,pe,:] 
-                    shift(tmp, 0, n_fe/4)
-                    echo = FFT.inverse_fft(tmp)
-                    shift(echo, 0, n_fe/4)
+        for volume in ksp_data:
+            for slice, phscor_slice in zip(volume, phasecor_phs):
+                for pe, theta in zip(slice, phscor_slice):
+                    correction = cos(-theta) + 1.0j*sin(-theta)
 
                     # Shift echo time by adding phase shift.
-                    echo = echo*cor
-                    shift(echo, 0, n_fe/4)
-                    tmp = (FFT.fft(echo)).astype(Complex32)
-                    shift(tmp, 0, n_fe/4)
-                    ksp_data[vol, slice, pe, :] = tmp
+                    echo = shifted_inverse_fft(pe)*correction
+                    pe[:] = shifted_fft(echo).astype(Complex32)
+
+
+#*****************************************************************************
+class SegmentationCorrection (Operation):
+    """
+    Correct for the Nyquist ghosting in segmented scans due to mismatches
+    between segments.
+    """
+    
+    #-------------------------------------------------------------------------
+    def get_times(self, params):
+        te = params["te"]
+        gro = params["gro"]
+        trise = params["trise"]
+        gmax = params["gmax"]
+        at = params["at"]
+
+        if(string.find(params["petable"],"alt") >= 0):
+            time0 = te - 2.0*abs(gro)*trise/gmax - at
+        else:
+            time0 = te - (floor(params["nv"]/params["nseg"])/2.0)*\
+                         ((2.0*abs(gro)*trise)/gmax + at)
+        time1 = 2.0*abs(gro)*trise/gmax + at
+        print "Data acquired with navigator echo time of %f" % (time0)
+        print "Data acquired with echo spacing of %f" % (time1)
+        return time0, time1
+
+    #-------------------------------------------------------------------------
+    def arctan(self, phs, nav_echo):
+        msk = where(equal(nav_echo.real,0.),1.,0.)
+        phs = (1.0 - msk)*arctan(nav_echo.imag/(nav_echo.real + msk))
+        pos_msk = where(phs > 0,1,0)
+        msk1 = pos_msk*where(nav_echo.imag < 0, pi, 0)
+        msk2 = (1 - pos_msk)*where(nav_echo.imag < 0, 2.0*pi, pi)
+        msk  = where((msk1 + msk2) == 0,1,0)
+        return phs + msk1 + msk2
+
+    #-------------------------------------------------------------------------
+    def compute_phase_difference(self): pass
+
+    #-------------------------------------------------------------------------
+    def correct_slice(self, slice, nav_slice): pass
+
+    #-------------------------------------------------------------------------
+    def run(self, params, options, data):
+        ksp_data = data.data_matrix
+        ksp_nav_data = data.nav_data
+        nseg = params['nseg']
+    #    n_pe_true = params['n_pe_true']
+    #    n_fe = params['n_fe']
+
+        time0, time1 = self.get_times(params)
+        print "SegmentationCorrection::correct_slice, nseg:",params["nseg"]," nav_per_seg:",params["nav_per_seg"],"ksp_data shape:",ksp_data.shape,"ksp_nav_data shape",ksp_nav_data.shape
+
+        for volume, nav_volume in zip(ksp_data, ksp_nav_data):
+            for slice, nav_slice in zip(volume, nav_volume):
+                self.correct_slice(slice, nav_slice)
+            #    for seg in range(nseg):
+            #        if nseg > 0:
+            #            # The first data frame is a navigator echo, compute the difference in
+            #            # phase (dphs) due to B0 inhomogeneities using navigator echo.
+            #            #tmp[:] = ksp_nav_data[vol,slice,seg,:] 
+            #            #shift(tmp,0,n_fe/4)
+            #            #nav_echo = (inverse_fft(tmp)).astype(Complex32)
+            #            #shift(nav_echo,0,n_fe/4)
+            #            nav_echo = shifted_inverse_fft(ksp_nav_data[vol,slice,seg,:])
+            #
+            #            # Convert to 4 quadrant arctan.
+            #            phs = self.arctan(phs, nav_echo)
+            
+            #            # Create mask for threshold of MAG_THRESH for magnitudes.
+            #            nav_mag = abs(nav_echo)
+            #            mag_msk = where(nav_mag > 0.0, 1, 0)
+            #            nav_phs = mag_msk*phs
+            #            dphs = (phasecor_phs[slice,seg,:] - nav_phs)
+            #            msk1 = where(dphs < -pi, 2.0*pi, 0)
+            #            msk2 = where(dphs > pi, -2.0*pi, 0)
+            #            nav_mask = where(nav_mag > 0.75*amax(nav_mag), 1.0, 0.0)
+            #            dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
+            #
+            #        for pe in range(n_pe_true/nseg):
+            #            # Calculate the phase correction.
+            #            time = time0 + pe*time1
+            #            if nseg > 0 and not ignore_nav:
+            #                theta = -(phasecor_phs[slice,pe,:] - dphs*time/time0)
+            #                msk1 = where(theta < 0.0, 2.0*pi, 0)
+            #                theta = theta + msk1
+            #                scl = cos(theta) + 1.0j*sin(theta)
+            #                msk = where(nav_mag == 0.0, 1, 0)
+            #                mag_ratio = (1 - msk)*phasecor_ftmag[slice,pe,:]/(nav_mag + msk)
+            #                msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
+            #                msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
+            #                msk = msk1*msk2
+            #                msk = (1 - msk) + msk*mag_ratio
+            #                cor = scl*msk
+            #            else:
+            #                theta = -phasecor_phs[slice,pe,:]
+            #                cor = cos(theta) + 1.j*sin(theta)
+
+            #            echo = shifted_inverse_fft(ksp_data[vol,slice,pe,:])
+            #            echo = echo*cor
+            #            ksp_data[vol, slice, pe, :] = shifted_fft(echo)
+            #                    
+            #            # Do the phase correction.
+            #            #tmp[:] = ksp_data[vol,slice,pe,:] 
+            #            #shift(tmp, 0, n_fe/4)
+            #            #echo = inverse_fft(tmp)
+            #            #shift(echo, 0, n_fe/4)
+            #
+            #            # Shift echo time by adding phase shift.
+            #            #echo = echo*cor
+            #
+            #            #shift(echo, 0, n_fe/4)
+            #            #tmp = (fft(echo)).astype(Complex32)
+            #            #shift(tmp, 0, n_fe/4)
+            #            #ksp_data[vol, slice, pe, :] = tmp
+
+    def old_version(self):
+#       This block contains image data. First, calculate the phase correction including
+#       the navigator echo.
+        dphs = zeros(N_pe).astype(Float32)
+        for slice in range(nslice):
+#           correction for all echos.
+            for seg in range(nseg):
+                ii = line_index(slice,seg,pe_per_seg)
+                jj = line_index(slice,seg,N_pe_true/nseg)
+                for pe in range(N_pe/nseg):
+#                   Calculate the phase correction.
+                    time = time0 + pe*time1
+###                    if pe == 0 and pulse_sequence == 'epi':
+                    if pe == 0 and n_nav_echo > 0:
+#                       The first data frame is a navigator echo, compute the difference  in 
+#                       phase (dphs) due to B0 inhomogeneities using navigator echo.
+                        tmp[:] = blk[pe+ii,:]
+                        shift(tmp,0,N_fe/4)
+                        nav_echo = (inverse_fft(tmp - bias[slice])).astype(Complex32)
+                        shift(nav_echo,0,N_fe/4)
+                        nav_mag = abs(nav_echo)
+                        msk = where(equal(nav_echo.real,0.),1.,0.)
+                        phs = (1.-msk)*arctan(nav_echo.imag/(nav_echo.real+msk))
+
+                        # Convert to 4 quadrant arctan.
+                        pos_msk = where(phs>0,1,0)
+                        msk1 = pos_msk*where(nav_echo.imag<0,math.pi,0)
+                        msk2 = (1-pos_msk)*where(nav_echo.imag<0,2.*math.pi,math.pi)
+                        msk  = where((msk1+msk2) == 0,1,0)
+                        phs = phs + msk1 + msk2
+
+#                       Create mask for threshold of MAG_THRESH for magnitudes.
+                        mag_msk = where(nav_mag>MAG_THRESH,1,0)
+                        nav_phs = mag_msk*phs
+                        dphs = (phasecor_phs[ii,:] - nav_phs)
+                        msk1 = where(dphs<-math.pi, 2.*math.pi,0)
+                        msk2 = where(dphs> math.pi,-2.*math.pi,0)
+                        nav_mask = where(nav_mag>.75*MLab.max(nav_mag),1.,0.)
+                        dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
+                        nav_save[slice,seg,:] = (dphs*(time1/time0)).astype(Float32)
+                    else:
+                        if n_nav_echo > 0 and not ignore_nav:
+                            theta = -(phasecor_phs[pe+ii,:] - dphs*time/time0)
+                            msk1 = where(theta<0.,2.*math.pi,0)
+                            theta = theta + msk1
+                            scl = cos(theta) + 1.j*sin(theta)
+                            msk = where(nav_mag==0.,1,0)
+                            mag_ratio = (1-msk)*phasecor_ftmag[pe+ii,:]/(nav_mag + msk)
+                            msk1 = (where((mag_ratio>1.05),0.,1.))
+                            msk2 = (where((mag_ratio<.95),0.,1.))
+                            msk = msk1*msk2
+                            msk = (1-msk) + msk*mag_ratio
+                            cor = scl*msk
+                        else:
+                            theta = -phasecor_phs[pe+ii,:]
+                            cor = cos(theta) + 1.j*sin(theta)
+ 
+                        # Do the phase correction.
+                        tmp[:] = blk[pe+ii,:]
+                        shift(tmp,0,N_fe/4)
+                        echo = inverse_fft(tmp - bias[slice])
+                        shift(echo,0,N_fe/4)
+
+                        # Shift echo time by adding phase shift.
+                        echo = echo*cor
+
+                        shift(echo,0,N_fe/4)
+                        tmp = (fft(echo)).astype(Complex32)
+                        shift(tmp,0,N_fe/4)
+                        blk_cor[vol-1,pe-n_nav_echo+jj,:] = tmp
+
 
 
 #*****************************************************************************
@@ -1081,7 +1268,7 @@ class InverseFFT (Operation):
         n_pe, n_fe = data.data_matrix.shape[-2:]
         for volume in data.data_matrix:
             for slice in volume:
-                image = FFT.inverse_fft2d(slice)
+                image = inverse_fft2d(slice)
                 shift(image,0,n_fe/2) 
                 shift(image,1,n_pe/2)  
                 slice[:,:] = image.astype(Complex32)
@@ -1097,12 +1284,11 @@ class ReorderSlices (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, params, options, data):
-        from matplotlib.mlab import zeros_like
         nslice = data.data_matrix.shape[-3]
 
         # Reorder the slices from inferior to superior.
         midpoint = nslice/2 + (nslice%2 and 1 or 0)
-        tmp = zeros_like(data.data_matrix[0])
+        tmp = mlab.zeros_like(data.data_matrix[0])
         #print "midpoint=",midpoint
         for volume in data.data_matrix:
             # if I can get the slice indices right, these two lines can replace
@@ -1119,111 +1305,6 @@ class ReorderSlices (Operation):
                 #print i, z
                 tmp[z] = slice
             volume[:] = tmp
-
-#*****************************************************************************
-class SegmentationCorrection (Operation):
-    """
-    Correct for the Nyquist ghosting in segmented scans due to mismatches
-    between segments.
-    """
-    
-    #-------------------------------------------------------------------------
-    def get_times(self, params):
-        from math import floor
-        te = params["te"]
-        gro = params["gro"]
-        trise = params["trise"]
-        gmax = params["gmax"]
-        at = params["at"]
-
-        if(string.find(params["petable"],"alt") >= 0):
-            time0 = te - 2.0*abs(gro)*trise/gmax - at
-        else:
-            time0 = te - (floor(params["nv"]/params["nseg"])/2.0)*\
-                         ((2.0*abs(gro)*trise)/gmax + at)
-        time1 = 2.0*abs(gro)*trise/gmax + at
-        print "Data acquired with navigator echo time of %f" % (time0)
-        print "Data acquired with echo spacing of %f" % (time1)
-        return time0, time1
-
-    #-------------------------------------------------------------------------
-    def correct_slice(self, slice, nav_slice): pass
-
-    #-------------------------------------------------------------------------
-    def run(self, params, options, data):
-        ksp_data = data.data_matrix
-        ksp_nav_data = data.nav_data
-        nseg = params['nseg']
-    #    n_pe_true = params['n_pe_true']
-    #    n_fe = params['n_fe']
-
-        time0, time1 = self.get_times(params)
-        print "SegmentationCorrection::correct_slice, nav_per_seg",params["nav_per_seg"],"ksp_data shape:",ksp_data.shape,"ksp_nav_data shape",ksp_nav_data.shape
-
-        for volume, nav_volume in zip(ksp_data, ksp_nav_data):
-            for slice, nav_slice in zip(volume, nav_volume):
-                self.correct_slice(slice, nav_slice)
-            #    for seg in range(nseg):
-            #        if nseg > 0:
-            #            # The first data frame is a navigator echo, compute the difference in
-            #            # phase (dphs) due to B0 inhomogeneities using navigator echo.
-            #            tmp[:] = ksp_nav_data[vol,slice,seg,:] 
-            #            shift(tmp,0,n_fe/4)
-            #            nav_echo = (FFT.inverse_fft(tmp)).astype(Complex32)
-            #            shift(nav_echo,0,n_fe/4)
-            #            nav_mag = abs(nav_echo)
-            #            msk = where(equal(nav_echo.real,0.),1.,0.)
-            #            phs = (1.0 - msk)*arctan(nav_echo.imag/(nav_echo.real + msk))
-            #
-            #            # Convert to 4 quadrant arctan.
-            #            pos_msk = where(phs > 0,1,0)
-            #            msk1 = pos_msk*where(nav_echo.imag < 0, pi, 0)
-            #            msk2 = (1 - pos_msk)*where(nav_echo.imag < 0, 2.0*pi, pi)
-            #            msk  = where((msk1 + msk2) == 0,1,0)
-            #            phs = phs + msk1 + msk2
-            #
-            #            # Create mask for threshold of MAG_THRESH for magnitudes.
-            #            mag_msk = where(nav_mag > 0.0, 1, 0)
-            #            nav_phs = mag_msk*phs
-            #            dphs = (phasecor_phs[slice,seg,:] - nav_phs)
-            #            msk1 = where(dphs < -pi, 2.0*pi, 0)
-            #            msk2 = where(dphs > pi, -2.0*pi, 0)
-            #            nav_mask = where(nav_mag > 0.75*amax(nav_mag), 1.0, 0.0)
-            #            dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
-            #
-            #        for pe in range(n_pe_true/nseg):
-            #            # Calculate the phase correction.
-            #            time = time0 + pe*time1
-            #            if nseg > 0 and not ignore_nav:
-            #                theta = -(phasecor_phs[slice,pe,:] - dphs*time/time0)
-            #                msk1 = where(theta < 0.0, 2.0*pi, 0)
-            #                theta = theta + msk1
-            #                scl = cos(theta) + 1.0j*sin(theta)
-            #                msk = where(nav_mag == 0.0, 1, 0)
-            #                mag_ratio = (1 - msk)*phasecor_ftmag[slice,pe,:]/(nav_mag + msk)
-            #                msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
-            #                msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
-            #                msk = msk1*msk2
-            #                msk = (1 - msk) + msk*mag_ratio
-            #                cor = scl*msk
-            #            else:
-            #                theta = -phasecor_phs[slice,pe,:]
-            #                cor = cos(theta) + 1.j*sin(theta)
-            #            phasecor_total[slice,pe,:] = theta.astype(Float32)
-            #                    
-            #            # Do the phase correction.
-            #            tmp[:] = ksp_data[vol,slice,pe,:] 
-            #            shift(tmp, 0, n_fe/4)
-            #            echo = FFT.inverse_fft(tmp)
-            #            shift(echo, 0, n_fe/4)
-            #
-            #            # Shift echo time by adding phase shift.
-            #            echo = echo*cor
-            #
-            #            shift(echo, 0, n_fe/4)
-            #            tmp = (FFT.fft(echo)).astype(Complex32)
-            #            shift(tmp, 0, n_fe/4)
-            #            ksp_data[vol, slice, pe, :] = tmp
 
 
 #*****************************************************************************
