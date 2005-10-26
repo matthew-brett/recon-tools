@@ -118,7 +118,7 @@ def run():
     params = get_params(options)
 
     # Log some parameter info to the console.
-    #log_params(params, options)
+    log_params(params, options)
 
     # Load data from the fid file.
     data = get_data(params, options)
