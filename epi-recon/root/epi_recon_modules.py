@@ -12,6 +12,7 @@ from FFT import inverse_fft, inverse_fft2d
 from pylab import (
   pi, mlab, fft, frange, fliplr, amax, meshgrid, floor, zeros, squeeze,
   fromstring, plot, show, angle)
+from recon import petables
 
 FIDL_FORMAT = "fidl"
 VOXBO_FORMAT = "voxbo"
@@ -686,7 +687,7 @@ def get_data(params, options):
     # Assumes navigator echo is aquired at the beginning of each segment
     petab = zeros(n_pe_true*nslice).astype(int)
     navtab = zeros(nav_per_seg*nseg*nslice).astype(int)
-    petable_file = "recon_epi_pettabs" + "/" + params['petable']
+    petable_file = os.path.join(petables, params['petable'])
     f_pe = open(petable_file)   # Open recon_epi petable file               
     petable_lines = f_pe.readlines()
     petable_lines[0] = string.split(petable_lines[0])

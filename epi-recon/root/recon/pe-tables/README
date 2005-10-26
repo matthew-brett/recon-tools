@@ -1,0 +1,6 @@
+This directory contains the Varian phase-encode tables which have been 
+modified for use with epi_recon. The first line contains the acquisition 
+order of the k-space lines. These lines are numbered according to the 
+diagram given at the beginning of epi_recon. Any navigator echos are 
+assumed to be acquired at the beginning of a segment and are therefore
+not assigned a line number.

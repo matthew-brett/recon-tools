@@ -1,4 +1,4 @@
-#!/usr/bic/bin/python
+#!/usr/bin/env python
 """
 Program: epi_recon, Read data from fid, take FFT, and write to disk.
 
