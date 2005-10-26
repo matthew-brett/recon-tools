@@ -221,7 +221,7 @@ class OrderedConfigParser (SafeConfigParser):
 
 
 #*****************************************************************************
-class EpiReconOptionParser (OptionParser):
+class ReconOptionParser (OptionParser):
     "Parse command-line arguments to the epi_recon tool."
 
     #-------------------------------------------------------------------------
@@ -320,9 +320,62 @@ class EpiReconOptionParser (OptionParser):
         # configure operations
         options.operations = self.configureOperations(options.config)
 
-        #options.ignore_nav = false
-
         return options
+
+
+##############################################################################
+class Recon (object):
+
+    #-------------------------------------------------------------------------
+    def log_params(self, params, options):
+        """
+        Print some of the values of the options and parameters dictionaries to the
+        screen. 
+        """
+        print ""
+        print "Phase encode table: ", params['petable']
+        print "Pulse sequence: %s" % params['pulse_sequence']
+        print "Number of navigator echoes per segment: %d" % params['nav_per_seg']
+        print "Number of frequency encodes: %d" % params['n_fe_true']
+        print "Number of phase encodes (including navigators if present): %d" % params['n_pe']
+        print "Data type: ", params['num_type']
+        print "Number of slices: %d" % params['nslice']
+        print "Number of volumes: %d" % params['nvol']
+        print "Number of segments: %d" % params['nseg']
+        print "Number of volumes to skip: %d" % options.skip
+        print "Orientation: %s" % params['orient']
+        print "Pixel size (phase-encode direction): %7.2f" % params['xsize'] 
+        print "Pixel size (frequency-encode direction): %7.2f" % params['ysize']
+        print "Slice thickness: %7.2f" % params['zsize']
+
+
+    #-------------------------------------------------------------------------
+    def run(self):
+        "Run the epi_recon tool."
+
+        # Get the filename names and options from the command line.
+        options = ReconOptionParser().getOptions()
+
+        # Get the imaging parameters from the vendor dependent parameter file.
+        params = get_params(options)
+
+        # Log some parameter info to the console.
+        self.log_params(params, options)
+
+        # Load data from the fid file.
+        data = get_data(params, options)
+
+        # Now apply the various data manipulation and artifact correction operations
+        # to the time-domain (k-space) data which is stored in the arrays
+        # data_matrix and nav_data as well as the ancillary data arrays ref_data and
+        # ref_nav_data. The operations are applied by looping over the list of
+        # operations that the user chooses on the command line. Each operation acts
+        # in a independent manner upon the data arrays.
+        for operation, args in options.operations:
+            operation(**args).run(params, options, data)
+
+        # Save data to disk.
+        save_image_data(data.data_matrix, params, options)
 
 
 #*****************************************************************************
@@ -337,6 +390,10 @@ def get_params(options):
     nvol_images = '0'
     nvol_image = '0'
     lc_spin = ''
+
+    procpar = varian.procpar(options.procpar_file)
+
+
     while 1:
         line = infile.readline()
         if(line == ''):
@@ -1065,7 +1122,7 @@ class SegmentationCorrection (Operation):
         n_pe_true = params['n_pe_true']
         pe_per_seg = n_pe_true/nseg
 
-        # Compute magnitude of the reference phase (ref_mag)
+        # Compute the phase angle and magnitude of reference volume.
         ref_phs = mlab.zeros_like(ref_data).astype(Float)
         ref_mag = mlab.zeros_like(ref_data).astype(Float)
         for slice in range(len(ref_data)):
@@ -1074,15 +1131,14 @@ class SegmentationCorrection (Operation):
                 ref_phs[slice,pe,:] = angle(ft_line)
                 ref_mag[slice,pe,:] = abs(ft_line)
 
-        # Compute phase of the reference navigator echoes.
+        # Compute phase angle of the reference navigator echoes.
         ref_nav_phs = mlab.zeros_like(ref_nav_data).astype(Float)
-        print "ref_nav_data shape:",ref_nav_data.shape,"ref_nav_phs shape:",ref_nav_phs.shape
         for slice in range(len(ref_nav_data)):
             for seg in range(len(ref_nav_data[slice])):
                 ref_nav_phs[slice,seg,:] = \
                   angle(shifted_inverse_fft(ref_nav_data[slice,seg]))
 
-        # Compute phase difference from reference for each segment from nav echo
+        # Compute phase difference from reference for each segment using nav echo.
         phs_diff = mlab.zeros_like(ksp_nav_data).astype(Float)
         nav_mag = mlab.zeros_like(ksp_nav_data).astype(Float)
         for vol in range(len(ksp_nav_data)):
@@ -1097,111 +1153,37 @@ class SegmentationCorrection (Operation):
                     msk1 = where(diff < -pi, 2.0*pi, 0)
                     msk2 = where(diff > pi, -2.0*pi, 0)
                     nav_mask = where(nav_mag > 0.75*amax(nav_mag), 1.0, 0.0)
-                    # This partially corrects for field inhomogeneity.
                     phs_diff[vol,slice,seg,:] = diff + msk1 + msk2  
 
         time0, time1 = self.get_times(params)
         def pe_time(pe):
             return time0 + (params["nav_per_seg"] + pe%pe_per_seg)*time1
 
-        for vol in range(len(ksp_nav_data)):
-            for slice in range(len(ksp_nav_data[vol])):
-                    for pe in range(n_pe_true):
-                        # Compute the phase correction.
-                        segnum = pe/pe_per_seg
-                        phs_diff_line = phs_diff[vol,slice,segnum]
-                        nav_mag_line = nav_mag[vol,slice,segnum]
-                        time = pe_time(pe)
-                        theta = -(ref_phs[slice,pe,:] - phs_diff_line*time/time0)
-                        msk1 = where(theta < 0.0, 2.0*pi, 0)
-                        theta = theta + msk1
-                        scl = cos(theta) + 1.0j*sin(theta)
-                        msk = where(nav_mag_line == 0.0, 1, 0)
-                        mag_ratio = (1 - msk)*ref_mag[slice,pe,:]/(nav_mag_line + msk)
-                        msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
-                        msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
-                        msk = msk1*msk2
-                        msk = (1 - msk) + msk*mag_ratio
-                        cor = scl*msk
+        for volnum, volume in enumerate(ksp_data):
+            for slicenum, slice in enumerate(volume):
+                for penum, pe in enumerate(slice):
+                    # Compute the phase correction.
+                    segnum = penum/pe_per_seg
+                    phs_diff_line = phs_diff[volnum,slicenum,segnum]
+                    nav_mag_line = nav_mag[volnum,slicenum,segnum]
+                    time = pe_time(penum)
+                    theta = -(ref_phs[slicenum,penum,:] - phs_diff_line*time/time0)
+                    msk1 = where(theta < 0.0, 2.0*pi, 0)
+                    theta = theta + msk1
+                    scl = cos(theta) + 1.0j*sin(theta)
+                    msk = where(nav_mag_line == 0.0, 1, 0)
+                    mag_ratio = (1 - msk)*ref_mag[slicenum,penum,:]/(nav_mag_line + msk)
+                    msk1 = (where((mag_ratio > 1.05), 0.0, 1.0))
+                    msk2 = (where((mag_ratio < 0.95), 0.0, 1.0))
+                    msk = msk1*msk2
+                    msk = (1 - msk) + msk*mag_ratio
+                    cor = scl*msk
 
-                        # Apply the phase correction.
-                        echo = shifted_inverse_fft(ksp_data[vol,slice,pe,:])
-                        echo = echo*cor
-                        ksp_data[vol,slice,pe,:] = shifted_fft(echo).astype(Complex32)
-                                
-
-    def old_version(self):
-#       This block contains image data. First, calculate the phase correction including
-#       the navigator echo.
-        dphs = zeros(N_pe).astype(Float32)
-        for slice in range(nslice):
-#           correction for all echos.
-            for seg in range(nseg):
-                ii = line_index(slice,seg,pe_per_seg)
-                jj = line_index(slice,seg,N_pe_true/nseg)
-                for pe in range(N_pe/nseg):
-#                   Calculate the phase correction.
-                    time = time0 + pe*time1
-###                    if pe == 0 and pulse_sequence == 'epi':
-                    if pe == 0 and n_nav_echo > 0:
-#                       The first data frame is a navigator echo, compute the difference  in 
-#                       phase (dphs) due to B0 inhomogeneities using navigator echo.
-                        tmp[:] = blk[pe+ii,:]
-                        shift(tmp,0,N_fe/4)
-                        nav_echo = (inverse_fft(tmp - bias[slice])).astype(Complex32)
-                        shift(nav_echo,0,N_fe/4)
-                        nav_mag = abs(nav_echo)
-                        msk = where(equal(nav_echo.real,0.),1.,0.)
-                        phs = (1.-msk)*arctan(nav_echo.imag/(nav_echo.real+msk))
-
-                        # Convert to 4 quadrant arctan.
-                        pos_msk = where(phs>0,1,0)
-                        msk1 = pos_msk*where(nav_echo.imag<0,math.pi,0)
-                        msk2 = (1-pos_msk)*where(nav_echo.imag<0,2.*math.pi,math.pi)
-                        msk  = where((msk1+msk2) == 0,1,0)
-                        phs = phs + msk1 + msk2
-
-#                       Create mask for threshold of MAG_THRESH for magnitudes.
-                        mag_msk = where(nav_mag>MAG_THRESH,1,0)
-                        nav_phs = mag_msk*phs
-                        dphs = (phasecor_phs[ii,:] - nav_phs)
-                        msk1 = where(dphs<-math.pi, 2.*math.pi,0)
-                        msk2 = where(dphs> math.pi,-2.*math.pi,0)
-                        nav_mask = where(nav_mag>.75*MLab.max(nav_mag),1.,0.)
-                        dphs = dphs + msk1 + msk2  # This partially corrects for field inhomogeneity.
-                        nav_save[slice,seg,:] = (dphs*(time1/time0)).astype(Float32)
-                    else:
-                        if n_nav_echo > 0 and not ignore_nav:
-                            theta = -(phasecor_phs[pe+ii,:] - dphs*time/time0)
-                            msk1 = where(theta<0.,2.*math.pi,0)
-                            theta = theta + msk1
-                            scl = cos(theta) + 1.j*sin(theta)
-                            msk = where(nav_mag==0.,1,0)
-                            mag_ratio = (1-msk)*phasecor_ftmag[pe+ii,:]/(nav_mag + msk)
-                            msk1 = (where((mag_ratio>1.05),0.,1.))
-                            msk2 = (where((mag_ratio<.95),0.,1.))
-                            msk = msk1*msk2
-                            msk = (1-msk) + msk*mag_ratio
-                            cor = scl*msk
-                        else:
-                            theta = -phasecor_phs[pe+ii,:]
-                            cor = cos(theta) + 1.j*sin(theta)
- 
-                        # Do the phase correction.
-                        tmp[:] = blk[pe+ii,:]
-                        shift(tmp,0,N_fe/4)
-                        echo = inverse_fft(tmp - bias[slice])
-                        shift(echo,0,N_fe/4)
-
-                        # Shift echo time by adding phase shift.
-                        echo = echo*cor
-
-                        shift(echo,0,N_fe/4)
-                        tmp = (fft(echo)).astype(Complex32)
-                        shift(tmp,0,N_fe/4)
-                        blk_cor[vol-1,pe-n_nav_echo+jj,:] = tmp
-
-
+                    # Apply the phase correction.
+                    echo = shifted_inverse_fft(pe)
+                    echo = echo*cor
+                    pe[:] = shifted_fft(echo).astype(Complex32)
+                            
 
 #*****************************************************************************
 def fermi_filter(rows, cols, cutoff, trans_width):
