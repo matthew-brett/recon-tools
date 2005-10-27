@@ -333,20 +333,20 @@ class Recon (object):
         screen. 
         """
         print ""
-        print "Phase encode table: ", params['petable']
-        print "Pulse sequence: %s" % params['pulse_sequence']
-        print "Number of navigator echoes per segment: %d" % params['nav_per_seg']
-        print "Number of frequency encodes: %d" % params['n_fe_true']
-        print "Number of phase encodes (including navigators if present): %d" % params['n_pe']
-        print "Data type: ", params['num_type']
-        print "Number of slices: %d" % params['nslice']
-        print "Number of volumes: %d" % params['nvol']
-        print "Number of segments: %d" % params['nseg']
+        print "Phase encode table: ", params.petable
+        print "Pulse sequence: %s" % params.pulse_sequence
+        print "Number of navigator echoes per segment: %d" % params.nav_per_seg
+        print "Number of frequency encodes: %d" % params.n_fe_true
+        print "Number of phase encodes (including navigators if present): %d" % params.n_pe
+        print "Data type: ", params.num_type
+        print "Number of slices: %d" % params.nslice
+        print "Number of volumes: %d" % params.nvol
+        print "Number of segments: %d" % params.nseg
         print "Number of volumes to skip: %d" % options.skip
-        print "Orientation: %s" % params['orient']
-        print "Pixel size (phase-encode direction): %7.2f" % params['xsize'] 
-        print "Pixel size (frequency-encode direction): %7.2f" % params['ysize']
-        print "Slice thickness: %7.2f" % params['zsize']
+        print "Orientation: %s" % params.orient
+        print "Pixel size (phase-encode direction): %7.2f" % params.xsize 
+        print "Pixel size (frequency-encode direction): %7.2f" % params.ysize
+        print "Slice thickness: %7.2f" % params.zsize
 
 
     #-------------------------------------------------------------------------
@@ -385,270 +385,111 @@ def get_params(options):
     to the scan. Some parameters may be overridden by the options from the
     command line and hence the "options" list is an argument to this function.
     """
-    params = {}       # Create empty dictionary.
-    infile = open(options.procpar_file,'r')
-    nvol_images = '0'
-    nvol_image = '0'
-    lc_spin = ''
-
+    import varian
+    params = EmptyObject()
     procpar = varian.procpar(options.procpar_file)
+    params.thk = procpar.thk[0]
+    params.pss = procpar.pss
+    params.nslice = len(procpar.pss)
+    params.n_fe = procpar.np[0]
+    params.n_pe = procpar.nv[0]
+    params.tr = procpar.tr[0]
+    params.petable = procpar.petable[0]
+    params.nvol = procpar.images[0]
+    params.te = procpar.te[0]
+    params.gro = procpar.gro[0]
+    params.trise = procpar.trise[0]
+    params.gmax = procpar.gmax[0]
+    params.at = procpar.at[0]
+    params.orient = procpar.orient[0]
+    pulse_sequence = procpar.pslabel[0]
+    
+    if procpar.get("spinecho", ("",))[0] == "y":
+        if pulse_sequence == 'epidw': pulse_sequence = 'epidw_se'
+        else: pulse_sequence = 'epi_se'
 
-
-    while 1:
-        line = infile.readline()
-        if(line == ''):
-            break
-        keywords = string.split(line)
-        if (keywords[0] == 'thk'):
-            line = infile.readline()
-            words = string.split(line)
-            thk = words[1]
-            params['thk'] = float(thk)
-        elif (keywords[0] + " 3" == "te 3"):
-            line = infile.readline()
-            words = string.split(line)
-            te = words[1]
-            params['te'] = te
-        elif (keywords[0] == 'pss'):
-            line = infile.readline()
-            words = string.split(line)
-            nslice = words[0]
-            len = int(nslice)
-            pss = words[1:]
-            params['pss'] = pss
-            params['nslice'] = int(nslice)
-        elif (keywords[0] == 'lro'):
-            line = infile.readline()
-            words = string.split(line)
-            ffov = 10.*float(words[1])
-            fov = "%f" % ffov
-            params['fov'] = fov
-        elif (keywords[0] == 'lpe2'):
-            line = infile.readline()
-            words = string.split(line)
-            flpe2 = 10.*float(words[1])
-            lpe2 = "%f" % flpe2
-            params['lpe2'] = lpe2
-        elif (keywords[0] == 'dquiet'):
-            line = infile.readline()
-            words = string.split(line)
-            fquiet_interval = float(words[1])
-            quiet_interval = "%f" % fquiet_interval
-            params['quiet_interval'] = quiet_interval
-        elif (keywords[0] == 'np'):
-            line = infile.readline()
-            words = string.split(line)
-            np = words[1]
-            params['n_fe'] = int(np)
-        elif (keywords[0] == 'nseg'):
-            line = infile.readline()
-            words = string.split(line)
-            nseg = words[1]
-            params['nseg'] = nseg
-        elif (keywords[0] == 'dp'):
-            line = infile.readline()
-            words = string.split(line)
-            dp = words[1]
-            params['dp'] = dp
-        elif (keywords[0] == 'nv'):
-            line = infile.readline()
-            words = string.split(line)
-            nv = words[1]
-            params['n_pe'] = int(nv)
-        elif (keywords[0] == 'nv2'):
-            line = infile.readline()
-            words = string.split(line)
-            nv2 = words[1]
-            params['nv2'] = nv2
-        elif (keywords[0] == 'pslabel'):
-            # Pulse sequence label
-            line = infile.readline()
-            words = string.split(line)
-            pulse_sequence = words[1][1:-1]
-            if pulse_sequence == 'spare':
-#               Leon's "spare" sequence is really the EPI sequence with delay.
-                pulse_sequence = "epi" 
-            params['pulse_sequence'] = pulse_sequence
-        elif (keywords[0] == 'tr'):
-            line = infile.readline()
-            words = string.split(line)
-            tr = words[1]
-            params['tr'] = tr
-        elif (keywords[0] == 'spinecho'):
-            line = infile.readline()
-            words = string.split(line)
-            lc_spin = words[1]
-        elif (keywords[0]+" 1" == 'at 1'):
-            line = infile.readline()
-            words = string.split(line)
-            at = words[1]
-            params['at'] = at
-        elif (keywords[0]+" " == 'gmax '):
-            line = infile.readline()
-            words = string.split(line)
-            gmax = words[1]
-            params['gmax'] = gmax
-        elif (keywords[0]+" " == 'gro '):
-            line = infile.readline()
-            words = string.split(line)
-            gro = words[1]
-            params['gro'] = gro
-        elif (keywords[0]+" " == 'trise '):
-            line = infile.readline()
-            words = string.split(line)
-            trise  = words[1]
-            params['trise'] = trise 
-        elif (keywords[0] == 'petable'):
-            line = infile.readline()
-            words = string.split(line)
-            petable = words[1]
-            params['petable'] = petable[1:-1]
-        elif (keywords[0] == 'cntr'):
-            line = infile.readline()
-            words = string.split(line)
-            nvol_images = words[0]
-            params['nvol'] = nvol_images
-        elif (keywords[0] == 'image'):
-            line = infile.readline()
-            words = string.split(line)
-            nvol_image = words[0]
-        elif (keywords[0] == 'images'):
-            line = infile.readline()
-            words = string.split(line)
-            nvol_images = words[1]
-        elif (keywords[0] == 'orient'):
-            line = infile.readline()
-            words = string.split(line)
-            orient = words[1]
-            params['orient'] = orient
-    infile.close()
-
-    if "y" in lc_spin:
-        if params['pulse_sequence'] == 'epidw':
-            params['pulse_sequence'] = 'epidw_se'
-        else:
-            params['pulse_sequence'] = 'epi_se'
+    # try using procpar.cntr or procpar.image to know which volumes are reference
 
     if pulse_sequence == 'mp_flash3d':
-        params['nslice'] = params['nv2']
-        ns = int(params['nslice'])
-        params['thk'] = float(params['lpe2'])
-        gap = 0
+        params.nslice = procpar.nv2[0]
+        params.thk = 10.*procpar.lpe2[0]
+        slice_gap = 0
     else:
-        slice_pos = params['pss']
-        th = float(thk)
-        ns = int(nslice)
-        min = 10.*float(slice_pos[0])
-        max = 10.*float(slice_pos[ns-1])
-        if ns > 1:
-            gap = ((max - min + th) - (ns*th))/(ns - 1)
+        slice_pos = params.pss
+        min = 10.*slice_pos[0]
+        max = 10.*slice_pos[-1]
+        nslice = params.nslice
+        if nslice > 1:
+            slice_gap = ((max - min + params.thk) - (nslice*params.thk))/(nslice - 1)
         else:
-            gap = 0
-    params['gap'] = gap
+            slice_gap = 0
 
-#   Coding of number of frames varies with the sequence.
-    if nvol_images > 0:
-#       This is the most reliable.
-        nvol = nvol_images
-    else:
-        nvol = nvol_image
-    params['nvol'] = nvol
-    params['nvol'] = int(params['nvol'])
-
-
-    if options.TR > 0:
-        params['tr'] = options.TR
-    params['n_fe_true'] = params['n_fe']/2
-    n_pe = params['n_pe']
-    n_fe = params['n_fe'] 
-
+    if options.TR > 0: params.tr = options.TR
+    params.n_fe_true = params.n_fe/2
+    n_pe = params.n_pe
+    n_fe = params.n_fe 
 
     # Determine the number of navigator echoes per segment.
-    if params['n_pe'] % 32:
-        params['nav_per_seg'] = 1
-    else:
-        params['nav_per_seg'] = 0
-
-    if(params.has_key('nvol') == 0):
-        params['nvol'] = 1
+    params.nav_per_seg = params.n_pe%32 and 1 or 0
 
     if(options.nvol_to_read > 0):
-        params['nvol'] = options.nvol_to_read
+        params.nvol = options.nvol_to_read
     else:
-        params['nvol'] = params['nvol'] - options.skip
+        params.nvol = params.nvol - options.skip
 
-
-    if(pulse_sequence == 'epi' or pulse_sequence == 'tepi'):
-        pulse_sequence = 'epi'
-        nseg = int(params['petable'][-2])
-    elif(pulse_sequence == 'epidw' or pulse_sequence == 'Vsparse'):
+    # sequence-specific logic for determining pulse_sequence, petable and nseg
+    # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
+    # Leon's "spare" sequence is really the EPI sequence with delay.
+    if(pulse_sequence in ('epi','tepi','sparse','spare')):
+        nseg = int(params.petable[-2])
+    elif(pulse_sequence in ('epidw','Vsparse')):
         pulse_sequence = 'epidw'
-        nseg = int(params['petable'][-1])
-        if(params.has_key('dquiet')):
-            TR = TR + float(params['quiet_interval'])
-    elif(pulse_sequence == 'epi_se'):
-        if string.rfind(params['petable'],'epidw') < 0:
+        nseg = int(params.petable[-1])
+    elif(pulse_sequence in ('epi_se','epidw_sb')):
+        nseg = procpar.nseg[0]
+        if string.rfind(params.petable,'epidw') < 0:
             petable = "epi%dse%dk" % (n_pe,nseg)
         else:
             pulse_sequence = 'epidw'
-        nseg = int(params['nseg'])
-    elif(pulse_sequence == 'epidw_sb'):
-        if string.rfind(params['petable'],'epidw') < 0:
-            petable = "epi%dse%dk" % (n_pe,nseg)
-        else:
-            pulse_sequence = 'epidw'
-        nseg = int(params['nseg'])
-    elif(pulse_sequence == 'epidw_se'):
-        nseg = int(params['nseg'])
     elif(pulse_sequence == 'asems'):
         nseg = 1
-        petable = "epi%dse%dk" % (n_pe,nseg)
-        petable = "64alt"
-        params['petable'] = petable
-        params['petable'] = ""  #!!! WHAT? OBTAIN petable THEN JUST SET TO "" ? !!!
         petab = zeros(n_pe)
         for i in range(n_pe):      # !!!!! WHAT IS THIS TOO ? !!!!!
             if i%2:
                  petab[i] = n_pe - i/2 - 1
             else:
                  petab[i] = i/2
-    elif(pulse_sequence == 'sparse'): # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
-        nseg = int(params['petable'][-2])
-        pulse_sequence = 'epi'
-        TR = TR + float(params['quiet_interval'])
     else:
         print "Could not identify sequence: %s" % (pulse_sequence)
         sys.exit(1)
 
-    params['tr'] = nseg*float(params['tr'])
-    params['nseg'] = nseg
-    params['n_pe_true'] =  params['n_pe'] - nseg*params['nav_per_seg']
-    params['xsize'] = float(params['fov'])/params['n_pe_true']
-    params['ysize'] = float(params['fov'])/params['n_fe_true']
-    params['zsize'] = float(params['thk']) + float(params['gap'])
-    params["te"] = float(params['te'])
-    params["trise"] = float(params['trise'])
-    params["gro"] = float(params['gro'])
-    params["gmax"] = float(params['gmax'])
-    params["at"] = float(params['at'])
+    params.nseg = nseg
+    params.pulse_sequence = pulse_sequence
+    
+    # this quiet_interval may need to be added to tr in some way...
+    #quiet_interval = procpar.get("dquiet", (0,))[0]
+    params.tr = nseg*params.tr
+    params.nav_per_slice = nseg*params.nav_per_seg
+    params.n_pe_true =  params.n_pe - params.nav_per_slice
+    fov = procpar.lro[0]
+    params.xsize = float(fov)/params.n_pe_true
+    params.ysize = float(fov)/params.n_fe_true
+    params.zsize = float(params.thk) + slice_gap
 
-    if(params['dp'] == '"y"'):
-        params['datasize'] = 4
-        params['num_type'] = Int32
-    else:
-        params['datasize'] = 2
-        params['num_type'] = Int16
+    params.datasize, params.num_type = \
+      procpar.dp[0]=="y" and (4, Int32) or (2, Int16)
+
     return params
 
 
 #*****************************************************************************
 def initialize_data(params):
     "Allocate and initialize data arrays."
-    nvol = params['nvol']
-    nslice = params['nslice']
-    n_nav = params['nseg']*params['nav_per_seg']
-    n_pe_true = params['n_pe_true']
-    n_fe_true = params['n_fe_true']
+    nvol = params.nvol
+    nslice = params.nslice
+    n_nav = params.nav_per_slice
+    n_pe_true = params.n_pe_true
+    n_fe_true = params.n_fe_true
     return EmptyObject(
       data_matrix = zeros((nvol, nslice, n_pe_true, n_fe_true), Complex32),
       nav_data = zeros((nvol, nslice, n_nav, n_fe_true), Complex32),
@@ -688,22 +529,22 @@ def get_data(params, options):
     nav_data = data.nav_data
     ref_data = data.ref_data
     ref_nav_data = data.ref_nav_data
-    nav_per_seg = params['nav_per_seg']
-    nseg = params['nseg']
-    n_nav = nseg*nav_per_seg
-    n_pe = params['n_pe']
+    nav_per_seg = params.nav_per_seg
+    nseg = params.nseg
+    n_nav = params.nav_per_slice
+    n_pe = params.n_pe
     pe_per_seg = n_pe/nseg
-    n_pe_true = params['n_pe_true']
+    n_pe_true = params.n_pe_true
     pe_true_per_seg = n_pe_true/nseg
-    n_fe = params['n_fe']  
-    n_fe_true = params['n_fe_true']
-    nslice =  params['nslice']
+    n_fe = params.n_fe  
+    n_fe_true = params.n_fe_true
+    nslice =  params.nslice
     ydim = n_fe_true
     xdim = n_pe_true
-    pulse_sequence = params['pulse_sequence']
-    nvol = params['nvol']
-    num_type = params['num_type']
-    datasize = params['datasize']
+    pulse_sequence = params.pulse_sequence
+    nvol = params.nvol
+    num_type = params.num_type
+    datasize = params.datasize
     main_hdr = 32
     sub_hdr = 28
     line_len_data = datasize*n_fe
@@ -743,8 +584,8 @@ def get_data(params, options):
     # will be used to read the data into the recon_epi as slices of k-space data. 
     # Assumes navigator echo is aquired at the beginning of each segment
     petab = zeros(n_pe_true*nslice).astype(int)
-    navtab = zeros(nav_per_seg*nseg*nslice).astype(int)
-    petable_file = os.path.join(petables, params['petable'])
+    navtab = zeros(n_nav*nslice).astype(int)
+    petable_file = os.path.join(petables, params.petable)
     f_pe = open(petable_file)   # Open recon_epi petable file               
     petable_lines = f_pe.readlines()
     petable_lines[0] = string.split(petable_lines[0])
@@ -935,17 +776,15 @@ def save_image_data(data_matrix, params, options):
     VolumeViewer(
       abs(data_matrix),
       ("Time Point", "Slice", "Row", "Column"))
-    nav_per_seg = params['nav_per_seg']
-    nseg = params['nseg']
-    n_pe = params['n_pe']
-    n_pe_true = params['n_pe_true']
-    n_fe = params['n_fe']
-    n_fe_true = params['n_fe_true']
-    nslice =  params['nslice']
-    pulse_sequence = params['pulse_sequence']
-    xsize = params['xsize'] 
-    ysize = params['ysize']
-    zsize = params['zsize']
+    n_pe = params.n_pe
+    n_pe_true = params.n_pe_true
+    n_fe = params.n_fe
+    n_fe_true = params.n_fe_true
+    nslice =  params.nslice
+    pulse_sequence = params.pulse_sequence
+    xsize = params.xsize 
+    ysize = params.ysize
+    zsize = params.zsize
 
     # Setup output file names.
     if options.file_format == SPM_FORMAT:
@@ -974,7 +813,7 @@ def save_image_data(data_matrix, params, options):
     # Save data to disk
     print "Saving to disk. Please Wait"
     tmp_vol = zeros((nslice,n_pe_true,n_fe_true)).astype(Complex32)
-    vol_rng = range(frame_start, params['nvol'])
+    vol_rng = range(frame_start, params.nvol)
     for vol in vol_rng:
         if options.save_first and vol == 0:  #!!!! DO WE NEED THIS SECTION !!!!!
             img = zeros((nslice,n_fe_true,n_pe_true)).astype(Float32)
@@ -1009,17 +848,15 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
     command line with an added suffix of "_ksp". The k-space data is saved
     with the slices in the acquisition order rather than the spatial order.
     """
-    nav_per_seg = params['nav_per_seg']
-    nseg = params['nseg']
-    n_pe = params['n_pe']
-    n_pe_true = params['n_pe_true']
-    n_fe = params['n_fe']
-    n_fe_true = params['n_fe_true']
-    nslice =  params['nslice']
-    pulse_sequence = params['pulse_sequence']
-    xsize = params['xsize'] 
-    ysize = params['xsize']
-    zsize = params['zsize']
+    n_pe = params.n_pe
+    n_pe_true = params.n_pe_true
+    n_fe = params.n_fe
+    n_fe_true = params.n_fe_true
+    nslice =  params.nslice
+    pulse_sequence = params.pulse_sequence
+    xsize = params.xsize 
+    ysize = params.xsize
+    zsize = params.zsize
 
     # Setup output file names.
     if options.file_format == SPM_FORMAT:
@@ -1044,7 +881,7 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
 
     # Save data to disk
     print "Saving to disk. Please Wait"
-    vol_rng = range(params['nvol'])
+    vol_rng = range(params.nvol)
     for vol in vol_rng:
         if  options.file_format == SPM_FORMAT:
             # Open files for this volume.
@@ -1064,10 +901,10 @@ class PhaseCorrection (Operation):
     def run(self, params, options, data):
         ref_data = data.ref_data
         ksp_data = data.data_matrix
-        nslice = params['nslice']
-        n_pe_true = params['n_pe_true']
-        n_fe = params['n_fe']
-        n_fe_true = params['n_fe_true']
+        nslice = params.nslice
+        n_pe_true = params.n_pe_true
+        n_fe = params.n_fe
+        n_fe_true = params.n_fe_true
 
         # Compute point-by-point phase correction
         ref_phs = mlab.zeros_like(ref_data).astype(Float)
@@ -1096,16 +933,16 @@ class SegmentationCorrection (Operation):
     
     #-------------------------------------------------------------------------
     def get_times(self, params):
-        te = params["te"]
-        gro = params["gro"]
-        trise = params["trise"]
-        gmax = params["gmax"]
-        at = params["at"]
+        te = params.te
+        gro = params.gro
+        trise = params.trise
+        gmax = params.gmax
+        at = params.at
 
-        if(string.find(params["petable"],"alt") >= 0):
+        if(string.find(params.petable,"alt") >= 0):
             time0 = te - 2.0*abs(gro)*trise/gmax - at
         else:
-            time0 = te - (floor(params["nv"]/params["nseg"])/2.0)*\
+            time0 = te - (floor(params.n_pe/params.nseg)/2.0)*\
                          ((2.0*abs(gro)*trise)/gmax + at)
         time1 = 2.0*abs(gro)*trise/gmax + at
         print "Data acquired with navigator echo time of %f" % (time0)
@@ -1118,8 +955,8 @@ class SegmentationCorrection (Operation):
         ref_nav_data = data.ref_nav_data
         ksp_data = data.data_matrix
         ksp_nav_data = data.nav_data
-        nseg = params['nseg']
-        n_pe_true = params['n_pe_true']
+        nseg = params.nseg
+        n_pe_true = params.n_pe_true
         pe_per_seg = n_pe_true/nseg
 
         # Compute the phase angle and magnitude of reference volume.
@@ -1157,7 +994,7 @@ class SegmentationCorrection (Operation):
 
         time0, time1 = self.get_times(params)
         def pe_time(pe):
-            return time0 + (params["nav_per_seg"] + pe%pe_per_seg)*time1
+            return time0 + (params.nav_per_seg + pe%pe_per_seg)*time1
 
         for volnum, volume in enumerate(ksp_data):
             for slicenum, slice in enumerate(volume):
