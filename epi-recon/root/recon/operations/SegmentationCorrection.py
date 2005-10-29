@@ -1,5 +1,5 @@
-from pylab import mlab, pi, angle, where, amax, cos, sin, Float, Complex32
-from recon.util import shifted_fft, shifted_inverse_fft
+from FFT import inverse_fft
+from pylab import mlab, pi, fft, floor, angle, where, amax, cos, sin, Float, Complex32
 from recon.operations import Operation
 
 
@@ -34,16 +34,14 @@ class SegmentationCorrection (Operation):
         ref_nav_data = data.ref_nav_data
         ksp_data = data.data_matrix
         ksp_nav_data = data.nav_data
-        nseg = params.nseg
-        n_pe_true = params.n_pe_true
-        pe_per_seg = n_pe_true/nseg
+        pe_per_seg = params.n_pe_true/params.nseg
 
         # Compute the phase angle and magnitude of reference volume.
         ref_phs = mlab.zeros_like(ref_data).astype(Float)
         ref_mag = mlab.zeros_like(ref_data).astype(Float)
         for slice in range(len(ref_data)):
             for pe in range(len(ref_data[slice])):
-                ft_line = shifted_inverse_fft(ref_data[slice,pe])
+                ft_line = inverse_fft(ref_data[slice,pe])
                 ref_phs[slice,pe,:] = angle(ft_line)
                 ref_mag[slice,pe,:] = abs(ft_line)
 
@@ -52,7 +50,7 @@ class SegmentationCorrection (Operation):
         for slice in range(len(ref_nav_data)):
             for seg in range(len(ref_nav_data[slice])):
                 ref_nav_phs[slice,seg,:] = \
-                  angle(shifted_inverse_fft(ref_nav_data[slice,seg]))
+                  angle(inverse_fft(ref_nav_data[slice,seg]))
 
         # Compute phase difference from reference for each segment using nav echo.
         phs_diff = mlab.zeros_like(ksp_nav_data).astype(Float)
@@ -60,7 +58,7 @@ class SegmentationCorrection (Operation):
         for vol in range(len(ksp_nav_data)):
             for slice in range(len(ksp_nav_data[vol])):
                 for seg in range(len(ksp_nav_data[vol,slice])):
-                    nav_echo = shifted_inverse_fft(ksp_nav_data[vol,slice,seg,:])
+                    nav_echo = inverse_fft(ksp_nav_data[vol,slice,seg,:])
                     nav_mag[vol,slice,seg] = abs(nav_echo)
                     nav_phs = angle(nav_echo)
         
@@ -96,9 +94,9 @@ class SegmentationCorrection (Operation):
                     cor = scl*msk
 
                     # Apply the phase correction.
-                    echo = shifted_inverse_fft(pe)
+                    echo = inverse_fft(pe)
                     echo = echo*cor
-                    pe[:] = shifted_fft(echo).astype(Complex32)
+                    pe[:] = fft(echo).astype(Complex32)
                             
 
 

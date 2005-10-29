@@ -84,9 +84,13 @@ class OperationManager (object):
     #-------------------------------------------------------------------------
     def __init__(self):
         self._op_index = {}
+        self._load_operation_index()
+
+    #-------------------------------------------------------------------------
+    def _load_operation_index(self):
         for opmodule in self._get_operation_modules():
             for name, obj in opmodule.__dict__.items():
-                if type(obj)==TypeType and issubclass(obj, Operation)  \
+                if type(obj)==TypeType and issubclass(obj, Operation) \
                   and obj is not Operation:
                     if self._op_index.has_key(name):
                         raise self.DuplicateOperationName(name)
@@ -112,7 +116,6 @@ class OperationManager (object):
     #-------------------------------------------------------------------------
     def getOperation(self, opname):
         "@return the operation for the given name"
-        import recon.operations.allops
         operation = self._op_index.get(opname, None)
         if not operation:
             raise self.InvalidOperationName("Operation '%s' not found."%opname)

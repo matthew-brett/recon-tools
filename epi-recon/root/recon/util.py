@@ -4,67 +4,40 @@ import os
 from Numeric import *
 import file_io
 import struct
+from Numeric import empty
 from FFT import inverse_fft
-from pylab import (
-  pi, mlab, fft, frange, fliplr, amax, meshgrid, floor, zeros, squeeze,
-  fromstring, plot, show, angle)
+from pylab import pi, mlab, fft, fliplr, zeros, fromstring
 from recon import petables, FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT,MAGNITUDE_TYPE, COMPLEX_TYPE
 from VolumeViewer import VolumeViewer
 
 
 #-----------------------------------------------------------------------------
-def shift(matrix, axis, shft):
+def shift(matrix, axis, shift):
     """
-    axis: Axis of shift: 0=x (rows), 1=y (columns),2=z
-    shft: Number of pixels to shift.
+    axis: Axis of shift: 0=x (rows), 1=y (columns), 2=z (slices), etc...
+    shift: Number of pixels to shift.
     """
     dims = matrix.shape
     ndim = len(dims)
-    if ndim == 1:
-        tmp = zeros((shft),matrix.typecode())
-        tmp[:] = matrix[-shft:]
-        matrix[-shft:] = matrix[-2*shft:-shft]
-        matrix[:shft] = tmp
-    elif ndim == 2:
-        ydim = dims[0]
-        xdim = dims[1]
-        tmp = zeros((shft),matrix.typecode())
-        new = zeros((ydim,xdim),matrix.typecode())
-        if(axis == 0):
-            for y in range(ydim):
-                tmp[:] = matrix[y,-shft:]
-                new[y,shft:] =  matrix[y,:-shft]
-                new[y,:shft] = matrix[y,-shft:]
-            matrix[:,:] = new[:,:]
-        elif(axis == 1):
-            for x in range(xdim):
-                new[shft:,x] =  matrix[:-shft,x]
-                new[:shft,x] = matrix[-shft:,x]
-            matrix[:,:] = new[:,:]
-    elif ndim == 3:
-        zdim = dims[0]
-        ydim = dims[1]
-        xdim = dims[2]
-        new = zeros((zdim,ydim,xdim),matrix.typecode())
-        if(axis == 0):
-            tmp = zeros((zdim,ydim,shft),matrix.typecode())
-            tmp[:,:,:] = matrix[:,:,-shft:]
-            new[:,:,shft:] =  matrix[:,:,:-shft]
-            new[:,:,:shft] = matrix[:,:,-shft:]
-        elif(axis == 1):
-            tmp = zeros((zdim,shft,xdim),matrix.typecode())
-            tmp[:,:,:] = matrix[:,-shft:,:]
-            new[:,shft:,:] =  matrix[:,:-shft,:]
-            new[:,:shft,:] = matrix[:,-shft:,:]
-        elif(axis == 2):
-            tmp = zeros((shft,ydim,xdim),matrix.typecode())
-            tmp[:,:,:] = matrix[-shft:,:,:]
-            new[shft:,:,:] =  matrix[:-shft,:,:]
-            new[:shft,:,:] = matrix[-shft:,:,:]
-        matrix[:,:,:] = new[:,:,:]
-    else:
-        print "shift() only support 1D, 2D, and 3D arrays."
-        sys.exit(1)
+    if axis >= ndim: raise ValueError("bad axis %s"%axis)
+    axis_dim = ndim - 1 - axis
+
+    # construct slices
+    slices = [slice(0,d) for d in dims]
+    slices_new1 = list(slices)
+    slices_new1[axis_dim] = slice(shift, dims[axis_dim])
+    slices_old1 = list(slices)
+    slices_old1[axis_dim] = slice(0, -shift)
+    slices_new2 = list(slices)
+    slices_new2[axis_dim] = slice(0, shift)
+    slices_old2 = list(slices)
+    slices_old2[axis_dim] = slice(-shift, dims[axis_dim])
+
+    # apply slices
+    new = empty(dims, matrix.typecode())
+    new[tuple(slices_new1)] = matrix[tuple(slices_old1)]
+    new[tuple(slices_new2)] = matrix[tuple(slices_old2)]
+    matrix[...] = new
 
 
 #-----------------------------------------------------------------------------
@@ -476,6 +449,8 @@ def get_data(params, options):
             nav_data[vol] = navigators
 
     f_fid.close()
+    # shift data for easy fft'ing
+    shift(data_matrix, 0, n_fe_true/2)
     return data
 
 
