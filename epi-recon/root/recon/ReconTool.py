@@ -2,6 +2,7 @@ from ConfigParser import SafeConfigParser
 from optparse import OptionParser, Option
 from recon import FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT,MAGNITUDE_TYPE, COMPLEX_TYPE
 from recon.operations import OperationManager
+from recon.VarianData import VarianData
 
 output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT)
 output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
@@ -27,7 +28,7 @@ class ReconOptionParser (OptionParser):
         OptionParser.__init__(self, *args, **kwargs)
         self._opmanager = OperationManager()
         opnames = self._opmanager.getOperationNames()
-        self.set_usage("usage: %prog [options] fid_file procpar output_image")
+        self.set_usage("usage: %prog [options] data output")
         self.add_options((
           Option( "-c", "--config", dest="config", type="string",
             default="recon.cfg", action="store",
@@ -105,11 +106,11 @@ class ReconOptionParser (OptionParser):
         object, including a resolved list of callable data operations.
         """
         options, args = self.parse_args()
-        if len(args) != 3: self.error(
-          "Expecting 3 arguments: fid_file procpar_file img_file" )
+        if len(args) != 2: self.error(
+          "Expecting 2 arguments: datadir ouput" )
 
         # treat the raw args as named options
-        options.fid_file, options.procpar_file, options.img_file = args
+        options.datadir, options.img_file = args
 
         # parse vol-range
         options.vol_start, options.vol_end = \
@@ -125,13 +126,38 @@ class ReconOptionParser (OptionParser):
 class ReconTool (object):
 
     #-------------------------------------------------------------------------
+    def run(self):
+        "Run the epi_recon tool."
+        from recon.util import save_image_data
+
+        # Get the filename names and options from the command line.
+        options = ReconOptionParser().getOptions()
+
+        # Load data from the fid file.
+        params = data = VarianData(options.datadir, options)
+
+        # Log some parameter info to the console.
+        self.log_params(params, options)
+
+        # Now apply the various data manipulation and artifact correction operations
+        # to the time-domain (k-space) data which is stored in the arrays
+        # data_matrix and nav_data as well as the ancillary data arrays ref_data and
+        # ref_nav_data. The operations are applied by looping over the list of
+        # operations that the user chooses on the command line. Each operation acts
+        # in a independent manner upon the data arrays.
+        for operation, args in options.operations:
+            operation(**args).run(params, options, data)
+
+        # Save data to disk.
+        save_image_data(data.data_matrix, params, options)
+
+    #-------------------------------------------------------------------------
     def log_params(self, params, options):
         """
         Print some of the values of the options and parameters dictionaries to the
         screen. 
         """
-        print ""
-        print "Phase encode table: ", params.petable
+        print "Phase encode table: ", params.petable_name
         print "Pulse sequence: %s" % params.pulse_sequence
         print "Number of navigator echoes per segment: %d" % params.nav_per_seg
         print "Number of frequency encodes: %d" % params.n_fe_true
@@ -146,35 +172,6 @@ class ReconTool (object):
         print "Pixel size (frequency-encode direction): %7.2f" % params.ysize
         print "Slice thickness: %7.2f" % params.zsize
 
-
     #-------------------------------------------------------------------------
-    def run(self):
-        "Run the epi_recon tool."
-        from recon.util import get_params, get_data, save_image_data
-
-        # Get the filename names and options from the command line.
-        options = ReconOptionParser().getOptions()
-
-        # Get the imaging parameters from the vendor dependent parameter file.
-        params = get_params(options)
-
-        # Log some parameter info to the console.
-        self.log_params(params, options)
-
-        # Load data from the fid file.
-        data = get_data(params, options)
-
-        # Now apply the various data manipulation and artifact correction operations
-        # to the time-domain (k-space) data which is stored in the arrays
-        # data_matrix and nav_data as well as the ancillary data arrays ref_data and
-        # ref_nav_data. The operations are applied by looping over the list of
-        # operations that the user chooses on the command line. Each operation acts
-        # in a independent manner upon the data arrays.
-        for operation, args in options.operations:
-            operation(**args).run(params, options, data)
-
-        # Save data to disk.
-        save_image_data(data.data_matrix, params, options)
-
-
+    def load_data(self, options): return recon.VarianData(options)
 

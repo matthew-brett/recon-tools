@@ -18,7 +18,7 @@ class SegmentationCorrection (Operation):
         gmax = params.gmax
         at = params.at
 
-        if(params.petable.find("alt") >= 0):
+        if(params.petable_name.find("alt") >= 0):
             time0 = te - 2.0*abs(gro)*trise/gmax - at
         else:
             time0 = te - (floor(params.n_pe/params.nseg)/2.0)*\
