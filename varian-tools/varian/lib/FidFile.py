@@ -89,6 +89,7 @@ class BlockHeader (_BlockHeaderBase):
         "tlt"           # tilt drift correction
     )
 
+    #-------------------------------------------------------------------------
     class _Status (_SharedHeaderStatus):
         "knows how to interpret each bit of the block header status byte"
         MORE_BLOCKS = property( lambda self: self._byte&0x80 !=0,
@@ -102,6 +103,7 @@ class BlockHeader (_BlockHeaderBase):
         NI2_CMPLX = property( lambda self: self._byte&0x800 !=0,
             doc="0=real, 1=complex" )
 
+    #-------------------------------------------------------------------------
     class _Mode (_FlagsByte):
         "knows how to interpret each bit of the block header mode byte"
         NP_PHMODE = property( lambda self: self._byte&0x1!=0)
@@ -138,6 +140,7 @@ class HypercomplexBlockHeader (_BlockHeaderBase):
         "f_spare2"      # spare float word
     )
 
+    #-------------------------------------------------------------------------
     class _Status (_SharedHeaderStatus):
         """
         knows how to interpret each bit of the hypercomplex block
@@ -157,9 +160,11 @@ class DataBlock (BlockHeader):
 
     def __init__( self, fidfile ):
         super( DataBlock, self ).__init__( fidfile )
+        self.header_size = BlockHeader.HEADER_SIZE
         if fidfile.nbheaders == 2:
             self.hyperheader = HypercomplexBlockHeader( fidfile )
-        self.data = fidfile.read( fidfile.bbytes )
+            self.header_size -= HypercomplexBlockHeader.HEADER_SIZE
+        self.data = fidfile.read(fidfile.bbytes - self.header_size)
 
     def __iter__( self ):
         "yield next trace"
@@ -182,6 +187,7 @@ class FidFile (file, _HeaderBase ):
         "nbheaders"     # number of block header per block
     )
 
+    #-------------------------------------------------------------------------
     class FileHeaderStatus (_SharedHeaderStatus):
         "knows how to interpret each bit of the file header status byte"
         S_ACQPAR = property( lambda self: self._byte&0x80 !=0,
@@ -214,13 +220,12 @@ class FidFile (file, _HeaderBase ):
     def __iter__( self ):
         "yield next block"
         self.seek( self.HEADER_SIZE )
-        for block_num in xrange( self.nblocks ):
-            yield DataBlock( self )
+        for block_num in xrange( self.nblocks ): yield DataBlock( self )
 
 
     #-------------------------------------------------------------------------
     def getBlock( self, bnum ):
         "get a single block (index starts a zero)"
         self.seek( self.HEADER_SIZE + bnum*self.bbytes + \
-            self.nbheaders*_BlockHeaderBase.HEADER_SIZE )
+            self.nbheaders*DataBlock.HEADER_SIZE )
         return DataBlock( self )

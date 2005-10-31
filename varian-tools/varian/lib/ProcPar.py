@@ -16,7 +16,7 @@ class StaticObjectDictMixin (object):
     def __setattr__( self, attname, val ):
         raise AttributeError, 'object is read-only'
 
-    def __getattr__( self, attname, val ):
+    def __getattr__( self, attname ):
         try:
             return self[attname]
         except KeyError:
