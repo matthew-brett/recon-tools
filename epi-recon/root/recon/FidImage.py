@@ -42,6 +42,7 @@ class FidImage (object):
         self.petable_name = procpar.petable[0]
         self.nvol_true = procpar.images[0]
         self.orient = procpar.orient[0]
+        self.nvol = self.nvol_true - self.options.skip
         pulse_sequence = procpar.pslabel[0]
         
         if procpar.get("spinecho", ("",))[0] == "y":
@@ -73,8 +74,6 @@ class FidImage (object):
         # Determine the number of navigator echoes per segment.
         # (Note: this CANNOT be the proper way to do this! -BH)
         self.nav_per_seg = self.n_pe%32 and 1 or 0
-
-        self.nvol = self.nvol_true - self.options.skip
 
         # sequence-specific logic for determining pulse_sequence, petable and nseg
         # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
@@ -127,8 +126,6 @@ class FidImage (object):
             self.echo_time = procpar.te[0] - f - procpar.at[0]
         else:
             self.echo_time = procpar.te[0] - floor(self.pe_per_seg)/2.0*self.echo_spacing
-        print "Data acquired with navigator echo time of %f" %self.echo_time
-        print "Data acquired with echo spacing of %f" %self.echo_spacing
         self.pe_times = [self.echo_time + pe*self.echo_spacing \
                           for pe in range(self.pe_per_seg)]
 
@@ -267,7 +264,6 @@ class FidImage (object):
         nvol = self.nvol
         nvol_true = self.nvol_true
         time_rev = n_fe_true - 1 - arange(n_fe_true)
-        print "time_rev", time_rev
 
         # allocate data matrices
         self.data_matrix = zeros(
@@ -319,9 +315,8 @@ class FidImage (object):
             if time_reverse:
                 f = self.pe_per_seg*nslice
                 for seg in range(self.nseg):
-                    lim1 = seg*f
-                    for pe in range(1,f,2): 
-                        pe += lim1
+                    base = seg*f
+                    for pe in range(base+1, base+f, 2): 
                         volume[pe] = take(volume[pe], time_rev)
 
             # Reorder data according to phase encode table
@@ -334,13 +329,14 @@ class FidImage (object):
             ksp_image = reshape(ksp_image, (nslice, n_pe_true, n_fe_true))
             navigators = reshape(navigators, (nslice, nav_per_slice, n_fe_true))
 
-            # The time-reversal section above reflects the odd slices (acquistion order
-            # implied) through the pe-axis. This section puts all slices in the same 
-            # conventional orientation.
-            if time_reverse and self.nav_per_seg > 0:
+            # The time-reversal section above reflects the odd slices through
+            # the pe-axis. This section puts all slices in the same orientation.
+            if time_reverse:
                 for slice in range(0,nslice,2):
                     for pe in range(n_pe_true):
                         ksp_image[slice,pe] = take(ksp_image[slice,pe], time_rev)
+                    for pe in range(nav_per_slice):
+                        navigators[slice,pe] = take(navigators[slice,pe], time_rev)
 
             # assign volume to the appropriate output matrix
             if vol == 0:
@@ -351,4 +347,4 @@ class FidImage (object):
                 self.nav_data[vol] = navigators
 
         # shift data for easier fft'ing later
-        shift(data_matrix, 0, n_fe_true/2)
+        shift(self.data_matrix, 0, n_fe_true/2)

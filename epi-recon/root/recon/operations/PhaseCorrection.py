@@ -7,7 +7,7 @@ from recon.operations import Operation
 class PhaseCorrection (Operation):
 
     #-------------------------------------------------------------------------
-    def run(self, params, options, data):
+    def run(self, options, data):
         ref_data = data.ref_data
         ksp_data = data.data_matrix
 

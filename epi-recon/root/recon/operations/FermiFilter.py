@@ -31,7 +31,7 @@ class FermiFilter (Operation):
         "sharper dropoff."))
 
     #-------------------------------------------------------------------------
-    def run(self, params, options, data):
+    def run(self, options, data):
         rows, cols = data.data_matrix.shape[-2:]
         kernel = fermi_filter(
           rows, cols, self.cutoff, self.trans_width).astype(Float32)

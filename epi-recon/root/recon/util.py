@@ -39,7 +39,6 @@ def shift(matrix, axis, shift):
     new[tuple(slices_new2)] = matrix[tuple(slices_old2)]
     matrix[...] = new
 
-
 #-----------------------------------------------------------------------------
 def shifted_fft(a):
     tmp = a.copy()
@@ -48,7 +47,6 @@ def shifted_fft(a):
     tmp = fft(tmp)
     shift(tmp, 0, shift_width)
     return tmp
-
 
 #-----------------------------------------------------------------------------
 def shifted_inverse_fft(a):
@@ -59,15 +57,8 @@ def shifted_inverse_fft(a):
     shift(tmp, 0, shift_width)
     return tmp
 
-
-#*****************************************************************************
-class EmptyObject (object):
-    "Takes whatever attributes are passed as keyword args when initialized."
-    def __init__(self, **kwargs): self.__dict__.update(kwargs)
-
-
-#*****************************************************************************
-def save_image_data(data_matrix, params, options):
+#-----------------------------------------------------------------------------
+def save_image_data(options, data):
     """
     This function saves the image data to disk in a file specified on the command
     line. The file name is stored in the options dictionary using the img_file key.
@@ -75,20 +66,23 @@ def save_image_data(data_matrix, params, options):
     is saved to disk as complex or magnitude data. By default the image data is 
     saved as magnitude data.
     """
+    data_matrix = data.data_matrix
     VolumeViewer(
       abs(data_matrix),
       ("Time Point", "Slice", "Row", "Column"))
-    n_pe = params.n_pe
-    n_pe_true = params.n_pe_true
-    n_fe = params.n_fe
-    n_fe_true = params.n_fe_true
-    nslice =  params.nslice
-    pulse_sequence = params.pulse_sequence
-    xsize = params.xsize 
-    ysize = params.ysize
-    zsize = params.zsize
+    n_pe = data.n_pe
+    n_pe_true = data.n_pe_true
+    n_fe = data.n_fe
+    n_fe_true = data.n_fe_true
+    nslice =  data.nslice
+    pulse_sequence = data.pulse_sequence
+    xsize = data.xsize 
+    ysize = data.ysize
+    zsize = data.zsize
 
     # Setup output file names.
+
+    # where's the dot
     if options.file_format == SPM_FORMAT:
         period = string.rfind(options.img_file,".img")
         if period < 0:
@@ -99,13 +93,17 @@ def save_image_data(data_matrix, params, options):
             period = string.rfind(options.img_file,".4dfp.ifh")
     elif options.file_format == VOXBO_FORMAT:
         period = string.rfind(options.img_file,".tes")
+
+    # what's the stem
     if period < 0: img_stem = options.img_file
     else: img_stem = options.img_file[:period]
+
     if options.file_format == FIDL_FORMAT:
         options.img_file     = "%s.4dfp.img" % (img_stem)
         img_file_hdr = "%s.4dfp.hdr" % (img_stem)
         img_file_ifh = "%s.4dfp.ifh" % (img_stem)
         f_img = open(options.img_file,"w")
+
     if options.phs_corr != "": frame_start = 1
     else: frame_start = 0
 
@@ -115,7 +113,7 @@ def save_image_data(data_matrix, params, options):
     # Save data to disk
     print "Saving to disk. Please Wait"
     tmp_vol = zeros((nslice,n_pe_true,n_fe_true)).astype(Complex32)
-    vol_rng = range(frame_start, params.nvol)
+    vol_rng = range(frame_start, data.nvol)
     for vol in vol_rng:
         if options.save_first and vol == 0:  #!!!! DO WE NEED THIS SECTION !!!!!
             img = zeros((nslice,n_fe_true,n_pe_true)).astype(Float32)
@@ -124,7 +122,7 @@ def save_image_data(data_matrix, params, options):
                     img[slice,:,:] = fliplr(abs(data_matrix[vol,slice,:,:])).astype(Float32)
                 else:
                     img[slice,:,:] = abs(data_matrix[vol,slice,:,:]).astype(Float32)
-            file_io.write_cub(img,"EPIs.cub",n_fe_true,n_pe_true,nslice,ysize,xsize,zsize,0,0,0,"s",params)
+            file_io.write_cub(img,"EPIs.cub",n_fe_true,n_pe_true,nslice,ysize,xsize,zsize,0,0,0,"s",data)
         if  options.file_format == SPM_FORMAT:
             # Open files for this volume.
             options.img_file = "%s_%04d.img" % (img_stem,vol)
@@ -144,21 +142,22 @@ def save_image_data(data_matrix, params, options):
 
 
 #*****************************************************************************
-def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
+def save_ksp_data(options, data):   # !!! FINISH AND TEST !!!
     """
     This function saves the k-space data to disk in a file specified on the
     command line with an added suffix of "_ksp". The k-space data is saved
     with the slices in the acquisition order rather than the spatial order.
     """
-    n_pe = params.n_pe
-    n_pe_true = params.n_pe_true
-    n_fe = params.n_fe
-    n_fe_true = params.n_fe_true
-    nslice =  params.nslice
-    pulse_sequence = params.pulse_sequence
-    xsize = params.xsize 
-    ysize = params.xsize
-    zsize = params.zsize
+    complex_data = data.data_matrix
+    n_pe = data.n_pe
+    n_pe_true = data.n_pe_true
+    n_fe = data.n_fe
+    n_fe_true = data.n_fe_true
+    nslice =  data.nslice
+    pulse_sequence = data.pulse_sequence
+    xsize = data.xsize 
+    ysize = data.xsize
+    zsize = data.zsize
 
     # Setup output file names.
     if options.file_format == SPM_FORMAT:
@@ -183,7 +182,7 @@ def save_ksp_data(complex_data, params, options):   # !!! FINISH AND TEST !!!
 
     # Save data to disk
     print "Saving to disk. Please Wait"
-    vol_rng = range(params.nvol)
+    vol_rng = range(data.nvol)
     for vol in vol_rng:
         if  options.file_format == SPM_FORMAT:
             # Open files for this volume.

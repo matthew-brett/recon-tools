@@ -54,7 +54,6 @@ class Operation (object):
 
     #-------------------------------------------------------------------------
     def configure(self, **kwargs):
-        #print self.__class__.__name__, "params=", self.params
         for p in self.params:
             self.__dict__[p.name] = p.valuate(kwargs.pop(p.name, p.default))
 

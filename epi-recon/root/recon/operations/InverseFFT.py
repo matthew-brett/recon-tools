@@ -8,7 +8,7 @@ class InverseFFT (Operation):
     "Perform an inverse 2D fft on each slice of each k-space volume."
 
     #-------------------------------------------------------------------------
-    def run(self, params, options, data):
+    def run(self, options, data):
         for volume in data.data_matrix:
             for slice in volume:
                 slice[:] = inverse_fft2d(slice).astype(Complex32)

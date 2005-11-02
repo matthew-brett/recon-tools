@@ -2,7 +2,7 @@ from ConfigParser import SafeConfigParser
 from optparse import OptionParser, Option
 from recon import FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT,MAGNITUDE_TYPE, COMPLEX_TYPE
 from recon.operations import OperationManager
-from recon.VarianData import VarianData
+from recon.FidImage import FidImage
 
 output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT)
 output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
@@ -59,9 +59,6 @@ class ReconOptionParser (OptionParser):
             help="Save first frame in file named 'EPIs.cub'." ),
           Option( "-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar." ),
-          Option( "-x", "--starting-frame-number", dest="sfn", type="int",
-            default=0, action="store", metavar="<starting frame number>",
-            help="Specify starting frame number for analyze format output." ),
           Option( "-l", "--flip-left-right", dest="flip_left_right",
             action="store_true", help="Flip image about the vertical axis." ),
           Option( "-y", "--output-data-type", dest="output_data_type",
@@ -134,10 +131,10 @@ class ReconTool (object):
         options = ReconOptionParser().getOptions()
 
         # Load data from the fid file.
-        params = data = VarianData(options.datadir, options)
+        data = FidImage(options.datadir, options)
 
         # Log some parameter info to the console.
-        self.log_params(params, options)
+        self.log_params(data, options)
 
         # Now apply the various data manipulation and artifact correction operations
         # to the time-domain (k-space) data which is stored in the arrays
@@ -146,31 +143,31 @@ class ReconTool (object):
         # operations that the user chooses on the command line. Each operation acts
         # in a independent manner upon the data arrays.
         for operation, args in options.operations:
-            operation(**args).run(params, options, data)
+            operation(**args).run(options, data)
 
         # Save data to disk.
-        save_image_data(data.data_matrix, params, options)
+        save_image_data(options, data)
 
     #-------------------------------------------------------------------------
-    def log_params(self, params, options):
+    def log_params(self, data, options):
         """
         Print some of the values of the options and parameters dictionaries to the
         screen. 
         """
-        print "Phase encode table: ", params.petable_name
-        print "Pulse sequence: %s" % params.pulse_sequence
-        print "Number of navigator echoes per segment: %d" % params.nav_per_seg
-        print "Number of frequency encodes: %d" % params.n_fe_true
-        print "Number of phase encodes (including navigators if present): %d" % params.n_pe
-        print "Data type: ", params.num_type
-        print "Number of slices: %d" % params.nslice
-        print "Number of volumes: %d" % params.nvol
-        print "Number of segments: %d" % params.nseg
+        print "Phase encode table: ", data.petable_name
+        print "Pulse sequence: %s" % data.pulse_sequence
+        print "Number of volumes: %d" % data.nvol
+        print "Number of slices: %d" % data.nslice
+        print "Number of segments: %d" % data.nseg
+        print "Number of navigator echoes per segment: %d" % data.nav_per_seg
+        print "Number of phase encodes per slice (including navigators if present): %d" % data.n_pe
+        print "Number of frequency encodes: %d" % data.n_fe_true
+        print "Raw precision (bytes): ", data.datasize
         print "Number of volumes to skip: %d" % options.skip
-        print "Orientation: %s" % params.orient
-        print "Pixel size (phase-encode direction): %7.2f" % params.xsize 
-        print "Pixel size (frequency-encode direction): %7.2f" % params.ysize
-        print "Slice thickness: %7.2f" % params.zsize
+        print "Orientation: %s" % data.orient
+        print "Pixel size (phase-encode direction): %7.2f" % data.xsize 
+        print "Pixel size (frequency-encode direction): %7.2f" % data.ysize
+        print "Slice thickness: %7.2f" % data.zsize
 
     #-------------------------------------------------------------------------
     def load_data(self, options): return recon.VarianData(options)
