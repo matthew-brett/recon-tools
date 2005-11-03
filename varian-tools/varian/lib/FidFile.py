@@ -158,17 +158,27 @@ class HypercomplexBlockHeader (_BlockHeaderBase):
 ##############################################################################
 class DataBlock (BlockHeader):
 
+    #-------------------------------------------------------------------------
     def __init__( self, fidfile ):
         super( DataBlock, self ).__init__( fidfile )
-        self.header_size = BlockHeader.HEADER_SIZE
+        self._fidfile = fidfile
+        self._data = None
+        self.header_size = fidfile.block_header_size
         if fidfile.nbheaders == 2:
             self.hyperheader = HypercomplexBlockHeader( fidfile )
-            self.header_size -= HypercomplexBlockHeader.HEADER_SIZE
-        self.data = fidfile.read(fidfile.bbytes - self.header_size)
 
+    #-------------------------------------------------------------------------
     def __iter__( self ):
         "yield next trace"
-        pass
+        for trace_num in xrange(self._fidfile.ntraces):
+            yield self._fidfile.read(self._fidfile.tbytes)
+
+    #-------------------------------------------------------------------------
+    def getData(self):
+        if self._data is None:
+            self._data = \
+              self._fidfile.read(self._fidfile.bbytes - self.header_size)
+        return self._data
 
 
 ##############################################################################
@@ -214,18 +224,22 @@ class FidFile (file, _HeaderBase ):
         # convert status byte into a FileHeaderStatus object (it knows how
         # interpret each status bit)
         self.status = self.FileHeaderStatus( self.status )
-
+        self.block_data_size = self.ntraces*self.tbytes
+        self.block_header_size = self.bbytes - self.block_data_size
 
     #-------------------------------------------------------------------------
-    def __iter__( self ):
+    def __iter__(self):
         "yield next block"
-        self.seek( self.HEADER_SIZE )
+        self.seekBlock(0)
         for block_num in xrange( self.nblocks ): yield DataBlock( self )
 
+    #-------------------------------------------------------------------------
+    def seekBlock(self, bnum):
+        "Seek to the beginning of block bnum (index starts a zero)."
+        self.seek(self.HEADER_SIZE + bnum*self.bbytes)
 
     #-------------------------------------------------------------------------
-    def getBlock( self, bnum ):
-        "get a single block (index starts a zero)"
-        self.seek( self.HEADER_SIZE + bnum*self.bbytes + \
-            self.nbheaders*DataBlock.HEADER_SIZE )
-        return DataBlock( self )
+    def getBlock(self, bnum):
+        "Return a single block (index starts a zero)."
+        self.seekBlock(bnum)
+        return DataBlock(self)
