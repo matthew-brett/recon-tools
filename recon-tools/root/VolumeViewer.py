@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray
+from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
 
@@ -169,18 +169,20 @@ class ColPlot (FigureCanvas):
 class SlicePlot (FigureCanvas):
 
     #-------------------------------------------------------------------------
-    def __init__(self, data):
+    def __init__(self, data, cmap=cm.bone):
         fig = Figure(figsize=figaspect(data))
         ax  = fig.add_axes([0.05, 0.1, 0.85, 0.85])
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
         FigureCanvas.__init__(self, fig)
+        self.cmap = cmap
         self.setData(data)
 
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        if not hasattr(self, "data"): ax.imshow(data, interpolation="nearest")
+        if not hasattr(self, "data"):
+            ax.imshow(data, interpolation="nearest", cmap=self.cmap)
         else: ax.images[0].set_data(data)
         nr, nc = data.shape[:2]
         ax.set_xlim((0,nc))
@@ -193,7 +195,7 @@ class SlicePlot (FigureCanvas):
 class VolumeViewer (gtk.Window):
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, dim_names=[], title="VolumeViewer"):
+    def __init__(self, data, dim_names=[], title="VolumeViewer", cmap=cm.bone):
         self.adjustments = []
         self.data = asarray(data)
 
@@ -217,7 +219,7 @@ class VolumeViewer (gtk.Window):
         table.attach(self.colplot, 0, 1, 1, 2)
 
         # slice image
-        self.sliceplot = SlicePlot(self.getSlice())
+        self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap)
         self.sliceplot.set_size_request(400, 400)
         table.attach(self.sliceplot, 1, 2, 1, 2)
 
