@@ -7,5 +7,4 @@ output_dir=./Images
 dataset=Ravi_ns22
 
 mkdir -p $output_dir
-python $recon_cmd --config=recon.cfg --file-format=spm --phs-corr=nonlinear \
-    $testdata_dir/$dataset.fid ./$output_dir/${dataset}_recon 
+python $recon_cmd --config=recon.cfg $testdata_dir/$dataset.fid ./$output_dir/${dataset}_recon 

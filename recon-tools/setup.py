@@ -9,6 +9,6 @@ setup(
   author_email='brian.lee.hawthorne@gmail.com',
   url='http://cirl.berkeley.edu/view/BIC/ReconEpi',
   package_dir = {'':'root'},
-  packages=['', 'recon', 'recon.lib', 'recon.tools'],
-  scripts=['recon-epi']
+  packages=['', 'recon', 'recon.operations'],
+  scripts=['recon']
 )

@@ -44,7 +44,7 @@ class FidImage (object):
         print "Number of phase encodes per slice (including navigators if present): %d" % self.n_pe
         print "Number of frequency encodes: %d" % self.n_fe_true
         print "Raw precision (bytes): ", self.datasize
-        print "Number of volumes to skip: %d" %(self.nvol_true-self.nvol)
+        print "Number of reference volumes: %d" % len(self.ref_vols)
         print "Orientation: %s" % self.orient
         print "Pixel size (phase-encode direction): %7.2f" % self.xsize 
         print "Pixel size (frequency-encode direction): %7.2f" % self.ysize
@@ -64,7 +64,6 @@ class FidImage (object):
         self.petable_name = procpar.petable[0]
         self.nvol_true = procpar.images[0]
         self.orient = procpar.orient[0]
-        self.nvol = self.nvol_true - self.options.skip
         pulse_sequence = procpar.pslabel[0]
         
         if procpar.get("spinecho", ("",))[0] == "y":
@@ -82,6 +81,7 @@ class FidImage (object):
         for i, isimage in enumerate(is_imagevol):
             if isimage: self.image_vols.append(i)
             if not isimage: self.ref_vols.append(i)
+        self.nvol = self.nvol_true - len(self.ref_vols)
 
         # determine number of slices, thickness, and gap
         if pulse_sequence == 'mp_flash3d':
@@ -299,9 +299,9 @@ class FidImage (object):
 
         # allocate data matrices
         self.data_matrix = zeros(
-          (nvol-numrefs, nslice, n_pe_true, n_fe_true), Complex32)
+          (nvol, nslice, n_pe_true, n_fe_true), Complex32)
         self.nav_data = zeros(
-          (nvol-numrefs, nslice, nav_per_slice, n_fe_true), Complex32)
+          (nvol, nslice, nav_per_slice, n_fe_true), Complex32)
         self.ref_data = zeros(
           (nslice, n_pe_true, n_fe_true), Complex32)
         self.ref_nav_data = zeros(
@@ -339,7 +339,7 @@ class FidImage (object):
         time_rev = n_fe_true - 1 - arange(n_fe_true)
 
 
-        for vol in range(nvol_true-nvol, nvol_true):
+        for vol in range(nvol_true):
 
             # read the next image volume
             volume = volreader(fid, vol)
