@@ -55,3 +55,6 @@ def shifted_inverse_fft(a):
     shift(tmp, 0, shift_width)
     return tmp
 
+#-----------------------------------------------------------------------------
+def nice_angle(a): return a + where(a<-pi, 2.*pi, 0) + where(a>pi, -2.*pi, 0)
+
