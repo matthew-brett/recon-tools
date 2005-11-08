@@ -1,10 +1,10 @@
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser, Option
-from recon.FidImage import FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT,MAGNITUDE_TYPE, COMPLEX_TYPE
+from recon.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, MAGNITUDE_TYPE, COMPLEX_TYPE
 from recon.operations import OperationManager
 from recon.FidImage import FidImage
 
-output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, SPM_FORMAT)
+output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT)
 output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
 
 
@@ -36,31 +36,20 @@ class ReconTool (OptionParser):
             " parameters."),
           Option( "-r", "--vol-range", dest="vol_range", type="string", default=":",
             action="store",
-            help="Which volumes to reconstruct.  Format is start:end, where "\
+            help="Which image volumes to reconstruct.  Format is start:end, where "\
             "either start or end may be omitted, indicating to start with the "\
             "first or end with the last respectively.  The index of the first "\
             "volume is 0.  The default value is a single colon with no start "\
-            "or end specified, meaning process all volumes."),
-          Option( "-n", "--nvol", dest="nvol_to_read", type="int", default=0,
-            action="store",
-            help="Number of volumes within run to reconstruct." ),
-          Option( "-s", "--frames-to-skip", dest="skip", type="int", default=0,
-            action="store",
-            help="Number of frames to skip at beginning of run." ),
+            "or end specified, meaning process all volumes.  (Note, this option "\
+            "refers specifically to image volumes, not to reference scans.)"),
           Option( "-f", "--file-format", dest="file_format", action="store",
-            type="choice", default=FIDL_FORMAT, choices=output_format_choices,
+            type="choice", default=ANALYZE_FORMAT, choices=output_format_choices,
             help="""{%s}
             fidl: save floating point file with interfile and 4D analyze headers.
-            spm: Save individual image for each frame in analyze format.
+            analyze: Save individual image for each frame in analyze format.
             voxbo: Save in tes format."""%("|".join(output_format_choices)) ),
-          Option( "-p", "--phs-corr", dest="phs_corr", default="", action="store",
-            help="Dan, please describe the action of this option..."),
-          Option( "-a", "--save-first", dest="save_first", action="store_true",
-            help="Save first frame in file named 'EPIs.cub'." ),
           Option( "-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar." ),
-          Option( "-l", "--flip-left-right", dest="flip_left_right",
-            action="store_true", help="Flip image about the vertical axis." ),
           Option( "-y", "--output-data-type", dest="output_data_type",
             type="choice", default=MAGNITUDE_TYPE, action="store",
             choices=output_datatype_choices,
