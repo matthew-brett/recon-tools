@@ -4,7 +4,7 @@ import os.path
 from Numeric import empty
 from pylab import (
   Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr, zeros, fromstring,
-  reshape, arange, take, floor, argmax, multiply)
+  reshape, arange, take, floor, argmax, multiply, asarray)
 import file_io
 import varian
 from recon import petables
@@ -13,7 +13,7 @@ from VolumeViewer import VolumeViewer
 
 FIDL_FORMAT = "fidl"
 VOXBO_FORMAT = "voxbo"
-SPM_FORMAT = "spm"
+ANALYZE_FORMAT = "analyze"
 MAGNITUDE_TYPE = "magnitude"
 COMPLEX_TYPE = "complex"
 
@@ -158,8 +158,8 @@ class FidImage (object):
             self.echo_time = procpar.te[0] - f - procpar.at[0]
         else:
             self.echo_time = procpar.te[0] - floor(self.pe_per_seg)/2.0*self.echo_spacing
-        self.pe_times = [self.echo_time + pe*self.echo_spacing \
-                          for pe in range(self.pe_per_seg)]
+        self.pe_times = asarray([self.echo_time + pe*self.echo_spacing \
+                          for pe in range(self.pe_per_seg)])
 
     #-------------------------------------------------------------------------
     def _load_petable(self):
@@ -404,7 +404,7 @@ class FidImage (object):
         if file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
 
-        # Calculate proper scaling factor for SPM Analyze format by using the maximum value over all volumes.
+        # Calculate proper scaling factor for Analyze format by using the maximum value over all volumes.
         scl = 16383.0/abs(data_matrix).flat[argmax(abs(data_matrix).flat)]
 
         if data_type == MAGNITUDE_TYPE:
@@ -417,7 +417,7 @@ class FidImage (object):
         # Save data to disk
         print "Saving to disk. Please Wait"
         for vol, volume in enumerate(data_matrix):
-            if  file_format == SPM_FORMAT:
+            if  file_format == ANALYZE_FORMAT:
                 outfile = "%s_%04d.img"%(outfile, vol)
                 hdr = file_io.create_hdr(n_fe_true,n_pe_true,nslice,1,ysize,xsize,zsize,1.,0,0,0,hdr_datatype,64,1.,'analyze',outfile,0)
                 file_io.write_analyze(outfile, hdr, vol_transformer(volume))
