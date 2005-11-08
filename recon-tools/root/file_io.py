@@ -5,35 +5,6 @@ from Numeric import *
 import struct
 from MLab import fliplr, flipud
 
-class Image:
-    def __init__(self,name):
-        self.filename = name
-        self.status = -1
-    def read_header(self):
-        self.hdr = read_header(self.filename)
-        self = self.hdr
-    def read_file(self):
-        data = read_file(self.filename)
-        if data == -1:
-            self.status = -1
-        else:
-            self.status = 0
-            self.hdr = data['header']
-            self.image = data['image']
-    def image(self):
-        self = self.image
-    def hdr(self):
-        self = self.hdr
-    def define(self,image,header):
-        self.image = image
-        self.hdr = header
-        self = 0
-    def write(self,type):
-#       type takes on values of cub, tes, 4dfp, analyze.
-        self.hdr['filetype'] = type
-        write_file(self.filename,{'header':self.hdr,'image':self.image})
-        
-        
 
 #***********************
 def file_type(filename):
