@@ -41,7 +41,7 @@ class FidImage (object):
         print "Number of slices: %d" % self.nslice
         print "Number of segments: %d" % self.nseg
         print "Number of navigator echoes per segment: %d" % self.nav_per_seg
-        print "Number of phase encodes per slice (including navigators if present): %d" % self.n_pe
+        print "Number of phase encodes per slice (including any navigators echoes): %d" % self.n_pe
         print "Number of frequency encodes: %d" % self.n_fe_true
         print "Raw precision (bytes): ", self.datasize
         print "Number of reference volumes: %d" % len(self.ref_vols)
