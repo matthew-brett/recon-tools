@@ -5,7 +5,6 @@ from Numeric import empty
 from pylab import (
   Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr, zeros, fromstring,
   reshape, arange, take, floor, argmax, multiply, asarray)
-import file_io
 from imaging.util import shift
 from imaging.varian import tablib
 from imaging.varian.ProcPar import ProcPar
@@ -145,6 +144,9 @@ class FidImage (object):
         self.n_pe_true =  self.n_pe - self.nav_per_slice
         self.pe_per_seg = self.n_pe/nseg
         fov = procpar.lro[0]
+        self.x0 = 0.
+        self.y0 = 0.
+        self.z0 = 0.
         self.xsize = float(fov)/self.n_pe_true
         self.ysize = float(fov)/self.n_fe_true
         self.zsize = float(self.thk) + slice_gap
@@ -393,8 +395,9 @@ class FidImage (object):
         is saved to disk as complex or magnitude data. By default the image data is 
         saved as magnitude data.
         """
+        import imageio
         data_matrix = self.data_matrix
-        VolumeViewer( abs(data_matrix), ("Time Point", "Slice", "Row", "Column"))
+        #VolumeViewer( abs(data_matrix), ("Time Point", "Slice", "Row", "Column"))
 
         n_pe_true = self.n_pe_true
         n_fe_true = self.n_fe_true
@@ -403,28 +406,25 @@ class FidImage (object):
         ysize = self.ysize
         zsize = self.zsize
 
-        if file_format == FIDL_FORMAT:
-            f_img = open("%s.4dfp.img" % (outfile), "w")
-
-        # Calculate proper scaling factor for Analyze format by using the maximum value over all volumes.
-        scl = 16383.0/abs(data_matrix).flat[argmax(abs(data_matrix).flat)]
-
         if data_type == MAGNITUDE_TYPE:
-            hdr_datatype = "Short"
-            vol_transformer = lambda v: multiply(scl, abs(v).astype(Float32))
+            datatype = imageio.SHORT
+            vol_transformer = lambda v: abs(v)
         elif data_type == COMPLEX_TYPE:
-            hdr_datatype = "Complex"
-            vol_transformer = lambda v: v.astype(Complex32)
+            datatype = imageio.COMPLEX
+            vol_transformer = lambda v: v  # identity
 
         # Save data to disk
         print "Saving to disk. Please Wait"
-        for vol, volume in enumerate(data_matrix):
-            if  file_format == ANALYZE_FORMAT:
-                outfile = "%s_%04d.img"%(outfile, vol)
-                hdr = file_io.create_hdr(n_fe_true,n_pe_true,nslice,1,ysize,xsize,zsize,1.,0,0,0,hdr_datatype,64,1.,'analyze',outfile,0)
-                file_io.write_analyze(outfile, hdr, vol_transformer(volume))
 
-            elif file_format == FIDL_FORMAT:
+        if file_format == ANALYZE_FORMAT:
+            for vol, volume in enumerate(data_matrix):
+                self.imagedata = vol_transformer(volume)
+                writer = imageio.AnalyzeWriter(self, datatype)
+                writer.write("%s_%04d"%(outfile, vol))
+
+        elif file_format == FIDL_FORMAT:
+            f_img = open("%s.4dfp.img" % (outfile), "w")
+            for volume in data_matrix:
                 f_img.write(vol_transformer(volume).byteswapped().tostring())
 
-            # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!
+        # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!

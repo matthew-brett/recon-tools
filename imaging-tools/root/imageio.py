@@ -1,31 +1,32 @@
 from Numeric import *
-from MLab import fliplr, flipud
+from pylab import amax, Int8, Int16, Int32, Float32, Float64, Complex32 
 import struct
 
-# map type string to Numeric type code
-typestr2typecode = {
-  "Byte": Int8,
-  "Short": Int16,
-  "Integer": Int32,
-  "Float": Float32,
-  "Double": Float64,
-  "Complex": Complex32}
+# (datatype, bitpix) for each datatype
+BYTE = (2,8)
+SHORT = (4,16)
+INTEGER = (8,32)
+FLOAT = (16,32)
+COMPLEX = (32,64)
+DOUBLE = (64,64)
 
-# max numeric range for some smaller data types
+# map Numeric typecode to Analyze datatype
+typecode2datatype = {
+  Int8: BYTE,
+  Int16: SHORT,
+  Int32: INTEGER,
+  Float32: FLOAT,
+  Float64: DOUBLE,
+  Complex32: COMPLEX}
+
+# map Analyze datatype to Numeric typecode
+datatype2typecode = dict([(v,k) for k,v in typecode2datatype.items()])
+
+# maximum numeric range for some smaller data types
 maxranges = {
   Int8:  255.,
   Int16: 32767.,
   Int32: 2147483648.}
-
-# (numbytes, bitpix) for each type string
-typelen = {
-    "Byte": (2,8),
-    "Short": (4,16),
-    "Integer": (8,32),
-    "Float": (16,32),
-    "Complex": (32,64),
-    "Double": (64,64)}
-
 
 #-----------------------------------------------------------------------------
 def get_analyze_filenames( filestem ):
@@ -37,90 +38,96 @@ def get_analyze_filenames( filestem ):
         filestem = ".".join( filestem.split(".")[:-1] )
     return "%s.hdr"%filestem, "%s.img"%filestem
 
-
 #-----------------------------------------------------------------------------
-def write_analyze( filestem, header, image ):
-    headername, imagename = get_analyze_filenames( filestem )
-    write_analyze_header( headername, header )
-    write_analyze_image( imagename, header, image )
+def get_dims(data):
+    "Extract ndim, tdim, zdim, ydim, and xdim from data shape."
+    shape = data.shape
+    ndim = len(shape)
+    if ndim == 3:
+        tdim = 1
+        zdim, ydim, xdim = shape
+    elif ndim == 4:
+        tdim, zdim, ydim, xdim = shape
+    else:
+        raise ValueError("data shape %s must be 3 or 4 dimensional"%shape)
+    return ndim, tdim, zdim, ydim, xdim
 
 
-#-----------------------------------------------------------------------------
-def write_analyze_header( filename, header ):
-    xdim = header['xdim']
-    ydim = header['ydim']
-    zdim = header['zdim']
-    tdim = header['tdim']
-    TR = header['TR']
-    xsize = header['xsize']
-    ysize = header['ysize']
-    zsize = header['zsize']
-    x0 = header['x0']
-    y0 = header['y0']
-    z0 = header['z0']
+##############################################################################
+class AnalyzeWriter (object):
 
-    scale_factor = header.get( "scale_factor", 1. )
-    swap = header['swap']
-    numbytes, bitpix = typelen.get( header['datatype'], (4,16) )
-    ndim = tdim > 1 and 4 or 3
+    #-------------------------------------------------------------------------
+    def __init__(self, image, datatype=None, byteswap=False):
+        self.image = image
+        self.datatype = datatype
+        self.byteswap = byteswap
 
-    cd = " "
-    sd = " "
-    hd = 0
-    id = 0
-    fd = 0.
+    #-------------------------------------------------------------------------
+    def write(self, filestem):
+        headername, imagename = get_analyze_filenames(filestem)
+        self.write_header(headername)
+        self.write_image(imagename)
 
-    format = "%si 10s 18s i h 1s 1s 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s 1s 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"%\
-             (swap and ">" or "<")
-    
-    binary_header = struct.pack( format, 348, sd, sd, id, hd, cd, cd, ndim, xdim, ydim, zdim, tdim, hd, hd, hd, sd, sd, hd, numbytes, bitpix, hd, fd, xsize, ysize, zsize, TR, fd, fd, fd, fd, scale_factor, fd, fd, fd, fd, id, id, id, id, sd, sd, cd, x0, y0, z0, sd, sd, sd, sd, sd, sd, sd, id, id, id, id, id, id, id, id)
+    #-------------------------------------------------------------------------
+    def write_header(self, filename):
+        image = self.image
+        ndim, tdim, zdim, ydim, xdim = get_dims(image.imagedata)
+        xsize = image.xsize
+        ysize = image.ysize
+        zsize = image.zsize
+        x0 = image.x0
+        y0 = image.y0
+        z0 = image.z0
+        tr = image.tr
+        scale_factor = getattr(image, "scale_factor", 1. )
+        datatype, bitpix = typecode2datatype[image.imagedata.typecode()]
+        cd = sd = " "
+        hd = id = 0
+        fd = 0.
 
-    f = open(filename,'w')
-    f.write(binary_header)
-    f.close()
+        format = "%si 10s 18s i h 1s 1s 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s 1s 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"%\
+                 (self.byteswap and ">" or "<")
+        binary_header = struct.pack(
+          format, 348, sd, sd, id, hd, cd, cd, ndim, xdim, ydim, zdim, tdim,
+          hd, hd, hd, sd, sd, hd, datatype, bitpix, hd, fd, xsize, ysize,
+          zsize, tr, fd, fd, fd, fd, scale_factor, fd, fd, fd, fd, id, id, id,
+          id, sd, sd, cd, x0, y0, z0, sd, sd, sd, sd, sd, sd, sd, id, id, id,
+          id, id, id, id, id)
+        f = open(filename,'w')
+        f.write(binary_header)
+        f.close()
 
+    #-------------------------------------------------------------------------
+    def write_image(self, filename):
+        """Write analyze image."""
 
-#-----------------------------------------------------------------------------
-def write_analyze_image( filename, header, image ):
-    """Write analyze image."""
+        imagedata = self.image.imagedata
+        datatype, bitpix = typecode2datatype[imagedata.typecode()]
+        ndim, tdim, zdim, ydim, xdim = get_dims(imagedata)
 
-    datatype = header['datatype']
-    typecode = typestr2typecode[datatype]
+        needscast = self.datatype is not None and self.datatype != datatype
+        if needscast:
+            typecode = datatype2typecode[self.datatype]
 
-    xdim = header['xdim']
-    ydim = header['ydim']
-    zdim = header['zdim']
-    tdim = header['tdim']
+            # Make sure image values are within the range of the desired datatype
+            if self.datatype in (BYTE, SHORT, INTEGER):
+                maxval = amax(abs(imagedata).flat)
+                if maxval == 0.: maxval = 1.e20
+                maxrange = maxranges[typecode]
 
-    # Flip images left to right and top to bottom.
-    image = reshape( image, (tdim, zdim, ydim, xdim) )
-    newimg = zeros( (tdim,zdim,ydim,xdim) ).astype( image.typecode() )
-    for t in range(tdim):
-        for z in range(zdim):
-            newimg[t,z,:,:] = flipud( fliplr( image[t,z,:,:] ) )
+                # if out of desired bounds, perform scaling
+                if maxval > maxrange: imagedata *= (maxrange/maxval)
 
-    if tdim == 1: newimg = reshape( newimg, (zdim, ydim, xdim) )
+            # cast image values to the desired datatype
+            imagedata = imagedata.astype( typecode )
 
-    # Make sure image values are within the range of the desired datatype
-    if datatype in ("Byte", "Short", "Integer"):
-        flatimg = newimg.flat
-        maxval = max(abs(flatimg[argmax(flatimg)]), abs(flatimg[argmin(flatimg)]))
-        if maxval == 0.: maxval = 1.e20
-        maxrange = maxranges[typecode]
+        # perform byteswap if requested
+        if self.byteswap: imagedata = imagedata.byteswapped()
 
-        # if out of desired bounds, perform scaling
-        if maxval > maxrange: newimg *= (maxrange/maxval)
-
-    # cast image values to the desired datatype
-    newimg = newimg.astype( typecode )
-
-    # perform byteswap if requested
-    if header['swap']: newimg = newimg.byteswapped()
-
-    # Write the image file.
-    f = file( filename, "w" )
-    f.write( newimg.tostring() )
-    f.close()
+        # Write the image file.
+        f = file( filename, "w" )
+        f.write( imagedata.tostring() )
+        f.close()
 
 
 #-----------------------------------------------------------------------------
@@ -131,10 +138,6 @@ def _make_test_data():
     xdim = 64
     image = ones( (tdim,zdim,ydim,xdim) ).astype( Float )
     header = {
-      "tdim":tdim,
-      "zdim":zdim,
-      "ydim":ydim,
-      "xdim":xdim,
       "xsize":1,
       "ysize":1,
       "zsize":1,
@@ -142,7 +145,7 @@ def _make_test_data():
       "y0":1,
       "z0":1,
       "TR":1,
-      "datatype":"Short",
+      "datatype":SHORT,
       "swap":False}
     return header, image
 
