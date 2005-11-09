@@ -1,4 +1,3 @@
-from Numeric import *
 from pylab import amax, Int8, Int16, Int32, Float32, Float64, Complex32 
 import struct
 
@@ -64,12 +63,14 @@ class AnalyzeWriter (object):
 
     #-------------------------------------------------------------------------
     def write(self, filestem):
+        "Write ANALYZE format header, image file pair."
         headername, imagename = get_analyze_filenames(filestem)
         self.write_header(headername)
         self.write_image(imagename)
 
     #-------------------------------------------------------------------------
     def write_header(self, filename):
+        "Write ANALYZE format header (.hdr) file."
         image = self.image
         ndim, tdim, zdim, ydim, xdim = get_dims(image.imagedata)
         xsize = image.xsize
@@ -99,7 +100,7 @@ class AnalyzeWriter (object):
 
     #-------------------------------------------------------------------------
     def write_image(self, filename):
-        """Write analyze image."""
+        "Write ANALYZE format image (.img) file."
 
         imagedata = self.image.imagedata
         datatype, bitpix = typecode2datatype[imagedata.typecode()]
