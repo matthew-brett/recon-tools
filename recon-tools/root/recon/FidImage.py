@@ -179,28 +179,29 @@ class FidImage (object):
         nslice =  self.nslice
         pulse_sequence = self.pulse_sequence
 
-        petable_line = file(os.path.join(petables, self.petable_name))\
-                       .readline().split()
-        self.petable = zeros(n_pe_true*nslice).astype(int)
+        line = file(os.path.join(petables, self.petable_name)).readline().split()
+        line = [int(i) for i in line]
+        self.petable = zeros(n_pe_true*nslice, Int16)
         i = 0 
         for slice in range(nslice):
             for pe in range(n_pe_true):
                 seg = pe/pe_true_per_seg
-                if pulse_sequence == 'epidw' or pulse_sequence == 'epidw_se':
+                if pulse_sequence in ('epidw','epidw_se'):
                     offset = slice*n_pe + (seg+1)*nav_per_seg
                 else:
                     offset = (slice + seg*nslice)*pe_per_seg \
                              - seg*pe_per_seg + (seg+1)*nav_per_seg
                 # Find location of the pe'th phase-encode line in acquisition order.
-                self.petable[i] = petable_line.index(str(pe)) + offset
+                self.petable[i] = line.index(pe) + offset
                 i += 1
             
-        self.navtable = zeros(nav_per_slice*nslice).astype(int)
-        if nav_per_seg != 0:    
+        self.navtable = zeros(nav_per_slice*nslice, Int16)
+        if nav_per_seg == 1:    
             i = 0        
+            # appears to not work if nav_per_seg > 1 ?
             for slice in range(nslice):
                 for seg in range(nseg):
-                    if pulse_sequence == 'epidw' or pulse_sequence == 'epidw_se':
+                    if pulse_sequence in ('epidw','epidw_se'):
                         offset = slice*n_pe + seg*pe_per_seg 
                     else:
                         offset = (slice + seg*nslice)*pe_per_seg
@@ -337,7 +338,6 @@ class FidImage (object):
           (fidformat=="compressed" and pulse_sequence != "epi_se") or \
           (fidformat=="uncompressed" and pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
-
 
         for vol in range(nvol_true):
 
