@@ -6,8 +6,10 @@ from pylab import (
   Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr, zeros, fromstring,
   reshape, arange, take, floor, argmax, multiply, asarray)
 import file_io
-import varian
-from recon.util import shift
+from imaging.util import shift
+from imaging.varian import tablib
+from imaging.varian.ProcPar import ProcPar
+from imaging.varian.FidFile import FidFile
 from VolumeViewer import VolumeViewer
 
 FIDL_FORMAT = "fidl"
@@ -56,7 +58,7 @@ class FidImage (object):
         Some parameters may be overridden by the options from the command line
         and hence the options attribute is used here.
         """
-        procpar = varian.procpar(procpar_file)
+        procpar = ProcPar(procpar_file)
         self.n_fe = procpar.np[0]
         self.n_pe = procpar.nv[0]
         self.tr = procpar.tr[0]
@@ -178,7 +180,7 @@ class FidImage (object):
         nslice =  self.nslice
         pulse_sequence = self.pulse_sequence
 
-        table_filename = os.path.join(varian.tablib, self.petable_name)
+        table_filename = os.path.join(tablib, self.petable_name)
         line = file(table_filename).readline().split()
         line = [int(i) for i in line]
         self.petable = zeros(n_pe_true*nslice, Int16)
@@ -309,7 +311,7 @@ class FidImage (object):
           (nslice, nav_per_slice, n_fe_true), Complex32)
 
         # open fid file
-        fid = varian.fidfile(fidfile) 
+        fid = FidFile(fidfile) 
 
         # determine fid type using fid file attributes nblocks and ntraces
         fidformat = {

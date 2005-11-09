@@ -54,7 +54,7 @@ def cast( toktup ):
         return tokids.tok_name[tokid]
 
 
-class Parser (StaticObjectDictMixin, dict):
+class ProcPar (StaticObjectDictMixin, dict):
     """
     A read-only representation of the named records found in a Varian procpar file.
     Record values can be accessed by record name in either dictionary style or object
@@ -106,5 +106,5 @@ class Parser (StaticObjectDictMixin, dict):
 
 if __name__ == "__main__":
     import pprint
-    p = Parser( "procpar" )
+    p = ProcPar( "procpar" )
     pprint.pprint( p )

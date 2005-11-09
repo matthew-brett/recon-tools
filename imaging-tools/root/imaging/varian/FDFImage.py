@@ -2,6 +2,7 @@ import glob
 import os
 from pylab import asarray
 from FDFFile import FDFFile
+from ProcPar import ProcPar
 
 
 ##############################################################################
@@ -15,7 +16,7 @@ class FDFImage (object):
 
     #-------------------------------------------------------------------------
     def loadParams(self):
-        procpar = varian.procpar(os.path.join(self.datadir),"procpar")
+        procpar = ProcPar(os.path.join(self.datadir),"procpar")
         self.tdim = procpar.images[0]
         self.zdim = len(procpar.pss)
 
