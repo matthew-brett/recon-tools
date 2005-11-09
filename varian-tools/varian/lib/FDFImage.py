@@ -24,8 +24,8 @@ class FDFImage (object):
         volumes = []
         for volnum in self.image_vols:
             slices = []
-            for slicenum in range(self.zdim)
+            for slicenum in range(self.zdim):
                 filename = "image%04d.fdf"%(volnum*self.zdim + slicenum + 1)
                 slices.append(FDFFile(filename).data)
-            volumes.append(asarray(slices)
+            volumes.append(asarray(slices))
         self.image_data = asarray(volumes)

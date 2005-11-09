@@ -1,8 +1,8 @@
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser, Option
-from recon.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, MAGNITUDE_TYPE, COMPLEX_TYPE
+from varian.lib.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, MAGNITUDE_TYPE, COMPLEX_TYPE
 from recon.operations import OperationManager
-from recon.FidImage import FidImage
+from varian import fidimage
 
 output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT)
 output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
@@ -115,7 +115,7 @@ class ReconTool (OptionParser):
         options = self.getOptions()
 
         # Load data from the fid file.
-        data = FidImage(options.datadir, options)
+        data = fidimage(options.datadir, options)
 
         # Log some parameter info to the console.
         data.logParams()

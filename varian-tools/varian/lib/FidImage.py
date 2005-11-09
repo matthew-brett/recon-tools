@@ -7,7 +7,6 @@ from pylab import (
   reshape, arange, take, floor, argmax, multiply, asarray)
 import file_io
 import varian
-from recon import petables
 from recon.util import shift
 from VolumeViewer import VolumeViewer
 
@@ -179,7 +178,8 @@ class FidImage (object):
         nslice =  self.nslice
         pulse_sequence = self.pulse_sequence
 
-        line = file(os.path.join(petables, self.petable_name)).readline().split()
+        table_filename = os.path.join(varian.tablib, self.petable_name)
+        line = file(table_filename).readline().split()
         line = [int(i) for i in line]
         self.petable = zeros(n_pe_true*nslice, Int16)
         i = 0 
