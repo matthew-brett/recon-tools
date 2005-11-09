@@ -20,7 +20,7 @@ class OrderedConfigParser (SafeConfigParser):
 
 
 ##############################################################################
-class ReconTool (OptionParser):
+class Recon (OptionParser):
     "Handle command-line aspects of the recon tool."
 
     #-------------------------------------------------------------------------
