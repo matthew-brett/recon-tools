@@ -1,5 +1,5 @@
 from pylab import frange, meshgrid, exp, sqrt, Float32
-from recon.operations import Operation, Parameter
+from imaging.operations import Operation, Parameter
 
 
 ##############################################################################

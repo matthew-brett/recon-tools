@@ -1,7 +1,7 @@
 from FFT import inverse_fft2d
 from pylab import Complex32
-from recon.util import shift
-from recon.operations import Operation
+from imaging.util import shift
+from imaging.operations import Operation
 
 ##############################################################################
 class InverseFFT (Operation):

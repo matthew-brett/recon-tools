@@ -1,6 +1,6 @@
 #!/bin/sh
 export PYTHONPATH=./root:../varian-tools
-recon_cmd=./recon
+recon_cmd=./scripts/recon
 testdata_dir=../testdata
 output_dir=./Images
 #dataset=Vari_ss_epi

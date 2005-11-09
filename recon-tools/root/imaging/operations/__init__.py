@@ -101,7 +101,7 @@ class OperationManager (object):
         opmodules = []
         for opfile in opfiles:
             opmodname = basename(opfile).split(".")[0]
-            full_opmodname = "recon.operations.%s"%opmodname
+            full_opmodname = "imaging.operations.%s"%opmodname
             opmodules.append(__import__(full_opmodname,{},{},[opmodname]))
         return opmodules
 

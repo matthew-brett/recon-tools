@@ -1,8 +1,8 @@
 from Numeric import empty, NewAxis
 from FFT import inverse_fft
 from pylab import mlab, pi, fft, floor, angle, where, amax, cos, sin, Float, Complex32
-from recon.operations import Operation
-from recon.util import nice_angle
+from imaging.operations import Operation
+from imaging.util import nice_angle
 
 
 ##############################################################################

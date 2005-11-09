@@ -1,7 +1,7 @@
 from Numeric import empty
 from FFT import inverse_fft
 from pylab import zeros, pi, Complex32, arange, reshape, Float32, cos, sin, conjugate, take, fft
-from recon.operations import Operation
+from imaging.operations import Operation
 
 ##############################################################################
 class FixSliceTimeSkew (Operation):

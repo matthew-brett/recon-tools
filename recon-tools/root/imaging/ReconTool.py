@@ -1,7 +1,7 @@
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser, Option
 from varian.lib.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, MAGNITUDE_TYPE, COMPLEX_TYPE
-from recon.operations import OperationManager
+from imaging.operations import OperationManager
 from varian import fidimage
 
 output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT)

@@ -1,7 +1,7 @@
 from Numeric import empty
 from FFT import inverse_fft
 from pylab import mlab, angle, fft, cos, sin, Float, Complex32
-from recon.operations import Operation
+from imaging.operations import Operation
 
 
 ##############################################################################

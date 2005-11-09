@@ -1,4 +1,4 @@
-from recon.operations import Operation
+from imaging.operations import Operation
 
 ##############################################################################
 class FieldInhomogeneityCorrection (Operation):
