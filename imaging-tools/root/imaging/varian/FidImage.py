@@ -395,7 +395,7 @@ class FidImage (object):
         is saved to disk as complex or magnitude data. By default the image data is 
         saved as magnitude data.
         """
-        import imageio
+        from imaging import imageio
         data_matrix = self.data_matrix
         #VolumeViewer( abs(data_matrix), ("Time Point", "Slice", "Row", "Column"))
 
