@@ -1,0 +1,5 @@
+#!/usr/bic/bin/python
+if __name__ == "__main__":
+    from imaging.tools import FDF2Img
+    FDF2Img.FDF2Img().run()
+    
