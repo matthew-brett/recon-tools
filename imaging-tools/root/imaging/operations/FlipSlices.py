@@ -2,7 +2,7 @@ from pylab import flipud, fliplr
 from imaging.operations import Operation, Parameter
 
 ##############################################################################
-class FlipData (Operation):
+class FlipSlices (Operation):
     "Flip image slices up-down and left-right"
 
     params=(
