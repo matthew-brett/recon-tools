@@ -115,7 +115,7 @@ class Recon (OptionParser):
         options = self.getOptions()
 
         # Load data from the fid file.
-        data = FidImage(options.datadir, options)
+        data = FidImage(options.datadir, options.TR)
 
         # Log some parameter info to the console.
         data.logParams()

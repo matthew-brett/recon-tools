@@ -6,10 +6,10 @@ from pylab import (
   Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr, zeros, fromstring,
   reshape, arange, take, floor, argmax, multiply, asarray)
 from imaging.util import shift
+from imaging.imageio import BaseImage
 from imaging.varian import tablib
-from imaging.varian.ProcPar import ProcPar
+from imaging.varian.ProcPar import ProcPar, ProcParImageMixin
 from imaging.varian.FidFile import FidFile
-from VolumeViewer import VolumeViewer
 
 FIDL_FORMAT = "fidl"
 VOXBO_FORMAT = "voxbo"
@@ -24,13 +24,19 @@ def complex_fromstring(data, numtype):
       Complex32)
 
 ##############################################################################
-class FidImage (object):
+class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
-    def __init__(self, datadir, options):
-        self.options = options
-        self.loadParams(os.path.join(datadir, "procpar"))
-        self.loadData(os.path.join(datadir, "fid"))
+    def __init__(self, datadir, tr=None):
+        self.loadParams(datadir, tr=tr)
+        self.loadData(datadir)
+
+    #-------------------------------------------------------------------------
+    def loadParams(self, datadir, tr=None):
+        ProcParImageMixin.loadParams(self, datadir)
+
+        # manually override tr
+        if tr > 0: self.tr = tr
 
     #-------------------------------------------------------------------------
     def logParams(self):
@@ -49,120 +55,6 @@ class FidImage (object):
         print "Pixel size (phase-encode direction): %7.2f" % self.xsize 
         print "Pixel size (frequency-encode direction): %7.2f" % self.ysize
         print "Slice thickness: %7.2f" % self.zsize
-
-    #-------------------------------------------------------------------------
-    def loadParams(self, procpar_file):
-        """
-        This method extracts scan related parameters from the procpar file.
-        Some parameters may be overridden by the options from the command line
-        and hence the options attribute is used here.
-        """
-        procpar = ProcPar(procpar_file)
-        self.n_fe = procpar.np[0]
-        self.n_pe = procpar.nv[0]
-        self.tr = procpar.tr[0]
-        self.petable_name = procpar.petable[0]
-        self.nvol_true = procpar.images[0]
-        self.orient = procpar.orient[0]
-        pulse_sequence = procpar.pslabel[0]
-        
-        if procpar.get("spinecho", ("",))[0] == "y":
-            if pulse_sequence == 'epidw': pulse_sequence = 'epidw_se'
-            else: pulse_sequence = 'epi_se'
-
-        # try using procpar.cntr or procpar.image to know which volumes are reference
-        if len(procpar.cntr) == self.nvol_true:
-            is_imagevol = procpar.cntr
-        elif len(procpar.image) == self.nvol_true:
-            is_imagevol = procpar.image
-        else: is_imagevol = [0] + [1]*nvol_true
-        self.ref_vols = []
-        self.image_vols = []
-        for i, isimage in enumerate(is_imagevol):
-            if isimage: self.image_vols.append(i)
-            if not isimage: self.ref_vols.append(i)
-        self.nvol = self.nvol_true - len(self.ref_vols)
-
-        # determine number of slices, thickness, and gap
-        if pulse_sequence == 'mp_flash3d':
-            self.nslice = procpar.nv2[0]
-            self.thk = 10.*procpar.lpe2[0]
-            slice_gap = 0
-        else:
-            slice_positions = procpar.pss
-            self.nslice = len(slice_positions)
-            self.thk = procpar.thk[0]
-            min = 10.*slice_positions[0]
-            max = 10.*slice_positions[-1]
-            nslice = self.nslice
-            if nslice > 1:
-                slice_gap = ((max - min + self.thk) - (nslice*self.thk))/(nslice - 1)
-            else:
-                slice_gap = 0
-
-        # override tr with command-line option
-        if self.options.TR > 0: self.tr = self.options.TR
-
-        # Determine the number of navigator echoes per segment.
-        # (Note: this CANNOT be the proper way to do this! -BH)
-        self.nav_per_seg = self.n_pe%32 and 1 or 0
-
-        # sequence-specific logic for determining pulse_sequence, petable and nseg
-        # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
-        # Leon's "spare" sequence is really the EPI sequence with delay.
-        if(pulse_sequence in ('epi','tepi','sparse','spare')):
-            nseg = int(self.petable_name[-2])
-        elif(pulse_sequence in ('epidw','Vsparse')):
-            pulse_sequence = 'epidw'
-            nseg = int(self.petable_name[-1])
-        elif(pulse_sequence in ('epi_se','epidw_sb')):
-            nseg = procpar.nseg[0]
-            if self.petable_name.rfind('epidw') < 0:
-                petable_name = "epi%dse%dk" % (self.n_pe, nseg)
-            else:
-                pulse_sequence = 'epidw'
-        elif(pulse_sequence == 'asems'):
-            nseg = 1
-            petable = zeros(self.n_pe)
-            for i in range(self.n_pe):      # !!!!! WHAT IS THIS TOO ? !!!!!
-                if i%2:
-                     petable[i] = self.n_pe - i/2 - 1
-                else:
-                     petable[i] = i/2
-        else:
-            print "Could not identify sequence: %s" % (pulse_sequence)
-            sys.exit(1)
-
-        self.nseg = nseg
-        self.pulse_sequence = pulse_sequence
-
-        # this quiet_interval may need to be added to tr in some way...
-        #quiet_interval = procpar.get("dquiet", (0,))[0]
-        self.n_fe_true = self.n_fe/2
-        self.tr = nseg*self.tr
-        self.nav_per_slice = nseg*self.nav_per_seg
-        self.n_pe_true =  self.n_pe - self.nav_per_slice
-        self.pe_per_seg = self.n_pe/nseg
-        fov = procpar.lro[0]
-        self.x0 = 0.
-        self.y0 = 0.
-        self.z0 = 0.
-        self.xsize = float(fov)/self.n_pe_true
-        self.ysize = float(fov)/self.n_fe_true
-        self.zsize = float(self.thk) + slice_gap
-
-        self.datasize, self.raw_typecode = \
-          procpar.dp[0]=="y" and (4, Int32) or (2, Int16)
-
-        # calculate echo times
-        f = 2.0*abs(procpar.gro[0])*procpar.trise[0]/procpar.gmax[0]
-        self.echo_spacing = f + procpar.at[0]
-        if(self.petable_name.find("alt") >= 0):
-            self.echo_time = procpar.te[0] - f - procpar.at[0]
-        else:
-            self.echo_time = procpar.te[0] - floor(self.pe_per_seg)/2.0*self.echo_spacing
-        self.pe_times = asarray([self.echo_time + pe*self.echo_spacing \
-                          for pe in range(self.pe_per_seg)])
 
     #-------------------------------------------------------------------------
     def _load_petable(self):
@@ -268,7 +160,7 @@ class FidImage (object):
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-    def loadData(self, fidfile):
+    def loadData(self, datadir):
         """
         This method reads the data from a fid file into following VarianData
         attributes: 
@@ -313,7 +205,7 @@ class FidImage (object):
           (nslice, nav_per_slice, n_fe_true), Complex32)
 
         # open fid file
-        fid = FidFile(fidfile) 
+        fid = FidFile(os.path.join(datadir, "fid")) 
 
         # determine fid type using fid file attributes nblocks and ntraces
         fidformat = {
@@ -383,48 +275,31 @@ class FidImage (object):
                 self.data_matrix[vol-numrefs] = ksp_image
                 self.nav_data[vol-numrefs] = navigators
 
+        self.data = self.data_matrix # to comply with the Image interface
+
         # shift data for easier fft'ing later
         shift(self.data_matrix, 0, n_fe_true/2)
 
     #-------------------------------------------------------------------------
     def save(self, outfile, file_format, data_type):
-        """
-        This function saves the image data to disk in a file specified on the command
-        line. The file name is stored in the options dictionary using the outfile key.
-        The output_data_type key in the options dictionary determines whether the data 
-        is saved to disk as complex or magnitude data. By default the image data is 
-        saved as magnitude data.
-        """
-        from imaging import imageio
+        "Save the image data to disk."
+        from imaging.imageio import AnalyzeWriter, write_analyze
         data_matrix = self.data_matrix
-        #VolumeViewer( abs(data_matrix), ("Time Point", "Slice", "Row", "Column"))
 
-        n_pe_true = self.n_pe_true
-        n_fe_true = self.n_fe_true
-        nslice =  self.nslice
-        xsize = self.xsize 
-        ysize = self.ysize
-        zsize = self.zsize
-
-        if data_type == MAGNITUDE_TYPE:
-            datatype = imageio.SHORT
-            vol_transformer = lambda v: abs(v)
-        elif data_type == COMPLEX_TYPE:
-            datatype = imageio.COMPLEX
-            vol_transformer = lambda v: v  # identity
-
-        # Save data to disk
-        print "Saving to disk. Please Wait"
-
+        print "Saving to disk (%s format). Please Wait"%file_format
         if file_format == ANALYZE_FORMAT:
-            for vol, volume in enumerate(data_matrix):
-                self.imagedata = vol_transformer(volume)
-                writer = imageio.AnalyzeWriter(self, datatype)
-                writer.write("%s_%04d"%(outfile, vol))
+            dtypemap = {
+              MAGNITUDE_TYPE: AnalyzeWriter.SHORT,
+              COMPLEX_TYPE: AnalyzeWriter.COMPLEX }
+            for volnum, volimage in enumerate(self.subImages()):
+                write_analyze(volimage,
+                  "%s_%04d"%(outfile, volnum), datatype=dtypemap[data_type])
 
         elif file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
+            if data_type == MAGNITUDE_TYPE: data_matrix = abs(data_matrix)
             for volume in data_matrix:
                 f_img.write(vol_transformer(volume).byteswapped().tostring())
+        else: print "Unsupported output type: %s"%file_format
 
         # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!

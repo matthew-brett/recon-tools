@@ -68,7 +68,10 @@ class FDFFile (object):
     def loadData(self):
         # advance file to beginning of binary data
         while self.infile.read(1) != "\x00": pass
-        datatype = getattr(pylab, "Float32")
+
+        datatype = {"integer": "Int", "float": "Float"}\
+          .get(self.header.storage, "Float")
+        typecode = getattr(pylab, "%s%d"%(datatype, self.header.bits))
         shape = [int(d) for d in self.header.matrix]
-        self.data = fromstring(self.infile.read(), datatype)\
+        self.data = fromstring(self.infile.read(), typecode)\
                     .byteswapped().resize(shape)

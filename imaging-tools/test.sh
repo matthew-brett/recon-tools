@@ -1,5 +1,5 @@
 #!/bin/sh
-export PYTHONPATH=./root:../varian-tools
+export PYTHONPATH=./root
 recon_cmd=./scripts/recon
 testdata_dir=../testdata
 output_dir=./Images
