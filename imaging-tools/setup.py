@@ -2,13 +2,13 @@
 from distutils.core import setup
 
 setup(
-  name='python-recon-tools',
+  name='python-imaging-tools',
   version='0.1',
-  description='Tools for reconstructing K-space MRI scan data.',
+  description='Tools for manipulating MRI data, specializing in k-space reconstruction.',
   author='Brian Hawthorne',
   author_email='brian.lee.hawthorne@gmail.com',
-  url='http://cirl.berkeley.edu/view/BIC/ReconEpi',
+  url='http://cirl.berkeley.edu/view/BIC/ImagingTools',
   package_dir = {'':'root'},
-  packages=['', 'recon', 'recon.operations'],
-  scripts=['recon']
+  packages=['', 'imaging', 'imaging.operations', 'imaging.tools', 'imaging.varian'],
+  scripts=['scripts/dumpheader', 'scripts/getparam', 'scripts/fdf2img']
 )
