@@ -92,8 +92,7 @@ class Recon (OptionParser):
         object, including a resolved list of callable data operations.
         """
         options, args = self.parse_args()
-        if len(args) != 2: self.error(
-          "Expecting 2 arguments: datadir ouput" )
+        if len(args) != 2: self.error("Expecting 2 arguments: datadir ouput")
 
         # treat the raw args as named options
         options.datadir, options.outfile = args
@@ -114,21 +113,20 @@ class Recon (OptionParser):
         # Get the filename names and options from the command line.
         options = self.getOptions()
 
-        # Load data from the fid file.
-        data = FidImage(options.datadir, options.TR)
+        # Load k-space image from the fid file.
+        image = FidImage(options.datadir, options.TR)
 
         # Log some parameter info to the console.
-        data.logParams()
+        image.logParams()
 
-        # Now apply the various data manipulation and artifact correction operations
-        # to the time-domain (k-space) data which is stored in the arrays
-        # data_matrix and nav_data as well as the ancillary data arrays ref_data and
-        # ref_nav_data. The operations are applied by looping over the list of
-        # operations specified in the config file. Each operation acts in an
-        # independent manner upon the data arrays.
-        for operation, args in options.operations:
-            operation(**args).run(options, data)
+        # Now apply the various data manipulation and artifact correction
+        # operations to the time-domain (k-space) data which is stored in the
+        # image attributes data and nav_data as well as the ancillary data arrays
+        # ref_data and ref_nav_data. The operations are applied by looping over
+        # the list of operations specified in the config file. Each operation
+        # acts independently upon the data.
+        for operation, args in options.operations: operation(**args).run(image)
 
         # Save data to disk.
-        data.save(options.outfile, options.file_format, options.output_data_type)
+        image.save(options.outfile, options.file_format, options.output_data_type)
 

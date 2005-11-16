@@ -43,7 +43,7 @@ class Parameter (object):
 
 ##############################################################################
 class Operation (object):
-    "Base class for data operations."
+    "Base class for image operations."
 
     class ConfigError (Exception): pass
 
@@ -66,7 +66,7 @@ class Operation (object):
               (leftovers[0], self.__class__.__name__))
 
     #-------------------------------------------------------------------------
-    def run(self, params, options, data): pass
+    def run(self, params, image): pass
 
 
 ##############################################################################

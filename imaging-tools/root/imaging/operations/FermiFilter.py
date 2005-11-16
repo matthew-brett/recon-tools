@@ -20,7 +20,7 @@ def fermi_filter(rows, cols, cutoff, trans_width):
 
 ##############################################################################
 class FermiFilter (Operation):
-    "Apply a Fermi filter to the data."
+    "Apply a Fermi filter to the image."
 
     params=(
       Parameter(name="cutoff", type="float", default=0.95,
@@ -31,11 +31,11 @@ class FermiFilter (Operation):
         "sharper dropoff."))
 
     #-------------------------------------------------------------------------
-    def run(self, options, data):
-        rows, cols = data.data_matrix.shape[-2:]
+    def run(self, image):
+        rows, cols = image.data.shape[-2:]
         kernel = fermi_filter(
           rows, cols, self.cutoff, self.trans_width).astype(Float32)
-        for volume in data.data_matrix:
+        for volume in image.data:
           for slice in volume: slice *= kernel
 
 

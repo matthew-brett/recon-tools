@@ -12,9 +12,9 @@ class FlipSlices (Operation):
         description="flip each slice left-right"))
 
     #-------------------------------------------------------------------------
-    def run(self, options, data):
+    def run(self, image):
         if not self.flipud and not self.fliplr: return
-        for volume in data.data_matrix:
+        for volume in image.data:
             for slice in volume:
                 if self.flipud and self.fliplr:
                     newslice = flipud(fliplr(slice))

@@ -13,20 +13,19 @@ class SegmentationCorrection (Operation):
     """
     
     #-------------------------------------------------------------------------
-    def run(self, options, data):
-        imgdata = data.data_matrix
-        pe_per_seg = data.n_pe_true/data.nseg
+    def run(self, image):
+        pe_per_seg = image.n_pe_true/image.nseg
 
         # phase angle of inverse fft'd ref navs and image navs
-        ref_nav_phs = angle(inverse_fft(data.ref_nav_data))
-        nav_phs = angle(inverse_fft(data.nav_data))
+        ref_nav_phs = angle(inverse_fft(image.ref_nav_data))
+        nav_phs = angle(inverse_fft(image.nav_data))
 
         # phase difference between ref navs and image navs
         phsdiff = nice_angle(ref_nav_phs - nav_phs)
 
         # weight phase difference by the phase encode timing during each segment
-        pe_times = (data.pe_times[data.nav_per_seg:]/data.echo_time)[:,NewAxis]
-        theta = empty(imgdata.shape, Float)
+        pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,NewAxis]
+        theta = empty(image.data.shape, Float)
         theta[:,:,:pe_per_seg] = phsdiff[:,:,NewAxis,0]*pe_times
         theta[:,:,pe_per_seg:] = phsdiff[:,:,NewAxis,1]*pe_times
 
@@ -34,7 +33,7 @@ class SegmentationCorrection (Operation):
         cor = cos(theta) + 1.0j*sin(theta)
 
         # Apply the phase correction.
-        data.data_matrix = fft(inverse_fft(imgdata)*cor).astype(Complex32)
+        image.data = fft(inverse_fft(image.data)*cor).astype(Complex32)
                             
 
 

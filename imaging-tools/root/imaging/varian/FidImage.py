@@ -165,8 +165,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         This method reads the data from a fid file into following VarianData
         attributes: 
 
-        data_matrix: A rank 4 array containing time-domain data. This array is 
-          dimensioned as data_matrix(nvol,nslice,n_pe_true,n_fe_true) where nvol 
+        data: A rank 4 array containing time-domain data. This array is 
+          dimensioned as data(nvol,nslice,n_pe_true,n_fe_true) where nvol 
           is the number of volumes, nslice is the number of slices per volume,
           n_pe_true is the number of phase-encode lines and n_fe_true is the
           number read-out points.
@@ -195,7 +195,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         numrefs = len(self.ref_vols)
 
         # allocate data matrices
-        self.data_matrix = zeros(
+        self.data = zeros(
           (nvol, nslice, n_pe_true, n_fe_true), Complex32)
         self.nav_data = zeros(
           (nvol, nslice, nav_per_slice, n_fe_true), Complex32)
@@ -272,19 +272,17 @@ class FidImage (BaseImage, ProcParImageMixin):
                 self.ref_data[:] = ksp_image
                 self.ref_nav_data[:] = navigators
             else:
-                self.data_matrix[vol-numrefs] = ksp_image
+                self.data[vol-numrefs] = ksp_image
                 self.nav_data[vol-numrefs] = navigators
 
-        self.data = self.data_matrix # to comply with the Image interface
-
         # shift data for easier fft'ing later
-        shift(self.data_matrix, 0, n_fe_true/2)
+        shift(self.data, 0, n_fe_true/2)
 
     #-------------------------------------------------------------------------
     def save(self, outfile, file_format, data_type):
         "Save the image data to disk."
         from imaging.imageio import AnalyzeWriter, write_analyze
-        data_matrix = self.data_matrix
+        data = self.data
 
         print "Saving to disk (%s format). Please Wait"%file_format
         if file_format == ANALYZE_FORMAT:
@@ -297,8 +295,8 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         elif file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
-            if data_type == MAGNITUDE_TYPE: data_matrix = abs(data_matrix)
-            for volume in data_matrix:
+            if data_type == MAGNITUDE_TYPE: data = abs(data)
+            for volume in data:
                 f_img.write(vol_transformer(volume).byteswapped().tostring())
         else: print "Unsupported output type: %s"%file_format
 

@@ -3,7 +3,7 @@ from imaging.operations import Operation
 ##############################################################################
 class FieldInhomogeneityCorrection (Operation):
 
-    def run(self, options, data):
+    def run(self, image):
         "Correct for Nyquist ghosting due to field inhomogeneity."
 
         # Read the inhomogeneity field-map data from disk (Calculated using compute_fmap).

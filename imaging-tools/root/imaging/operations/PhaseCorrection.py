@@ -8,14 +8,13 @@ from imaging.operations import Operation
 class PhaseCorrection (Operation):
 
     #-------------------------------------------------------------------------
-    def run(self, options, data):
-        imgdata = data.data_matrix
+    def run(self, image):
 
         # phase angle of inverse fft'd reference volume
-        ref_phs = angle(inverse_fft(data.ref_data))
+        ref_phs = angle(inverse_fft(image.ref_data))
 
         # compute phase correction
         cor = cos(-ref_phs) + 1.j*sin(-ref_phs)
 
         # apply correction to image data
-        data.data_matrix = fft(inverse_fft(imgdata)*cor).astype(Complex32)
+        image.data = fft(inverse_fft(image.data)*cor).astype(Complex32)

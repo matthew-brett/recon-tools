@@ -11,9 +11,9 @@ class ReorderSlices (Operation):
         description="Flip slices during reordering."),)
 
     #-------------------------------------------------------------------------
-    def run(self, options, data):
-        nslice = data.nslice
-        imgdata = data.data_matrix
+    def run(self, image):
+        nslice = image.nslice
+        imgdata = image.data
         # this needs testing on odd number of slices
         midpoint = nslice/2 + (nslice%2 and 1 or 0)
         tmp = empty(imgdata.shape, imgdata.typecode())

@@ -8,18 +8,11 @@ maxranges = {
   Int32: 2147483648.}
 
 #-----------------------------------------------------------------------------
-def get_analyze_filenames( filestem ):
-    """
-    Construct appropriate Analyze header and image file names.
-    Returns (headername, imagename)
-    """
-    if filestem.find( ".hdr" ) != -1 or filestem.find( ".img" ) != -1:
-        filestem = ".".join( filestem.split(".")[:-1] )
-    return "%s.hdr"%filestem, "%s.img"%filestem
-
-#-----------------------------------------------------------------------------
 def get_dims(data):
-    "Extract ndim, tdim, zdim, ydim, and xdim from data shape."
+    """
+    Extract ndim, tdim, zdim, ydim, and xdim from data shape.
+    @return: (ndim, tdim, zdim, ydim, xdim)
+    """
     shape = data.shape
     ndim = len(shape)
     if ndim < 2 or ndim > 4:
@@ -96,13 +89,13 @@ class AnalyzeWriter (object):
     def __init__(self, image, datatype=None, byteswap=False):
         self.image = image
         self.datatype = \
-          datatype or typecode2datatype[image.data.typecode()]
+          datatype or self.typecode2datatype[image.data.typecode()]
         self.byteswap = byteswap
 
     #-------------------------------------------------------------------------
     def write(self, filestem):
         "Write ANALYZE format header, image file pair."
-        headername, imagename = get_analyze_filenames(filestem)
+        headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
         self.write_header(headername)
         self.write_image(imagename)
 
