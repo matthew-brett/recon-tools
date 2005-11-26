@@ -1,0 +1,42 @@
+##############################################################################
+COPYRIGHT: Brian Hawthorne  2005
+EMAIL: brian.lee.hawthorne@gmail.com
+
+imaging-tools:
+
+A collection of tools and libraries for manipulating medical imaging data
+developed at the University of California Berkeley's Helen Wills Neuroscience
+Institute Brain Imaging Center.
+For documentation, see https://cirl.berkeley.edu/view/BIC/ImagingTools
+
+##############################################################################
+This program is free software; you can redistribute it and/or modify it
+under the terms of the GNU General Public License as published by the Free
+Software Foundation; either version 2 of the License, or (at your option)
+any later version.
+
+This program is distributed in the hope that it will be useful, but WITHOUT
+ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or
+FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public License for
+more details.
+
+You should have received a copy of the GNU General Public License along
+with this program; if not, write to the Free Software Foundation:
+
+  Free Software Foundation, Inc.
+  59 Temple Place - Suite 330
+  Boston, MA  02111-1307, USA
+
+A copy of the GPL version 2 can be found in the file named LICENSE that is
+included with this source code distribution.  You can also learn more from:
+http://www.gnu.org
+
+##############################################################################
+The imaging-tools package provides a number of command-line tools for
+manipulating image data, as well as a code library of reusable components.
+The central types of objects in the imaging-tools system are data readers,
+transformers, and writers.  Image manipulation tools can be created by
+composing appropriate combinations of these core objects into a pipeline
+beginning with a reader, followed by a sequence of transformers (called
+Operations), and ending with a writer.  Image data in the pipeline is
+represented by an Image object conforming to a conventional Image interface.
