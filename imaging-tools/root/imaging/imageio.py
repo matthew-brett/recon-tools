@@ -64,7 +64,7 @@ class BaseImage (object):
 class AnalyzeWriter (object):
 
     # (datatype, bitpix) for each Analyze datatype
-    # datatype is an arbitrary 
+    # datatype is a bit flag into a datatype byte of the Analyze header
     # bitpix is the number of bits per pixel (or voxel, as the case may be)
     BYTE = (2,8)
     SHORT = (4,16)
