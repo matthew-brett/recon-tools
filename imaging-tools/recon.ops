@@ -1,10 +1,16 @@
 [PhaseCorrection]
+
 [SegmentationCorrection]
+
 [FermiFilter]
 cutoff=0.95
 trans_width=0.3
+
 [ReorderSlices]
 flip_slices=False
+
 [TimeInterpolate]
+
 [InverseFFT]
+
 [ViewImage]
