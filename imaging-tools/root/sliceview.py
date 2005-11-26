@@ -1,7 +1,16 @@
 #!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm
+from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
+
+def iscomplex(a): return hasattr(a, "imag")
+
+# Transforms for viewing different aspects of complex data
+def ident_xform(data): return data
+def abs_xform(data): return abs(data)
+def phs_xform(data): return angle(data)
+def real_xform(data): return data.real
+def imag_xform(data): return data.imag
 
 
 ##############################################################################
@@ -31,10 +40,11 @@ class DimSlider (gtk.HScale):
 class ControlPanel (gtk.Frame):
 
     #-------------------------------------------------------------------------
-    def __init__(self, shape, dim_names=[]):
+    def __init__(self, shape, dim_names=[], iscomplex=False):
         self._init_dimensions(shape, dim_names)
         gtk.Frame.__init__(self)
         main_vbox = gtk.VBox()
+        main_vbox.set_border_width(2)
 
         # spinner for row dimension
         #spinner_box = gtk.HBox()
@@ -49,6 +59,26 @@ class ControlPanel (gtk.Frame):
         #spinner_box.add(gtk.Label("Col:"))
         #spinner_box.add(self.col_spinner)
         #main_vbox.add(spinner_box)
+
+        # radio buttons for different aspects of complex data
+        xform_map = {
+          "ident": ident_xform,
+          "abs": abs_xform,
+          "phs": phs_xform,
+          "real": real_xform,
+          "imag": imag_xform}
+        self.radios = []
+        radio_box = gtk.HBox()
+        prev_button = None
+        for name in ("abs","phs","real","imag"):
+            button = prev_button = gtk.RadioButton(prev_button, name)
+            button.transform = xform_map[name]
+            if name=="abs": button.set_active(True)
+            self.radios.append(button)
+            radio_box.add(button)
+        if iscomplex:
+            main_vbox.pack_end(radio_box, False, False, 0)
+            main_vbox.pack_end(gtk.HSeparator(), False, False, 0)
 
         # slider for each data dimension
         self.sliders = [DimSlider(*d) for d in self.dimensions]
@@ -73,11 +103,17 @@ class ControlPanel (gtk.Frame):
         self.slice_dims = (self.dimensions[-2][0], self.dimensions[-1][0])
 
     #-------------------------------------------------------------------------
-    def connect(self, spinner_handler, slider_handler):
+    def connect(self, spinner_handler, radio_handler, slider_handler):
+        # connect spinners
         self.row_spinner.get_adjustment().connect(
           "value-changed", spinner_handler)
         self.col_spinner.get_adjustment().connect(
           "value-changed", spinner_handler)
+
+        # connect radio buttons
+        for r in self.radios: r.connect("toggled", radio_handler, r.transform)
+
+        # connect sliders
         for s in self.sliders:
             s.get_adjustment().connect("value_changed", slider_handler)
 
@@ -192,19 +228,23 @@ class SlicePlot (FigureCanvas):
 
 
 ##############################################################################
-class VolumeViewer (gtk.Window):
+class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, dim_names=[], title="VolumeViewer", cmap=cm.bone):
+    def __init__(self, data, dim_names=[], title="sliceview", cmap=cm.bone):
         self.adjustments = []
         self.data = asarray(data)
+
+        # if data is complex, show the magnitude by default
+        self.transform = iscomplex(data) and abs_xform or ident_xform
 
         # widget layout table
         table = gtk.Table(2, 2)
 
         # control panel
-        self.control_panel = ControlPanel(data.shape, dim_names)
-        self.control_panel.connect(self.spinnerHandler, self.sliderHandler)
+        self.control_panel = ControlPanel(data.shape, dim_names, iscomplex(data))
+        self.control_panel.connect(
+            self.spinnerHandler, self.radioHandler, self.sliderHandler)
         self.control_panel.set_size_request(200, 200)
         table.attach(self.control_panel, 0, 1, 0, 1)
 
@@ -230,7 +270,7 @@ class VolumeViewer (gtk.Window):
         self.connect("destroy", lambda x: gtk.main_quit())
         self.set_default_size(400,300)
         self.set_title(title)
-        self.set_border_width(5)
+        self.set_border_width(3)
         self.add(table)
         self.show_all()
         show()
@@ -245,7 +285,8 @@ class VolumeViewer (gtk.Window):
 
     #-------------------------------------------------------------------------
     def getSlice(self):
-        return squeeze(self.data[self.control_panel.getSlices()])
+        return self.transform(
+          squeeze(self.data[self.control_panel.getSlices()]))
 
     #-------------------------------------------------------------------------
     def updateRow(self): self.rowplot.setData(self.getRow())
@@ -261,7 +302,7 @@ class VolumeViewer (gtk.Window):
 
     #-------------------------------------------------------------------------
     def updateDataRange(self):
-        flat_data = self.data.flat
+        flat_data = self.transform(self.data.flat)
         data_min = amin(flat_data)
         data_max = amax(flat_data)
         self.rowplot.setDataRange(data_min, data_max)
@@ -270,6 +311,13 @@ class VolumeViewer (gtk.Window):
     #-------------------------------------------------------------------------
     def spinnerHandler(self, adj):
         print "VolumeViewer::spinnerHandler slice_dims", self.control_panel.slice_dims
+
+    #-------------------------------------------------------------------------
+    def radioHandler(self, button, transform):
+        if not button.get_active(): return
+        self.transform = transform
+        self.updateDataRange()
+        self.updateSlice()
 
     #-------------------------------------------------------------------------
     def sliderHandler(self, adj):
@@ -282,4 +330,4 @@ class VolumeViewer (gtk.Window):
 ##############################################################################
 if __name__ == "__main__":
     from pylab import randn
-    viewer = VolumeViewer(randn(6,6))
+    sliceview(randn(6,6))
