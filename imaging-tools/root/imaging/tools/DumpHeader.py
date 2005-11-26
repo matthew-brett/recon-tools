@@ -1,13 +1,14 @@
+import sys
+from optparse import OptionParser
+from imaging.varian.FidFile import FidFile
 
 # configure command line options
-from optparse import OptionParser
 parser = OptionParser( usage="usage: %prog [options] fidfile" )
 parser.add_option( "-b", "--blocknum",
     help="dump header for a particular data block",
     metavar="<blocknum>" )
 
 def cli():
-    import sys
     options, args = parser.parse_args()
 
     # get the filename
@@ -17,9 +18,8 @@ def cli():
     else: filename = args[0]
 
     # open fidfile
-    from varian import fidfile
     try:
-        fh = fidfile( filename )
+        fh = FidFile( filename )
     except IOError, e:
         print e
         parser.print_help()

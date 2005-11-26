@@ -1,4 +1,7 @@
 "Defines a tool for extracting values from a Varian procpar file."
+import sys
+import os.path
+from imaging.varian.ProcPar import ProcPar
 
 # configure command line options
 from optparse import OptionParser
@@ -9,7 +12,6 @@ parser = OptionParser( usage=\
   all parameters in the file will be displayed.""" )
 
 def cli():
-    import sys
     options, args = parser.parse_args()
 
     def fail( mesg="" ):
@@ -19,14 +21,11 @@ def cli():
 
     if not args: fail( "Filename required." )
     filename = args[0]
-    import os.path
     if not os.path.exists( filename ): fail( "File not found: %s"%filename )
-    import varian
     try:
-        procpar = varian.procpar( filename )
+        procpar = ProcPar( filename )
     except: fail( "Error parsing procpar file." )
 
-    import pprint
     if len( args ) == 1: params = procpar.keys()
     else: params = args[1:]
     params.sort()
