@@ -1,0 +1,326 @@
+#!/usr/bic/bin/python
+import sys
+import os
+import string
+import file_io
+from Numeric import *
+from LinearAlgebra import *
+import math_bic
+import math
+
+#-----------------------------------------------------------------------------
+def exec_cmd(cmd, verbose=False, exit_on_error=False):
+    "Execute unix command and handle errors."
+    if(verbose): print "\n" +  cmd
+    status = os.system(cmd)
+    if(status):
+        print "\n****** Error occurred while executing: ******"
+        print cmd
+        print "Aborting procedure\n\n"
+        if exit_on_error: sys.exit(1)
+
+#-----------------------------------------------------------------------------
+def regularize_distortion_matrix(A,reg_param):
+    dim = A.shape[0]
+    svd = singular_value_decomposition(A)
+    V = svd[0]
+    S = svd[1]
+    W = svd[2]
+    Smax = S[argmax(S)]
+
+    SS = 1./S
+    SS = SS*where(greater(S,reg_param*Smax),1.,0.)
+    idx = (dim+1)*arange(dim)
+    diag = zeros((dim,dim)).astype(S.typecode())
+    put(diag,idx,SS)
+
+    tmp = matrixmultiply(diag,transpose(V))
+    inv = matrixmultiply(transpose(W),tmp)
+    return inv
+
+#-----------------------------------------------------------------------------
+def compute_distortion_matrices(reg_param):
+    A = zeros((zdim,ydim,xdim,xdim)).astype(Complex)
+    Am1_reg = zeros((zdim,ydim,xdim,xdim)).astype(Complex)
+    mat = zeros((xdim,xdim)).astype(Complex)
+    tmp = zeros((xdim)).astype(Complex)
+    row = zeros((xdim)).astype(Complex)
+
+    scl1 = -2.*math.pi/xdim
+    scl2  = xdim*dwell_time/(2.*math.pi)
+    scl3  = 1./xdim
+
+    for z in range(zdim):
+        sys.stdout.write("%d" % (z+1))
+        for u in range(ydim):
+            sys.stdout.write(".")
+            sys.stdout.flush()
+            for v in range(xdim):
+                for q in range(xdim):
+                    angle = scl1*(n*(q - v) + scl2*fmap[z,u,q]*np)
+                    tmp.real = cos(angle)
+                    tmp.imag = sin(angle)
+                    row[q] = scl3*sum(tmp)
+                if sum(fmap_mask[z,u,:]) == 0.:
+                    row[:] = complex(0.,0.)
+                    row[v] = complex(1.,0.)
+                A[z,u,v,:] = row[:]
+            try:
+                Am1_reg[z,u,:,:] = regularize_distortion_matrix(A[z,u,:,:],reg_param)
+            except LinAlgError: # SVD didn't converge, can't regularize this row of k-space.
+                print "SVD did not converge at row %d of slice %d.  This line may have artifacts outside the image." % (v,z+1)
+                Am1_reg[z,u,:,:] = inverse(A[z,u,:,:])
+    sys.stdout.write("\n\n")
+    return [A,Am1_reg]
+
+#-----------------------------------------------------------------------------
+def compute_fmap(fid_file, procpar_file):
+
+    # Get procpar info.
+    params = file_io.parse_procpar(procpar_file,0)
+    tdim = float(params.get("nvol", 1.))
+    asym_time = float(params['asym_time'])
+    print "asym_time: %f sec" % asym_time
+
+    cmd = "recon_epi %s %s %s -file_format spm -save_phase"%(
+      fid_file, procpar_file, stem)
+    exec_cmd(cmd)
+
+    # Create image filenames.
+    stem = "asems"
+    trange = range(tdim)
+    mag = ["%s_%04d.img"%(stem, t) for t in trange]
+    mag_hdr = ["%s_%04d.hdr"%(stem, t) for t in trange]
+    phs = ["%s_phs_%04d.img"%(stem, t) for t in trange]
+    phs_hdr = ["%s_phs_%04d.hdr"%(stem, t) for t in trange]
+    phs_unwrapped = ["%s_phs_unwrapped_%04d.img"%(stem, t) for t in trange]
+    phs_unwrapped_hdr = ["%s_phs_unwrapped_%04d.hdr"%(stem, t) for t in trange]
+    fmap_files = ["%s_fmap_%02d.img"%(stem, t) for t in trange[:-1]]
+    pixshift_files = ["%s_pixshift_%02d.img"%(stem, t) for t in trange[:-1]]
+    fmap_file_fitted = "%s_fmap_fitted.img"%stem
+    phase_pair = "phase_pair.img"
+    phase_pair_hdr = "phase_pair.hdr"
+    
+    # Read header info and set for output.
+    hdr = file_io.read_header(mag[0])
+    xdim = hdr['xdim']
+    ydim = hdr['ydim']
+    zdim = hdr['zdim']
+    xsize = hdr['xsize']
+    ysize = hdr['ysize']
+    zsize = hdr['zsize']
+    datatype = 3 # Floating point
+
+    # Unwrap phases.
+    for idx in range(tdim):
+        cmd = "prelude -a %s -p %s -u %s -v -t 2000" % (mag[idx],phs[idx],phs_unwrapped[idx])
+        exec_cmd(cmd)
+
+    for idx in range(tdim-1):
+
+        # Concatenate adjacent unwrapped phase maps into a single 2-frame file.
+        cmd = "cat %s %s > %s" % (phs_unwrapped[idx],phs_unwrapped[idx+1],phase_pair)
+        exec_cmd(cmd)
+        hdr = file_io.create_hdr(xdim,ydim,zdim,2,xsize,ysize,zsize,1.,0,0,0,'Float',32,1.,'analyze',phase_pair,0)
+        file_io.write_analyze_header(phase_pair_hdr,hdr)
+
+        # Compute B-maps for concatenated unwrapped phase maps.
+        cmd = "fugue -p %s --asym=%f --savefmap=%s --dwell=1. --saveshift=%s" % (phase_pair,asym_time,fmap_files[idx],pixshift_files[idx])
+        exec_cmd(cmd)
+
+    if tdim > 2:
+        # Use a linear regression to fit phases, then use the the fit to estimate field map.
+        sumx = 0.
+        sumxsq = 0.
+        sumy = zeros((zdim,ydim,xdim)).astype(Float)
+        sumxy = zeros((zdim,ydim,xdim)).astype(Float)
+        phasem1 = zeros((zdim,ydim,xdim)).astype(Float)
+        for t in range(tdim):
+            phs_data = file_io.read_file(phs_unwrapped[t])
+            phase = phs_data['image']
+            if t > 0:
+                # Ensure that phase is within 2*pi of the last phase values (Acq protocol should not allow phase wraps.)
+                diff = phase - phasem1
+                mask = where(equal(diff,0.),0.,1.)
+                N = sum(mask.flat)
+                offset = int(sum(diff.flat)/(N*2.*math.pi))
+                print t,N,offset
+                if offset != 0.:
+                    phase = phase - 2.*math.pi*offset*mask
+                    file_io.write_analyze("phase.img",phs_data['header'],phase)
+            sumx = sumx + t
+            sumxsq = sumxsq + t**2
+            sumy = sumy + phase[:,:,:]
+            sumxy = sumxy + t*phase[:,:,:]
+            phasem1[:,:,:] = phase
+        fmap = (tdim*sumxy - sumx*sumy)/(asym_time*(tdim*sumxsq - sumx**2))
+        fmap = math_bic.median_filter(fmap,3)
+        fmap_hdr = file_io.create_hdr(xdim,ydim,zdim,1,xsize,ysize,zsize,1.,0,0,0,'Float',32,1.,'analyze',fmap_file_fitted,0)
+        file_io.write_analyze(fmap_file_fitted,fmap_hdr,fmap)
+        fmap_mask = where(greater(abs(fmap),0),1.,0.)
+            
+    #fmap = fmap_data['image']
+    #print "asems_undistortion_2shot_cen_r%04.2f.img" % reg_2shot_cen
+    #fmap = fmap*fmap_mask
+    #fmap_data['image'] = fmap
+    #file_io.write_file(fmap_file,fmap_data)
+    #fmap_data = file_io.read_file(fmap_file)
+    #fmap_hdr = fmap_data['header']
+    #fmap = fmap_data['image']
+    #fmap_mask = where(greater(abs(fmap),0),1.,0.)
+    #print "asems_undistortion_2shot_cen_r%04.2f.img" % reg_2shot_cen
+    #fmap = fmap*fmap_mask
+    #fmap_data['image'] = fmap
+    #file_io.write_file(fmap_file,fmap_data)
+
+#-----------------------------------------------------------------------------
+def load_fmap(fmap_file):
+    fmap_data = file_io.read_file(user_fmap_file)
+    fmap_hdr = fmap_data['header']
+    fmap = fmap_data['image']
+    fmap_mask = where(greater(abs(fmap),0),1.,0.)
+    xdim = fmap_hdr['xdim']
+    ydim = fmap_hdr['ydim']
+    zdim = fmap_hdr['zdim']
+    tdim = 2
+    xsize = fmap_hdr['xsize']
+    ysize = fmap_hdr['ysize']
+    zsize = fmap_hdr['zsize']
+    datatype = 3 # Floating point
+
+#-----------------------------------------------------------------------------
+def cleanup():
+    sp = " "
+    cleanup_cmd = "/bin/rm %s %s %s %s %s %s %s %s"%(
+      sp.join(mag), sp.join(mag_hdr),
+      sp.join(phs), sp.join(phs_hdr),
+      sp.join(phs_unwrapped), sp.join(phs_unwrapped_hdr),
+      phase_pair, phase_pair_hdr)
+    exec_cmd(cleanup_cmd)
+
+#-----------------------------------------------------------------------------
+def run():
+    if(len(sys.argv) < 3):
+        print "Usage: compute_fmap asems_fid_filename asems_procpar_filename dwell_time [-nocleanup -1shot -2shot_cen -2shot_lin -reg_1shot -reg_2shot_cen]"
+        print "    asems_filename: Stem of files containing either reconstructed asems images (without the image number) or fid"
+        print "    asems_procpar: procpar of asems data."
+        print "    dwell_time: Find by running 'dump_procpar epi_procpar_file'"
+        print "    -nocleanup: Don't remove temporary files."
+        print "    -1shot: one-shot linear kspace acquisition order. (Jezzard, Cusack etc method)"
+        print "    -2shot_cen: two-shot centric kspace acquisition order.Jezzard, Cusack etc method)"
+        print "    -2shot_lin: two-shot linear kspace acquisition order.Jezzard, Cusack etc method)"
+        print "    -reg_1shot: Regularization parameter for one-shot normalization.  Between 0 and 1."
+        print "    -reg_2shot_cen: Regularization parameter for one-shot normalization. Default is .2."
+        print "    If no seqence type is specified, tables for all sequences will be computed."
+        print "Examples:"
+        print "    compute_fmap fid procpar"
+        print "        Field map will be written to a file named '"'asems_fmap.img'"'"
+        sys.exit(1)
+
+    reg = 0.2
+    iarg = 0
+    cleanup = 1
+    one_shot = 0
+    two_shot_cen = 0
+    two_shot_lin = 0
+    reg_1shot = .3
+    reg_2shot_cen = .2
+    tag = ""
+    for arg in sys.argv:
+        if arg == "-nocleanup":
+            cleanup = 0
+        elif arg == "-1shot":
+            one_shot = 1
+        elif arg == "-2shot_cen":
+            two_shot_cen = 1
+        elif arg == "-2shot_lin":
+            two_shot_lin = 1
+        elif arg == "-reg_1shot":
+            reg_1shot = string.atof(sys.argv[iarg+1])
+        elif arg == "-reg_2shot_cen":
+            reg_2shot_cen = string.atof(sys.argv[iarg+1])
+        elif arg == "-tag":
+            tag = "_" + sys.argv[iarg+1]
+        else:
+            if arg[0] == "-":
+                print "\n*** Could not parse this option: %s *** \n\n" % (arg)
+                sys.exit(1)
+        iarg = iarg + 1
+
+    compute_fmap(sys.argv[1], sys.argv[2])
+
+    # cleanup after compute_fmap
+    if cleanup: cleanup()
+
+    if not one_shot or two_shot_lin or two_shot_cen: sys.exit(1)
+
+    #======== Move this dwell time stuff into ProcParImageMixin =========
+    # Determine dwell time.
+    if len(sys.argv) > 3: dwell_time = string.atof(sys.argv[3])
+    #epi_params = file_io.parse_procpar(epi_procpar_file,0)
+    #if epi_params.has_key('dwell'):
+        #dwell_time = string.atof(epi_params['dwell'])
+    #else:
+        #trise = string.atof(epi_params['trise'])
+        #gro = string.atof(epi_params['gro'])
+        #gmax = string.atof(epi_params['gmax'])
+        #np = string.atof(epi_params['np'])
+        #sw = string.atof(epi_params['sw'])
+        # This one give values that agree with Varian's
+        #dwell_time = (trise*gro/gmax) + np/(2.*sw)
+
+    n = arange((xdim)).astype(Float)
+    if one_shot:
+        print "Computing one-shot distortion matrices."
+        np = arange(xdim).astype(Float)
+        seg1 = arange(xdim/2,xdim)
+        seg2 = arange(xdim/2)
+        np[:xdim/2] = seg1  # Adjust for FT frequency ordering.
+        np[xdim/2:] = seg2
+        np[:] = arange(xdim)
+
+        matrices = compute_distortion_matrices(reg_1shot)
+        A = matrices[0]
+        Am1_reg = matrices[1]
+
+        unwarp_file = "asems_undistortion_1shot_r%04.2f%s.img" % (reg_2shot_cen,tag)
+        hdr = file_io.create_hdr(xdim,xdim,ydim,zdim,xsize,ysize,zsize,1.,0,0,0,'Complex',64,1.,'analyze',unwarp_file,0)
+        file_io.write_analyze(unwarp_file,hdr,Am1_reg)
+
+        warp_file = "asems_undistortion_1shot_r%04.2f%s.img" % (reg_2shot_cen,tag)
+        hdr = file_io.create_hdr(xdim,xdim,ydim,zdim,xsize,ysize,zsize,1.,0,0,0,'Complex',64,1.,'analyze',warp_file,0)
+        file_io.write_analyze(warp_file,hdr,A)
+
+    if two_shot_lin:
+        print "2shot linear kspace ordering not yet implemented."
+        sys.exit(1)
+
+    if two_shot_cen:
+        print "Computing two-shot distortion matrices."
+        np = zeros((xdim)).astype(Float)
+        seg1 = xdim/2 - arange(xdim/2) - 1
+        seg2 = arange(xdim/2)
+        np[:xdim/2] = seg1
+        np[xdim/2:] = seg2
+        np[:xdim/2] = seg2  # Adjust for FT frequency ordering.
+        np[xdim/2:] = seg1
+
+        matrices = compute_distortion_matrices(reg_2shot_cen)
+        A = matrices[0]
+        Am1_reg = matrices[1]
+
+        unwarp_file = "asems_undistortion_2shot_cen_r%04.2f%s.img" % (reg_2shot_cen,tag)
+        hdr = file_io.create_hdr(xdim,xdim,ydim,zdim,xsize,ysize,zsize,1.,0,0,0,'Complex',64,1.,'analyze',unwarp_file,0)
+        file_io.write_analyze(unwarp_file,hdr,Am1_reg)
+
+        warp_file = "asems_undistortion_2shot_cen_r%04.2f%s.img" % (reg_2shot_cen,tag)
+        hdr = file_io.create_hdr(xdim,xdim,ydim,zdim,xsize,ysize,zsize,1.,0,0,0,'Complex',64,1.,'analyze',warp_file,0)
+        file_io.write_analyze(warp_file,hdr,A)
+
+    if cleanup:
+        cmd = "/bin/rm %s %s" % (phs_unwrapped, phs_unwrapped_hdr)
+        exec_cmd(cmd)
+
+
+#-----------------------------------------------------------------------------
+if __name__ == "__main__": run()
