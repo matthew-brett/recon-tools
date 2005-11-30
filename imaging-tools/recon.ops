@@ -9,6 +9,8 @@ trans_width=0.3
 [ReorderSlices]
 flip_slices=False
 
+#[ComputeFieldMap]
+
 [TimeInterpolate]
 
 [InverseFFT]
