@@ -2,9 +2,8 @@ import struct
 import stat
 import os.path
 from Numeric import empty
-from pylab import (
-  Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr, zeros, fromstring,
-  reshape, arange, take, floor, argmax, multiply, asarray)
+from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr,\
+  zeros, fromstring, reshape, arange, take, floor, argmax, multiply, asarray
 from imaging.util import shift
 from imaging.imageio import BaseImage
 from imaging.varian import tablib
