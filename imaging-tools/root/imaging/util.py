@@ -2,7 +2,6 @@ import sys
 import string 
 import os
 from Numeric import *
-import file_io
 import struct
 from Numeric import empty
 from FFT import inverse_fft
