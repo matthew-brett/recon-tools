@@ -26,7 +26,6 @@ class StaticObjectDictMixin (object):
             raise AttributeError, attname
 
 
-
 #-----------------------------------------------------------------------------
 def advanceTo( tokens, stopid ):
     collection = []
@@ -121,20 +120,26 @@ class ProcParImageMixin (object):
         self.n_pe = procpar.nv[0]
         self.tr = procpar.tr[0]
         self.petable_name = procpar.petable[0]
-        self.nvol_true = procpar.images[0]
         self.orient = procpar.orient[0]
         pulse_sequence = procpar.pslabel[0]
-        
+
+        if hasattr(procpar, "asym_time"):
+            self.asym_times = procpar.asym_time
+            self.nvol_true = len(self.asym_times)
+        else:
+            self.asym_times = ()
+            self.nvol_true = procpar.images[0]
+
         if procpar.get("spinecho", ("",))[0] == "y":
             if pulse_sequence == 'epidw': pulse_sequence = 'epidw_se'
             else: pulse_sequence = 'epi_se'
 
         # try using procpar.cntr or procpar.image to know which volumes are reference
-        if len(procpar.cntr) == self.nvol_true:
+        if hasattr(procpar, "cntr") and len(procpar.cntr) == self.nvol_true:
             is_imagevol = procpar.cntr
-        elif len(procpar.image) == self.nvol_true:
+        elif hasattr(procpar, "image") and len(procpar.image) == self.nvol_true:
             is_imagevol = procpar.image
-        else: is_imagevol = [0] + [1]*nvol_true
+        else: is_imagevol = [1]*self.nvol_true
         self.ref_vols = []
         self.image_vols = []
         for i, isimage in enumerate(is_imagevol):
@@ -160,7 +165,6 @@ class ProcParImageMixin (object):
                 slice_gap = 0
 
         # Determine the number of navigator echoes per segment.
-        # (Note: this CANNOT be the proper way to do this! -BH)
         self.nav_per_seg = self.n_pe%32 and 1 or 0
 
         # sequence-specific logic for determining pulse_sequence, petable and nseg
@@ -179,12 +183,6 @@ class ProcParImageMixin (object):
                 pulse_sequence = 'epidw'
         elif(pulse_sequence == 'asems'):
             nseg = 1
-            petable = zeros(self.n_pe)
-            for i in range(self.n_pe):      # !!!!! WHAT IS THIS TOO ? !!!!!
-                if i%2:
-                     petable[i] = self.n_pe - i/2 - 1
-                else:
-                     petable[i] = i/2
         else:
             print "Could not identify sequence: %s" % (pulse_sequence)
             sys.exit(1)
