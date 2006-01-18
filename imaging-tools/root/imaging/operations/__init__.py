@@ -1,3 +1,4 @@
+import sys
 from os.path import dirname, basename, join
 from glob import glob
 from types import TypeType, BooleanType
@@ -36,6 +37,7 @@ class Parameter (object):
             raise ValueError("type must be one of %s"%self._type_map.keys())
         self.valuator=self._type_map[type]
         self.default=default
+        self.description=description
 
     #-------------------------------------------------------------------------
     def valuate(self, valspec): return self.valuator(valspec)
@@ -57,7 +59,7 @@ class Operation (object):
         for p in self.params:
             self.__dict__[p.name] = p.valuate(kwargs.pop(p.name, p.default))
 
-        # All valid args should have been popped of the kwargs dict at this
+        # All valid args should have been popped off the kwargs dict at this
         # point.  If any are left, it means they are not valid parameters for
         # this operation.
         leftovers = kwargs.keys()
@@ -66,7 +68,41 @@ class Operation (object):
               (leftovers[0], self.__class__.__name__))
 
     #-------------------------------------------------------------------------
-    def run(self, params, image): pass
+    def log(self, message):
+        print "[%s]: %s"%(self.__class__.__name__, message)
+
+    #-------------------------------------------------------------------------
+    def run(self, image): pass
+
+
+##############################################################################
+class RunLogger (object):
+    """
+    """
+
+    # what command is used to run the executable log
+    _magic_string = "#!/usr/bin/env runops"
+
+    #-------------------------------------------------------------------------
+    def __init__(self, ostream=sys.stdout):
+        self.ostream = ostream
+        print >> self.ostream, self._magic_string
+
+    #-------------------------------------------------------------------------
+    def _format_doc(self, doc):
+        for line in (doc or "").splitlines():
+            line = line.strip()
+            if line: print >> self.ostream, "#", line
+
+    #-------------------------------------------------------------------------
+    def logop(self, operation):
+        self._format_doc(operation.__class__.__doc__)
+        print >> self.ostream, "[%s]"%operation.__class__.__name__
+        for parameter in operation.params:
+            self._format_doc(parameter.description)
+            paramval = getattr(operation, parameter.name)
+            print >> self.ostream, "%s = %s"%(parameter.name, paramval)
+        print >> self.ostream
 
 
 ##############################################################################
@@ -74,8 +110,7 @@ class OperationManager (object):
     """
     This class is responsible for knowing which operations are available
     and retrieving them by name.  It should be a global singleton in the
-    system. (Preferrably, an attribute of the EpiRecon tool class, once
-    that class is implemented.)
+    system.
     """
     class InvalidOperationName (Exception): pass
     class DuplicateOperationName (Exception): pass
