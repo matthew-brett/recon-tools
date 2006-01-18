@@ -9,6 +9,9 @@ class PhaseCorrection (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
+        if not image.ref_data:
+            self.log("No reference data, nothing to do.")
+            return
 
         # phase angle of inverse fft'd reference volume
         ref_phs = angle(inverse_fft(image.ref_data))
