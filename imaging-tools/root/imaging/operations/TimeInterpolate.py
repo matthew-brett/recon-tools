@@ -9,7 +9,7 @@ class TimeInterpolate (Operation):
     #-------------------------------------------------------------------------
     def run(self, image):
         if image.nseg != 2:
-            print "TimeInterpolate:  non-segmented data, nothing to do."
+            self.log("Non-segmented data, nothing to do.")
             return
         pe_per_seg = image.n_pe_true/image.nseg
         old_vols = reshape(image.data,
