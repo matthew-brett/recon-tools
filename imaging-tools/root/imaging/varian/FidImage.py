@@ -73,10 +73,20 @@ class FidImage (BaseImage, ProcParImageMixin):
         nslice =  self.nslice
         pulse_sequence = self.pulse_sequence
 
-        table_filename = os.path.join(tablib, self.petable_name)
-        line = file(table_filename).readline().split()
-        line = [int(i) for i in line]
-        self.petable = zeros(n_pe_true*nslice, Int16)
+        if pulse_sequence == "asems":
+            line = range(self.n_pe)
+            for i in range(self.n_pe):      # !!!!! WHAT IS THIS TOO ? !!!!!
+                if i%2:
+                     line[i] = self.n_pe - i/2 - 1
+                else:
+                     line[i] = i/2
+        else:
+            table_filename = os.path.join(tablib, self.petable_name)
+            line = file(table_filename).readline().split()
+            line = [int(i) for i in line]
+        print "line: ",line
+
+        self.petable = empty(n_pe_true*nslice, Int16)
         i = 0 
         for slice in range(nslice):
             for pe in range(n_pe_true):
@@ -89,8 +99,9 @@ class FidImage (BaseImage, ProcParImageMixin):
                 # Find location of the pe'th phase-encode line in acquisition order.
                 self.petable[i] = line.index(pe) + offset
                 i += 1
+        print "petable: ",self.petable
             
-        self.navtable = zeros(nav_per_slice*nslice, Int16)
+        self.navtable = empty(nav_per_slice*nslice, Int16)
         if nav_per_seg == 1:    
             i = 0        
             # appears to not work if nav_per_seg > 1 ?
@@ -140,7 +151,7 @@ class FidImage (BaseImage, ProcParImageMixin):
     def _read_asems_ncsnn_volume(self, fid, vol):
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
-            block = fid.getBlock(pe*nvol + vol)
+            block = fid.getBlock(pe*self.nvol + vol)
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_typecode)
@@ -234,6 +245,12 @@ class FidImage (BaseImage, ProcParImageMixin):
           (fidformat=="uncompressed" and pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
 
+        needs_pe_reordering = \
+          fidformat not in ("epi2fid", "asems_ncsnn", "asems_nccnn")
+        #needs_pe_reordering = fidformat not in ("epi2fid",)
+
+        if needs_pe_reordering: self._load_petable()
+
         for vol in range(nvol_true):
 
             # read the next image volume
@@ -248,10 +265,12 @@ class FidImage (BaseImage, ProcParImageMixin):
                         volume[pe] = take(volume[pe], time_rev)
 
             # Reorder data according to phase encode table
-            if fidformat != "epi2fid":
-                self._load_petable()
+            if needs_pe_reordering:
                 ksp_image = take(volume, self.petable)
                 navigators = take(volume, self.navtable) 
+            else:
+                ksp_image = volume
+                navigators = empty(0, Complex32)
 
             # reshape into final volume shape
             ksp_image = reshape(ksp_image, (nslice, n_pe_true, n_fe_true))
