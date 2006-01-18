@@ -16,7 +16,7 @@ class SegmentationCorrection (Operation):
     def run(self, image):
         # can't perform segmentation correction on a non-segmented image!
         if image.nseg < 2:
-            print "[SegmentationCorrection]: image is non-segmented, nothing to do"
+            self.log("Image is non-segmented, nothing to do.")
             return
         pe_per_seg = image.n_pe_true/image.nseg
 
