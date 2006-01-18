@@ -10,5 +10,5 @@ setup(
   url='http://cirl.berkeley.edu/view/BIC/ImagingTools',
   package_dir = {'':'root'},
   packages=['', 'imaging', 'imaging.operations', 'imaging.tools', 'imaging.varian'],
-  scripts=['scripts/dumpheader', 'scripts/getparam', 'scripts/fdf2img']
+  scripts=['scripts/dumpheader', 'scripts/getparam', 'scripts/fdf2img', 'scripts/recon']
 )
