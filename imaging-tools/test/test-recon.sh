@@ -1,8 +1,8 @@
 #!/bin/sh
-export PYTHONPATH=./root
-recon_cmd=./scripts/recon
-testdata_dir=../testdata
-output_dir=./Images
+export PYTHONPATH=../root
+recon_cmd=../scripts/recon
+testdata_dir=../../testdata
+output_dir=./test-output
 #dataset=Vari_ss_epi
 dataset=asems
 #dataset=Ravi_ns22
