@@ -40,3 +40,7 @@ composing appropriate combinations of these core objects into a pipeline
 beginning with a reader, followed by a sequence of transformers (called
 Operations), and ending with a writer.  Image data in the pipeline is
 represented by an Image object conforming to a conventional Image interface.
+
+##############################################################################
+Testing:  A crude test framework is provided in the test directory.  Please
+read the README there for more details.

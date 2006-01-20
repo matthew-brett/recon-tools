@@ -1,0 +1,24 @@
+------------------------------------------------------------------------------
+TEST FRAMEWORK
+------------------------------------------------------------------------------
+
+SETUP:
+
+Running these test scripts requires that the bic testdata be separately
+installed or checked out.  That data is bundled separately from the main
+project due to its size.
+
+If you do not already have it, the testdata can be checked out from svn at
+    https://cirl.berkeley.edu/svn/bic/trunk/testdata.
+
+The test scripts expect the test data to be found as a sibling to the
+imaging-tools directory, but may of course be edited to look in a different
+location.
+
+RUNNING THE TESTS:
+
+To run the tests, simply execute one of the test scripts found in this
+directory.  The testing framework is still crude and does not include any
+unit tests.  The test-recon.sh script may be edited to test the recon tool
+with a number of raw data files in the testdata distribution.  Simply
+uncomment the desired data set and comment the currently active one.
