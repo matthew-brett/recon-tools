@@ -3,6 +3,7 @@ import sys
 from imaging.imageio import write_analyze, AnalyzeWriter
 from imaging.varian.FDFImage import FDFImage
 from imaging.operations.ReorderSlices import ReorderSlices
+from imaging.operations.FlipSlices import FlipSlices
 from imaging.operations.ViewImage import ViewImage
 
 ##############################################################################
@@ -18,5 +19,6 @@ class Fdf2Img (object):
 
         fdfimage = FDFImage(datadir)
         ReorderSlices().run(fdfimage)
+        FlipSlices(flipud=False, fliplr=True).run(fdfimage)
         ViewImage().run(fdfimage)
         fdfimage.save(outputdir)

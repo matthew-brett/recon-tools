@@ -49,7 +49,7 @@ class FDFHeader (object):
             else:
                 value = item_valuator(value)
             setattr(self, name, value)
- 
+
 
 ##############################################################################
 class FDFFile (object):
@@ -66,7 +66,7 @@ class FDFFile (object):
       
     #-------------------------------------------------------------------------
     def loadData(self):
-        # advance file to beginning of binary data
+        # advance file to beginning of binary data (demarcated by a null byte)
         while self.infile.read(1) != "\x00": pass
 
         datatype = {"integer": "Int", "float": "Float"}\

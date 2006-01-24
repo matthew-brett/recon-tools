@@ -201,8 +201,8 @@ class ProcParImageMixin (object):
         self.x0 = 0.
         self.y0 = 0.
         self.z0 = 0.
-        self.xsize = float(fov)/self.n_pe_true
-        self.ysize = float(fov)/self.n_fe_true
+        self.xsize = 10.*float(fov)/self.n_pe_true
+        self.ysize = 10.*float(fov)/self.n_fe_true
         self.zsize = float(self.thk) + slice_gap
 
         self.datasize, self.raw_typecode = \
