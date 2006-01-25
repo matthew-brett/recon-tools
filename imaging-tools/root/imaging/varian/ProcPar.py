@@ -175,7 +175,7 @@ class ProcParImageMixin (object):
         elif(pulse_sequence in ('epidw','Vsparse')):
             pulse_sequence = 'epidw'
             nseg = int(self.petable_name[-1])
-        elif(pulse_sequence in ('epi_se','epidw_sb')):
+        elif(pulse_sequence in ('epi_se','epidw_se')):
             nseg = procpar.nseg[0]
             if self.petable_name.rfind('epidw') < 0:
                 petable_name = "epi%dse%dk" % (self.n_pe, nseg)
@@ -217,8 +217,6 @@ class ProcParImageMixin (object):
             self.echo_time = procpar.te[0] - floor(self.pe_per_seg)/2.0*self.echo_spacing
         self.pe_times = asarray([self.echo_time + pe*self.echo_spacing \
                           for pe in range(self.pe_per_seg)])
-
-
 
 
 ##############################################################################
