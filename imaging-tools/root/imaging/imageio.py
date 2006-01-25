@@ -1,4 +1,4 @@
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, Complex32 
+from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, Complex32
 import struct
 
 # maximum numeric range for some smaller data types
@@ -47,10 +47,27 @@ class BaseImage (object):
 
     #-------------------------------------------------------------------------
     def __init__(self, data, xsize, ysize, zsize, x0, y0, z0):
-        self.data = data
-        self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
+        self.setData(data)
         self.xsize, self.ysize, self.zsize = (xsize, ysize, zsize)
         self.x0, self.y0, self.z0 = (x0, y0, z0)
+
+    #-------------------------------------------------------------------------
+    def setData(self, data):
+        self.data = data
+        self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
+
+    #-------------------------------------------------------------------------
+    def concatenate(image, axis=0):
+        self_sizes = (self.xsize, self.ysize, self.zsize)
+        image_sizes = (image.xsize, image.ysize, image.zsize)
+
+        # pixel sizes must match
+        if self_sizes != image_sizes:
+            raise ValueError(
+              "cannot concatenate images with different pixel sizes: %s != %s"%\
+              (self_sizes, image_sizes))
+
+        self.setData(concatenate((self.data, image.data), axis))
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum): return subimage(self, self.data[subnum])
@@ -62,6 +79,8 @@ class BaseImage (object):
 
 ##############################################################################
 class AnalyzeWriter (object):
+    """
+    """
 
     # (datatype, bitpix) for each Analyze datatype
     # datatype is a bit flag into a datatype byte of the Analyze header
