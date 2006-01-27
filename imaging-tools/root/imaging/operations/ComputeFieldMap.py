@@ -2,21 +2,10 @@
 from Numeric import *
 from LinearAlgebra import *
 import math
-#from imaging.util import median_filter
+from sliceview import sliceview
+from imaging.util import exec_cmd, unwrap_phase
 from imaging.imageio import write_analyze
 from imaging.operations import Operation, Parameter
-
-#-----------------------------------------------------------------------------
-def exec_cmd(cmd, verbose=False, exit_on_error=False):
-    "Execute unix command and handle errors."
-    import sys, os
-    if(verbose): print "\n" +  cmd
-    status = os.system(cmd)
-    if(status):
-        print "\n****** Error occurred while executing: ******"
-        print cmd
-        print "Aborting procedure\n\n"
-        if exit_on_error: sys.exit(1)
 
 
 ##############################################################################
@@ -36,23 +25,20 @@ class ComputeFieldMap (Operation):
 
         # Create image filenames.
         trange = range(nvol)
-        ksp = ["ksp_%04d.img"%t for t in trange]
-        ksp_hdr = ["ksp_%04d.hdr"%t for t in trange]
-        phs_unwrapped = ["ksp_phs_unwrapped_%04d.img"%t for t in trange]
-        phs_unwrapped_hdr = ["ksp_phs_unwrapped_%04d.hdr"%t for t in trange]
+        wrapped = ["wrapped_%04d.img"%t for t in trange]
+        phs_unwrapped = ["phs_unwrapped_%04d.img"%t for t in trange]
         #fmap_files = ["fmap_%02d.img"%t for t in trange[:-1]]
         #pixshift_files = ["pixshift_%02d.img"%t for t in trange[:-1]]
         #fmap_file_fitted = "fmap_fitted.img"
         #phase_pair = "phase_pair.img"
         #phase_pair_hdr = "phase_pair.hdr"
-       
+
         # Unwrap phases.
-        for idx in range(nvol):
-            exec_cmd("prelude --complex=%s --unwrap=%s -v -t 2000"%\
-              (ksp[idx], phs_unwrapped[idx]))
+        unwrapped_volumes = [unwrap_phase(volume) for volume in image.data]
+        sliceview(unwrapped_volumes[0])
  
         # Read header info and set for output.
-        #hdr = file_io.read_header(ksp[0])
+        #hdr = file_io.read_header(wrapped[0])
         #xdim = hdr['xdim']
         #ydim = hdr['ydim']
         #zdim = hdr['zdim']
@@ -104,10 +90,8 @@ class ComputeFieldMap (Operation):
 
         # cleanup leftover files
         sp = " "
-        exec_cmd("/bin/rm %s %s %s %s %s %s %s %s"%(
-          sp.join(ksp), sp.join(ksp_hdr),
-          sp.join(phs_unwrapped), sp.join(phs_unwrapped_hdr),
-          phase_pair, phase_pair_hdr))
+        exec_cmd("/bin/rm %s %s %s %s %s"%(
+          sp.join(wrapped), sp.join(phs_unwrapped), phase_pair))
 
         #======== Move this dwell time stuff into ProcParImageMixin =========
         # Determine dwell time.
