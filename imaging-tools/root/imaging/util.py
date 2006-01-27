@@ -11,8 +11,11 @@ from pylab import pi, mlab, fft, fliplr, zeros, fromstring
 #-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
     """
-    axis: Axis of shift: 0=x (rows), 1=y (columns), 2=z (slices), etc...
-    shift: Number of pixels to shift.
+    Perform an in-place circular shift of the given matrix by the given
+    number of pixels along the given axis.
+
+    @param axis: Axis of shift: 0=x (rows), 1=y (columns), 2=z (slices), etc...
+    @param shift: Number of pixels to shift.
     """
     dims = matrix.shape
     ndim = len(dims)
@@ -56,6 +59,7 @@ def shifted_inverse_fft(a):
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
+    "@return the given angle between -pi and pi"
     return a + where(a<-pi, 2.*pi, 0) + where(a>pi, -2.*pi, 0)
 
 #-----------------------------------------------------------------------------
@@ -83,3 +87,28 @@ def median_filter(image, N):
                 s = sort(subm.flat)
                 img[tz, y+center+1, x+center+1] = s[median_pt]
     return reshape(img, (tdim, zdim, ydim, xdim))
+
+#-----------------------------------------------------------------------------
+def unwrap_phase(image):
+    from imaging.analyze import AnalyzeImage
+    from imaging.imageio import write_analyze
+    wrapped_fname = "wrapped"
+    unwrapped_fname = "unwrapped"
+    write_analyze(image, wrapped_fname)
+    exec_cmd("prelude --complex=%s.img --unwrap=%s.img -v -t 2000"%\
+      (wrapped_fname, unwrapped_fname))
+    unwrapped_image = AnalyzeImage(unwrapped_fname)
+    exec_cmd("/usr/bin/rm %s*"%wrapped_fname, unwrapped_fname)
+    return unwrapped_image
+
+#-----------------------------------------------------------------------------
+def exec_cmd(cmd, verbose=False, exit_on_error=False):
+    "Execute unix command and handle errors."
+    import sys, os
+    if(verbose): print "\n" +  cmd
+    status = os.system(cmd)
+    if(status):
+        print "\n****** Error occurred while executing: ******"
+        print cmd
+        print "Aborting procedure\n\n"
+        if exit_on_error: sys.exit(1)
