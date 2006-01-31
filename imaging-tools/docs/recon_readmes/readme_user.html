@@ -1,0 +1,248 @@
+
+<strong>Recon Users' Guide </strong>
+
+<strong>Introduction</strong><br>
+
+Recon is a highly flexible command line tool for the reconstruction of echo-planar images. Since Recon is built on an abstract operation interface, a major feature of Recon is the support of any number of custom image operations. Through command-line options, users are given the ability to configure chosen operations to be performed sequentially.
+
+This document covers the following topics: 
+<ol>
+   <li> <a href="#running"><strong>Running Recon</strong></a> </li>
+   <li> <a href="#config"><strong>Setting Up A Config File</strong></a>  </li>
+   <li> <a href="#predefop"><strong>Summary of Pre-Defined Operations</strong></a> </li>
+   <li> <a href="#structop"><strong>Structure of Image Operations (And Creating Your Own)</strong></a> </li>
+   <ul><li> <a href="#newops"><strong>I) Developing New Operations</strong></a> </li>
+	  <li> <a href="#fidim"><strong>II) Working with FidImage Types</strong></a> </li>
+       </ul>
+ </ol>
+
+<a name="running"><strong>Running Recon</strong></a>
+
+<p>To run Recon type the following at the command line:<br>
+
+<p>recon [<em>options</em>] <em>data output</em><br>
+
+<p>where<br></p>
+
+<em>data</em>: This is the path to the directory containing the image data<br>
+
+<em>output</em>:	This is the path to where to write the output files<br>
+
+<em>options</em>: The following options may be included. If no options are included Recon runs with default options.<br>
+
+
+  -h, --help show this help message and exit<br>
+  -c CONFIG, --config=CONFIG<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Name of the config file describing operations and operation parameters.<br>
+  -r VOL_RANGE, --vol-range=VOL_RANGE<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Which image volumes to reconstruct.  Format is start:end, where either<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;start or end may be omitted, indicating to start with the first or end<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;with the last respectively.  The index of the first volume is 0. The<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;default value is a single colon with no start or end specified, meaning<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;process all volumes. (Note, this option refers specifically to image<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;volumes, not to reference scans.)<br>
+  -f FILE_FORMAT, --file-format=FILE_FORMAT {fidl|voxbo|analyze}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;fidl: save floating point file with interfile and 4D analyze headers.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;analyze: Save individual image for each frame in analyze format.<br>             &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;voxbo: Save in tes format.<br>
+  -t TR, --tr=TR Use the TR given here rather than the one in the procpar.<br>
+  -y OUTPUT_DATA_TYPE, --output-data-type=OUTPUT_DATA_TYPE {magnitude|complex}<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Specifies whether output images should contain only magnitude or both<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;the real and imaginary components (only valid for analyze format).<br>
+  -l LOG_FILE, --log-file=LOG_FILE where to record reconstruction details ('recon.log' by default)
+
+<p>For example, you want to reconstruct volumes 0-4 of an image stored in <code>MRIruns/subjX</code> under your home directory, using a  sequence of operations scripted in <code>myops.cfg</code>. You also want to log the results in <code>reconLog</code> and write the reconstructed volumes to <code>MRIout/subjX</code> in your home directory. You would type at the command line:</p>
+
+<pre>[you@urcomp ~]$ recon -c myops.cfg -r 0:4 -l reconLog ~/MRIruns/subjX.fid ~/MRIout/subjX</pre>
+
+<a name="config"><strong>Setting Up A Config File(option -c CONFIG)</strong></a>
+
+<p>The user can configure a selected sequence of image operations by constructing a config file, as shown in this example</p>
+
+<pre>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[OperationNameA]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;param1=val1
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;param2=val2
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[OperationNameB]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[OperationNameC]</pre>
+
+<p>The config file is organized into Sections (the exact class names of image operations) and Items (any parameters associated with those operations). For instance, if one wants to perform a phase correction followed by a Fermi filter, and then view the data, the config file might look like this:</p>
+
+<pre>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#1st let's shift the phase back
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[PhaseCorrection]
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#now let's filter the data
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[FermiFilter]
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;cutoff = .85
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;trans_width = .35
+
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#finally let's see the results
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[ViewImage]</pre>
+
+<p>You can see that the sections are defined by names in square brackets [...]. If the operation takes parameters, they are considered items in the section and are written in <em>name = val</em> pairs, where the name must match exactly the name of the parameter in the operation's Python script. </p>
+
+<p>This file is included with the -c CONFIG option on the command line. All available image operations can be found in the root/imaging/operations directory. <em>Note: there is no restrictions on the order of operations, so it is assumed the user will make sensible choices.</em></p>
+
+<a name="predefop"><p><strong>Summary of Pre-Defined Operations</strong></p></a>
+
+<p>(filling in for now, don't know how to explain yet)</p>
+
+<p>PhaseCorrection</p>
+
+<p>SegmentationCorrection<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Correct for the Nyquist ghosting in segmented scans due to mismatches between segments.</p>
+
+<p>FermiFilter</p>
+
+<p>FlipSlices<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Flip image slices up-down and left-right</p>
+
+<p>ReorderSlices<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Reorder image slices from inferior to superior.</p>
+
+<p>ComputeFieldMap<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Perform phase unwrapping and calculate field map.</p>
+
+<p>FieldInhomogeneityCorrection<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Correct for Nyquist ghosting due to field inhomogeneity.</p>
+
+<p>TimeInterpolate</p>
+
+<p>InverseFFT<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Perform an inverse 2D fft on each slice of each k-space volume.</p>
+
+<p>ViewImage<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Run the sliceview volume viewer.</p>
+
+<a name="structop"><p><strong>Structure of Image Operations (And Creating Your Own)</strong></p></a>
+
+<p>Image operations are built up from the abstract <code>Operation</code> class, imported from <code>imaging.operations</code>, and defined in __init__.py. The important elements of any image operation are a list of <code>Parameter</code> objects (class also defined in __init__.py) called <code>params</code> and a method called <code>run</code>. Additionally, operations might include some computation methods provided by packages such as Numeric or PyLab. </p>
+
+<p>For any recognized operation requested in the config file, Recon simply initializes an object of the correct class, which fills in any necessary parameters with values in the config file, and passes control to the operation through the run method. This is where you have the ability to define a custom operation.</p>
+
+<a name="newops"><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>I) Developing New Operations</strong></p></a>
+<p>If you are new to object oriented programming, don't worry about understanding the details of subclassing and inheritance. In this case, the mechanics are very simple, yet flexible enough to be used for any image manipulation. You should begin by importing class definitions for <code>Operation</code> and <code>Parameter</code> so that their usage is supported in your module (see the following example). It is also a good idea to import computational functionality from PyLab or Numeric, depending on what you're up to. Since the image data is stored as an array, which is not defined in standard Python, importing from one or the other will also enable access to the data.</p>
+
+<p>When naming your operation, always declare the operation class as a subclass by putting <code>(Operation)</code> after the class name. In Python, this means that behavior and information from the superclass is inherited in this new class.  Parameters should be declared as in the following example. What is happening in fact is that each <code>Parameter(...)</code> statement initializes a new <code>Parameter</code> object, and the data between the parentheses are arguments to the constructor. You can get away without including a default value or a description, but the name and type are essential. However, your operation may not require parameters at all, in which case the <code>params</code> definition can be omitted and the operation would simply inherit an empty list from the superclass. On the other hand, <code>run</code> must be defined (technically, overloaded) because it is the anticipated entry point into your operation. The operation should not return any values; the changes made to the image data stay with the image object as it moves out of the operation's control. Take for example the FermiFilter operation included in the package:</p>
+
+<pre>#This file name is FermiFilter.py, found under root/imaging/operations
+
+#here I'm importing various definitions from outside of Python:
+
+from pylab import frange, meshgrid, exp, sqrt, Float32
+from imaging.operations import Operation, Parameter
+
+#I can define a helper function outside of run(image) if it makes
+#sense to do so:
+def fermi_filter(rows, cols, cutoff, trans_width):
+    #returns a Fermi filter kernel.
+    #
+    #cutoff: distance from the center at which the filter drops to         
+    #         0.5. Units for cutoff are percentage of radius.
+    #
+    #trans_width: width of the transition.  Smaller values will 
+    #              result in a sharper dropoff.
+
+    row_end = (rows-1)/2.0; col_end = (cols-1)/2.0
+    row_vals = frange(-row_end, row_end)**2
+    col_vals = frange(-col_end, col_end)**2
+    X, Y = meshgrid(row_vals, col_vals)
+    return 1/(1 + exp((sqrt(X + Y) - cutoff*cols/2.0)/trans_width))
+
+#the following line declares a class, and from what class it inherits:
+class FermiFilter (Operation):
+    #Apply a Fermi filter to the image.    
+
+    #the Parameter objects in params are all constructed with four
+    #elements: Parameter(name, type, default, description).
+    #I would skip these definitions if I weren't using parameters
+    params=(
+      Parameter(name="cutoff", type="float", default=0.95,
+        description="distance from the center at which the filter" \ 
+		"drops to 0.5.  Units for cutoff are percentage of" \
+		"radius."),
+      
+      Parameter(name="trans_width", type="float", default=0.3,
+        description="transition width.  Smaller values will result" \ 
+		"in a sharper dropoff.")
+    )
+    
+    #note the definition of run: the declaration MUST be this way 
+    def run(self, image):
+        rows, cols = image.data.shape[-2:]
+        kernel = fermi_filter(
+          rows, cols, self.cutoff, self.trans_width).astype(Float32)
+        for volume in image.data:
+          for slice in volume: slice *= kernel
+    
+    #here the data is being changed in-place
+
+    #final note: the operation returns nothing</pre>
+
+<p>I have just defined a new class <code>FermiFilter</code> which inherits from <code>Operation</code>. I give my operation named, typed parameters, constructing a list of <code>Parameter</code> objects, and I overload the <code>run</code> method, making it perform some transformation on the image data. Within the operation, I can see the parameter values because they are self-attributes. Also notice that it is unnecessary to define a constructor (<code>__init__</code> method). The configuration for the operation should be taken care of by the logic in the superclass.</p>
+
+<p>To summarize, your operation will function correctly within the Recon system if there is a <code>run</code> method that accepts a single argument called <code>image</code>, and any parameters needed are specified as <code>Parameter</code> objects in the <code>params</code> list. Recalling the previous section, values for these parameters are set through the config file as <em>name=val</em> items. Unlike the operations themselves, in the case of parameters order is not important. The order of parameters in the <code>params</code> list can be different than the order in the config file.</p>
+
+<p>It is probably worth mentioning that an operation should not change the geometry, or the spatial interpretation of the data arrays. In Python terms, <code>image.data.shape</code> should be preserved from beginning to end. This assures a clean exchange of data between operations.</p>
+
+<p>One final rule: the python script must be placed in the imaging/operations directory to be visible by Recon.</p>
+
+<a name="fidim"><p>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<strong>II) Working with Images as FidImage Types</strong></p></a>
+<p>In defining an operation, it will be helpful to be aware of the data available. Recon defaults to loading image data in Varian FID format. Correspondingly, Recon stores image data internally as a <code>FidImage</code> type (defined in the <code>imaging.varian.FidImage</code> module). Before beginning the operation sequence, Recon creates a <code>FidImage</code> object, which looks for the files "procpar"(processing parameters) and "fid" (image data) inside the data directory given from the command-line. <code>FidImage</code> also aligns segments, and reorders phase-encoded lines and frequency-encoded points if necessary. After a successful load, various arrays and relevant dimension parameters are accessible by the user.</p>
+
+<p>The <code>FidImage</code> class inherits from <code>BaseImage</code> (defined in the <code>imaging.imageio</code> module) giving it a clean, predictable interface appropriate for images, and from <code>ProcParImageMixin</code> (defined in the <code>imaging.varian.ProcPar</code> module), giving itself access to the contents of the procpar file. In general, attributes of Python objects are accessed by the "." shortcut. For example,</p>
+
+<pre>scratchArray = image.data</pre>
+is just shorthand for
+<pre>scratchArray = image.__getattr__('data')</pre>
+
+<p>In contrast to the simplicity of retrieving attributes from objects, it is very important to keep track of what kind of data is being returned. In particular, the voxel data is stored in arrays, which are not supported in standard Python. Try adding <code>from Numeric import *</code> at the top of the operation module.</p>
+
+The attributes of <code>BaseImage</code> are:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;data:  3 or 4 dimensional matrix (array) representing a single volume or a timecourse of volumes.<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ndim:  number of dimensions<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;tdim:  number of volumes in a timecourse<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;zdim:  number of slices per volume<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ydim:  number of rows per slice<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;xdim:  number of columns per row<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;xsize: spacial width of column<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ysize: spacial height of a row<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;zsize: spacial slice thickness<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;x0:  position of first column<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;y0:  position of first row<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;z0:  position of first slice<br>
+
+(? not fully implemented, spatial sizes and initial positions only)<br>
+
+<p><code>FidImage</code> also provides:</p>
+
+<p>data: A rank 4 array containing time-domain data. This array is<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;dimensioned as data(nvol,nslice,n_pe_true,n_fe_true) where nvol<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;is the number of volumes, nslice is the number of slices per volume,<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;n_pe_true is the number of phase-encode lines and n_fe_true is the<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;number read-out points.</p>
+
+<p>nav_data: A rank 4 array containing time-domain data for the navigator<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;echoes of the image data. This array is dimensioned as<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;nav_data(nvol,nslice,nav_per_slice,n_fe_true).</p>
+
+<p>ref_data: A rank 4 array containing time-domain reference scan data<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(phase-encode gradients are kept at zero). This array is dimensioned<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;as ref_data(nslice,n_pe_true,n_fe_true).</p>
+
+<p>ref_nav_data: A rank 4 array containing time-domain data for the<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;navigator echoes of the reference scan data which is dimensioned as<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ref_nav_data(nslice,nav_per_slice,n_fe_true).</p>
+
+<p>nav_per_slice #number of navigator lines per slice<br>
+n_pe #number of phase-encode lines (includes 2 navigator lines)<br>
+n_pe_true #true number of phase-encode lines in a slice (n_pe_true - navigator lines)<br>
+n_fe_true #number of complex frequency-encode points in a pe-line<br>
+n_fe #number of data points (n_fe * 2)<br>
+nslice #number of slices in a volume<br>
+pulse_sequence #may be 'epi', 'epidw', 'epidw_se', etc<br>
+nvol #number of volumes in the data set<br>
+nvol_true #number of volumes including reference volumes<br>
+numrefs # := nvol_true - nvol<br>
+echo_spacing<br>
+echo_time<br>
+pe_times<br>
+pe_per_seg<br></p>
