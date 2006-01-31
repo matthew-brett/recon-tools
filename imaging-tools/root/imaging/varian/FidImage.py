@@ -1,3 +1,4 @@
+"A class for interpreting image data in FID format"
 import struct
 import stat
 import os.path
@@ -25,6 +26,18 @@ def complex_fromstring(data, numtype):
 ##############################################################################
 class FidImage (BaseImage, ProcParImageMixin):
 
+    """
+    FidImage loads a FID formatted file from a Varian system. It knows how to re-assemble 
+    volume data from various scanner sequences. A FidImage is both a BaseImage, giving it 
+    a clean, predictable interface appropriate for an image, and a ProcParImageMixin, giving 
+    it access to the parsed data from the procpar file. Additionally, FidImage loads more 
+    specific volume data such as reference and navigator data. FidImage calls on the FidFile 
+    class to interface with the actual data on-disk. FidImage contains a multitude of 
+    potentially useful image information that is freely accessible (due to Python's design), 
+    mainly assigned in the loadParams(...) and the loadData(...)methods.
+    
+    @cvar _procpar: holds the contents of the procpar file
+    """
     #-------------------------------------------------------------------------
     def __init__(self, datadir, tr=None):
         self.loadParams(datadir, tr=tr)
@@ -32,7 +45,8 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def loadParams(self, datadir, tr=None):
-        ProcParImageMixin.loadParams(self, datadir)
+        "calls superclass function, and potentially over-rides tr"
+	ProcParImageMixin.loadParams(self, datadir)
 
         # manually override tr
         if tr > 0: self.tr = tr
@@ -116,7 +130,11 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def _read_compressed_volume(self, fid, vol):
-        block = fid.getBlock(vol)
+        """
+	Reads a given block of compressed data from a FID file
+	@return: block of data with shape (nslice*n_pe, n_fe_true)
+	"""
+	block = fid.getBlock(vol)
         bias = complex(block.lvl, block.tlt)
         volume = complex_fromstring(block.getData(), self.raw_typecode)
         volume = (volume - bias).astype(Complex32)
@@ -124,7 +142,11 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def _read_uncompressed_volume(self, fid, vol):
-        volume = empty((self.nslice, self.n_pe*self.n_fe_true), Complex32)
+    	"""
+	Reads a given block of uncompressed data from a FID file
+	@return: block of data with shape (nslice*n_pe, n_fe_true)
+	"""        
+	volume = empty((self.nslice, self.n_pe*self.n_fe_true), Complex32)
         for slice_num, slice in enumerate(volume):
             block = fid.getBlock(self.nslice*vol + slice_num)
             bias = complex(block.lvl, block.tlt)
@@ -134,7 +156,11 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def _read_epi2fid_volume(self, fid, vol):
-        volume = empty(
+        """
+	Reads a given block of epi2fid data from a FID file
+	@return: block of data with shape (nslice*n_pe, n_fe_true)
+	"""        
+	volume = empty(
           (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),Complex32)
         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
         for seg in range(self.nseg):
@@ -149,6 +175,10 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def _read_asems_ncsnn_volume(self, fid, vol):
+	"""
+	Reads a given block of asems_ncsnn data from a FID file
+	@return: block of data with shape (nslice*n_pe, n_fe_true)
+	"""
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
             block = fid.getBlock(pe*self.nvol + vol)
@@ -160,6 +190,10 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def _read_asems_nccnn_volume(self, fid, vol):
+        """
+	Reads a given block of asems_nccnn data from a FID file
+	@return: block of data with shape (nslice*n_pe, n_fe_true)
+	"""
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
             for slice in range(self.nslice):

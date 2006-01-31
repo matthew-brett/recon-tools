@@ -1,3 +1,4 @@
+"Defines a command-line interface to Recon"
 from optparse import OptionParser, Option
 
 from imaging.tools import OrderedConfigParser
@@ -8,10 +9,13 @@ from imaging.operations import OperationManager, RunLogger
 
 ##############################################################################
 class Recon (OptionParser):
-    "Handle command-line aspects of the recon tool."
+    """
+    Handle command-line aspects of the recon tool.
+    @cvar options: tuple of Option objs, filled in by OptionParser
+    @cvar _opmanager: OperationManager used to find out opclasses given opnames
+    """
 
     _opmanager = OperationManager()
-
     output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT)
     output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
     options = (
@@ -61,8 +65,14 @@ class Recon (OptionParser):
     #-------------------------------------------------------------------------
     def configureOperations(self, configfile):
         """
-        @return a list of operation pairs (operation, args).
-        @param configfile: filename of operations config file.
+        Creates an OrderedConfigParser object to parse the config file
+	 
+	Returns a list of (opclass, args) pairs by querying _opmanager for 
+	the operation class by opname, and querying the OrderedConfigParser 
+	for items (argumentss) by section (opname)
+	
+	@param configfile: filename of operations config file.
+	@return: a list of operation pairs (operation, args).
         """
         config = OrderedConfigParser()
         config.read(configfile)
@@ -72,7 +82,12 @@ class Recon (OptionParser):
 
     #-------------------------------------------------------------------------
     def parseVolRange(self, vol_range):
-        parts = vol_range.split(":")
+        """
+	Separates out the command-line option volume range into distinct numbers
+	@param vol_range: volume range as x:y
+	@return: vol_start = x, vol_end = y
+	"""
+	parts = vol_range.split(":")
         if len(parts) < 2: self.error(
           "The specification of vol-range must contain a colon separating "\
           "the start index from the end index.")
@@ -89,7 +104,12 @@ class Recon (OptionParser):
         """
         Bundle command-line arguments and options into a single options
         object, including a resolved list of callable data operations.
+	
+	Uses OptionParser to fill in the options list from command line input; 
+	appends volume range specifications, and input/output directories as options;
+	asks for an index of requested operations from configureOperations()
         """
+	
         options, args = self.parse_args()
         if len(args) != 2: self.error("Expecting 2 arguments: datadir ouput")
 
@@ -107,7 +127,13 @@ class Recon (OptionParser):
 
     #-------------------------------------------------------------------------
     def run(self):
-        "Run the recon tool."
+        """
+	Run the recon tool.
+	
+	Asks for options from self.getOptions(); starts RunLogger object;
+	initializes FidImage object from the fid and procpar in data directory;
+	 loops through image operation battery; saves processed image
+	"""
 
         # Get the filename names and options from the command line.
         options = self.getOptions()

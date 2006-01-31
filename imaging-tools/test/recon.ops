@@ -3,8 +3,8 @@
 [SegmentationCorrection]
 
 [FermiFilter]
-cutoff=0.95
-trans_width=0.3
+trans_width=0.35
+cutoff=0.92
 
 [ReorderSlices]
 flip_slices=False

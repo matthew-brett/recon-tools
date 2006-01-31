@@ -110,7 +110,14 @@ class ProcPar (StaticObjectDictMixin, dict):
 
 ##############################################################################
 class ProcParImageMixin (object):
-    "Knows how to extract basic Image parameters from a procpar file"
+    """
+    Knows how to extract basic Image parameters from a procpar file.
+    
+    ProcParImageMixin keeps a local ProcPar object, and then redefines some ProcPar 
+    parameters into image parameters.
+    
+    @cvar _procpar: The ProcPar object, created with a path to a given procpar file
+    """
 
     #-------------------------------------------------------------------------
     def loadParams(self, datadir):

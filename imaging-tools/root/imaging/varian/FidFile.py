@@ -1,3 +1,4 @@
+"Describes classes to interpret a FID file"
 from __future__ import generators # this allows it to work in Python-2.2+
 import struct
 

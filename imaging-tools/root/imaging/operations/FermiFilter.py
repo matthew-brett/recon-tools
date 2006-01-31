@@ -5,7 +5,7 @@ from imaging.operations import Operation, Parameter
 ##############################################################################
 def fermi_filter(rows, cols, cutoff, trans_width):
     """
-    @return a Fermi filter kernel.
+    @return: a Fermi filter kernel.
     @param cutoff: distance from the center at which the filter drops to 0.5.
       Units for cutoff are percentage of radius.
     @param trans_width: width of the transition.  Smaller values will result
