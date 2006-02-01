@@ -1,4 +1,4 @@
-#!/usr/bic/bin/python
+#!/usr/bin/env python
 if __name__ == "__main__":
     from imaging.tools import Fdf2Img
     Fdf2Img.Fdf2Img().run()
