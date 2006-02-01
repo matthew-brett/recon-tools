@@ -13,13 +13,15 @@ class FlipSlices (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
+        from sliceview import sliceview
+        from pylab import array
         if not self.flipud and not self.fliplr: return
         for volume in image.data:
-            for slice in volume:
+            for i, slice in enumerate(volume):
                 if self.flipud and self.fliplr:
                     newslice = flipud(fliplr(slice))
                 elif self.flipud:
                     newslice = flipud(slice)
                 elif self.fliplr:
                     newslice = fliplr(slice)
-                slice[:] = newslice
+                slice[:] = newslice.copy()
