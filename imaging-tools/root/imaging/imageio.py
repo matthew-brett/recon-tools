@@ -71,66 +71,10 @@ class BaseImage (object):
 
 
 #-----------------------------------------------------------------------------
-def write_analyze(image, filename, datatype=None, byteswap=False):
+def write_analyze(image, filename, datatype=None):
     from imaging.analyze import AnalyzeWriter
-    writer = AnalyzeWriter(image, datatype=datatype, byteswap=byteswap)
+    writer = AnalyzeWriter(image, datatype=datatype)
     writer.write(filename)
 
 readers = {}
 writers = {}
-
-
-#-----------------------------------------------------------------------------
-def _make_test_data():
-    class EmptyObject:pass
-    image = EmptyObject()
-    tdim = 1
-    zdim = 20
-    ydim = 64
-    xdim = 64
-    image.data = randn(tdim, zdim, ydim, xdim)
-    image.ndim, image.tdim, image.zdim, image.ydim, image.xdim = (3, tdim, zdim, ydim, xdim)
-    image.xsize=1
-    image.ysize=1
-    image.zsize=1
-    image.x0=1
-    image.y0=1
-    image.z0=1
-    image.TR = image.tr =1
-    image.datatype=SHORT
-    image.swap=False
-    return image
-
-
-#-----------------------------------------------------------------------------
-def _test():
-    import os
-    import time
-
-    class StopWatch:
-        t = 0
-        def start( self ): self.t = time.time()
-        def check( self ): return time.time() - self.t
-
-    os.system( "mkdir -p scratch" )
-    filename = "scratch/frame"
-    image = _make_test_data()
-    timer = StopWatch()
-
-    print "Timing old write_analyze"
-    from file_io import write_analyze as old_write_analyze
-    timer.start()
-    for _ in range(300):
-        old_write_analyze( filename, image.__dict__, image.data )
-    print timer.check()
-
-    print "Timing new write_analyze"
-    timer.start()
-    for _ in range(300):
-         write_analyze(image, filename)
-    print timer.check()
-
-
-#-----------------------------------------------------------------------------
-if __name__ == "__main__": _test()
-

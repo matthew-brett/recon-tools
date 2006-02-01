@@ -333,16 +333,16 @@ class FidImage (BaseImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def save(self, outfile, file_format, data_type):
         "Save the image data to disk."
-        from imaging.imageio import AnalyzeWriter, write_analyze
+        from imaging import analyze
         data = self.data
 
         print "Saving to disk (%s format). Please Wait"%file_format
         if file_format == ANALYZE_FORMAT:
             dtypemap = {
-              MAGNITUDE_TYPE: AnalyzeWriter.SHORT,
-              COMPLEX_TYPE: AnalyzeWriter.COMPLEX }
+              MAGNITUDE_TYPE: analyze.SHORT,
+              COMPLEX_TYPE: analyze.COMPLEX }
             for volnum, volimage in enumerate(self.subImages()):
-                write_analyze(volimage,
+                analyze.write_analyze(volimage,
                   "%s_%04d"%(outfile, volnum), datatype=dtypemap[data_type])
 
         elif file_format == FIDL_FORMAT:

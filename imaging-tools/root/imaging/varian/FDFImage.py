@@ -3,7 +3,8 @@ from os.path import join as pjoin
 from pylab import asarray
 from FDFFile import FDFFile, FDFHeader
 from ProcPar import ProcPar, ProcParImageMixin
-from imaging.imageio import BaseImage, write_analyze, get_dims
+from imaging.imageio import BaseImage
+from imaging.analyze import write_analyze
 
 
 #-----------------------------------------------------------------------------
@@ -38,11 +39,7 @@ class FDFImage (BaseImage, ProcParImageMixin):
                 filename = slicefilename(volnum*self.zdim + slicenum + 1)
                 slices.append(FDFFile(pjoin(self.datadir, filename)).data)
             volumes.append(asarray(slices))
-        self.data = asarray(volumes)
-        self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = \
-          get_dims(self.data)
-        #self.xsize, self.ysize, self.zsize = self.loadDimSizes()
-	print "Dim Sizes: ", (self.xsize, self.ysize, self.zsize)
+        self.setData(asarray(volumes))
 
     #-------------------------------------------------------------------------
     def save(self, outputdir):

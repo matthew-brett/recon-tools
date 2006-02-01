@@ -1,6 +1,8 @@
+"This module implements details of the Analyze7.5 file format."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, Complex32
 import struct
 
+from odict import odict
 from imaging.imageio import BaseImage
 
 # maximum numeric range for some smaller data types
@@ -9,265 +11,174 @@ maxranges = {
   Int16: 32767.,
   Int32: 2147483648.}
 
+# datatype is a bit flag into the datatype identification byte of the Analyze
+# header. 
+BYTE = 2
+SHORT = 4
+INTEGER = 8
+FLOAT = 16
+COMPLEX = 32
+DOUBLE = 64
+
+# map datatype to number of bits per pixel (or voxel)
+datatype2bitpix = {
+  BYTE: 8,
+  SHORT: 16,
+  INTEGER: 32,
+  FLOAT: 32,
+  DOUBLE: 64,
+  COMPLEX: 64,
+}
+
+# map Analyze datatype to Numeric typecode
+datatype2typecode = {
+  BYTE: Int8,
+  SHORT: Int16,
+  INTEGER: Int32,
+  FLOAT: Float32,
+  DOUBLE: Float64,
+  COMPLEX: Complex32}
+
+# map Numeric typecode to Analyze datatype
+typecode2datatype = \
+  dict([(v,k) for k,v in datatype2typecode.items()])
+
+HEADER_SIZE = 384
+struct_fields = odict((
+    ('sizeof_hdr','i'),
+    ('data_type[10]','10s'),
+    ('db_name[18]','18s'),
+    ('extents','i'),
+    ('session_error','h'),
+    ('regular','c'),
+    ('hkey_un0','c'),
+    ('ndim','h'),
+    ('xdim','h'),
+    ('ydim','h'),
+    ('zdim','h'),
+    ('tdim','h'),
+    ('dim5','h'),
+    ('dim6','h'),
+    ('dim7','h'),
+    ('vox_units[4]','4s'),
+    ('cal_units[8]','8s'),
+    ('unused1','h'),
+    ('datatype','h'),
+    ('bitpix','h'),
+    ('dim_un0','h'),
+    ('pixdim0','f'),
+    ('xsize','f'),
+    ('ysize','f'),
+    ('zsize','f'),
+    ('tsize','f'),
+    ('pixdim5','f'),
+    ('pixdim6','f'),
+    ('pixdim7','f'),
+    ('vox_offset','f'),
+    ('funused1','f'),
+    ('funused2','f'),
+    ('funused3','f'),
+    ('cal_max','f'),
+    ('cal_min','f'),
+    ('compressed','i'),
+    ('verified','i'),
+    ('glmax','i'),
+    ('glmin','i'),
+    ('descrip[80]','80s'),
+    ('aux_file[24]','24s'),
+    ('orient','c'),
+    ('x0','h'),
+    ('y0','h'),
+    ('z0','h'),
+    ('sunused','4s'),
+    ('generated[10]','10s'),
+    ('scannum[10]','10s'),
+    ('patient_id[10]','10s'),
+    ('exp_date[10]','10s'),
+    ('exp_time[10]','10s'),
+    ('hist_un0[3]','3s'),
+    ('views','i'),
+    ('vols_added','i'),
+    ('start_field','i'),
+    ('field_skip','i'),
+    ('omax','i'),
+    ('omin','i'),
+    ('smax','i'),
+    ('smin','i'),
+))
+
+# struct byte order constants
+NATIVE = "="
+LITTLE_ENDIAN = "<"
+BIG_ENDIAN = ">"
+
+def struct_format(byte_order, elements):
+    return byte_order+" ".join(elements)
+    
+def struct_unpack(infile, byte_order, elements):
+    format = struct_format(byte_order, elements)
+    return struct.unpack(format, infile.read(struct.calcsize(format)))
+
+
+##############################################################################
 class AnalyzeImage (BaseImage):
+    """
+    Image interface conformant Analyze7.5 file reader.
+    """
 
     #-------------------------------------------------------------------------
-    def __init__(self, filestem): pass
-
-
-    #-------------------------------------------------------------------------
-    def read_header(self, filename):
-
-    # 0: i       int sizeof_hdr
-    # 1: 10s     char data_type[10]
-    # 2: 18s     char db_name[18]
-    # 3: i       int extents
-    # 4: h       short int session_error
-    # 5: c       char regular
-    # 6: c       char hkey_un0
-    # 7: 8h      short int dim[8]
-    # 8: 4s      char vox_units[4]
-    # 9: 8s      char cal_units[8]
-    # 10: h       short int unused1
-    # 11: h       short int datatype
-    # 12: h       short int bitpix
-    # 13: h       short int dim_un0
-    # 14: 8f      float pixdim[8]
-    # 22: f       float vox_offset
-    # 23: f       float funused1
-    # 24: f       float funused2
-    # 25: f       float funused3
-    # 26: f       float cal_max
-    # 27: f       float cal_min
-    # 28: i       int compressed
-    # 29: i       int verified
-    # 30: 2i      int glmax, glmin
-    # 32: 80s     char descrip[80]
-    # 33: 24s     char aux_file[24]
-    # 34: c       char orient
-    # 35: 10s     char originator[10]
-    # 36: 10s     char generated[10]
-    # 37: 10s     char scannum[10]
-    # 38: 10s     char patient_id[10]
-    # 39: 10s     char exp_date[10]
-    # 40: 10s     char exp_time[10]
-    # 41: 3s      char hist_un0[3]
-    # 42: i       int views
-    # 43: i       int vols_added
-    # 44: i       int start_field
-    # 45: i       int field_skip
-    # 46: 2i      int omax,omin
-    # 48: 2i      int smax,smin
-
-        format = "i 10s 18s i h c c 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s c 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"
-        f = open(filename,'r')
-        fmt = "<" + format
-        vhdr = struct.unpack(fmt,f.read(348))
-        f.close()
-
-        length = vhdr[0]
-        if length == 348:
-            swap = 0
-        else:
-            swap = 1
-            fmt = ">" + format
-            f = open(filename,'r')
-            vhdr = struct.unpack(fmt,f.read(348))
-            f.close()
-
-        whole_header = ''
-        start_binary = -1
-        orientation = 'trans'
-        xdim = vhdr[8]
-        ydim = vhdr[9]
-        zdim = vhdr[10]
-        tdim = vhdr[11]
-        num_voxels = xdim*ydim*zdim*tdim
-        datatype = vhdr[18]
-        xsize = vhdr[22]
-        ysize = vhdr[23]
-        zsize = vhdr[24]
-        TR = vhdr[25]
-        scale_factor = vhdr[30]
-        x0 = vhdr[42]
-        y0 = vhdr[43]
-        z0 = vhdr[44]
-
-        if(datatype == 1): 
-            data_length = 1
-            datatype = 'Bit'
-        elif(datatype == 2): 
-            data_length = 1
-            datatype = 'Byte'
-        elif(datatype == 4): 
-            data_length = 2
-            datatype = 'Short'
-        elif(datatype == 8): 
-            data_length = 4
-            datatype = 'Integer'
-        elif(datatype == 16): 
-            data_length = 4
-            datatype = 'Float'
-        elif(datatype == 32): 
-            data_length = 8
-            datatype = 'Complex'
-        elif(datatype == 64): 
-            data_length = 8
-            datatype = 'Double'
-        elif(datatype == 'Integer'): data_length = 2
-        elif(datatype == 'Float'): data_length = 4
-        elif(datatype == 'Double'): data_length = 8
-        elif(datatype == 'Complex'): data_length = 8
-        else: data_length = 4
-
-        hdr = {'xdim':xdim,'ydim':ydim,'zdim':zdim,'tdim':tdim,'xsize':xsize,'ysize':ysize,'zsize':zsize,'x0':x0,'y0':y0,'z0':z0,'TR':TR,'orientation':orientation,'whole_header':whole_header,'start_binary':start_binary,'data_length':data_length,'num_voxels':num_voxels,'datatype':datatype,'filetype':'analyze','swap':swap,'scale_factor':scale_factor}
-
-        return(hdr)
+    def __init__(self, filestem):
+        self.load_header(filestem+".hdr")
+        self.load_image(filestem+".img")
 
     #-------------------------------------------------------------------------
-    def read_file(self, filename):
+    def load_header(self, filename):
+        "Load Analyze7.5 header from the given filename"
+        field_formats = struct_fields.values()
 
-        hdr = read_header(filename)
-        if hdr == -1:
-            return(-1)
-        datatype = hdr['datatype']
-        xdim = hdr['xdim']
-        ydim = hdr['ydim']
-        zdim = hdr['zdim']
-        tdim = hdr['tdim']
+        # Determine byte order of the header.  The first header element is the
+        # header size.  It should always be 384.  If it is not then you know
+        # you read it in the wrong byte order.
+        byte_order = LITTLE_ENDIAN
+        reported_length = struct_unpack(file(filename),
+          byte_order, field_formats[0:1])[0]
+        if reported_length != HEADER_SIZE: byte_order = BIG_ENDIAN
 
-        if(datatype == 'Byte'): 
-            numtype = Int8
-            new_numtype = Float32
-        elif(datatype == 'Short'): 
-            numtype = Int16
-            new_numtype = Float32
-        elif(datatype == 'Integer'): 
-            numtype = Int32
-            new_numtype = Float32
-        elif(datatype == 'Float'): 
-            numtype = Float32
-            new_numtype = Float32
-        elif(datatype == 'Double'): 
-            numtype = Float64
-            new_numtype = Float32
-        elif(datatype == 'Complex'): 
-            numtype = Complex32
-            new_numtype = Complex
-        else: 
-            print "Unknown data type, aborting ..."
-            sys.exit(1)
-        length = xdim*ydim*zdim*tdim*hdr['data_length']
-        datatype = hdr['datatype']
+        # unpack all header values
+        values = struct_unpack(file(filename), byte_order, field_formats)
+        print len(field_formats),len(values)
 
-        if  hdr['filetype'] < 0:
-            print "Could not find header for %s" % filename
-            return -1
-        if hdr['filetype'] == 'analyze':
-            f_img = open(hdr['imgfile'],"r")
-            if hdr['swap']:
-                image = fromstring(f_img.read(length),numtype).byteswapped().astype(new_numtype)
-            else:
-                image = fromstring(f_img.read(length),numtype).astype(new_numtype)
-    #       Flip images left to right and top to bottom.
-            img = zeros((tdim,zdim,ydim,xdim)).astype(new_numtype)
-            jmg = zeros((ydim,xdim)).astype(new_numtype)
-            image = reshape(image,(tdim,zdim,ydim,xdim))
-            for t in range(tdim):
-                for z in range(zdim):
-                    jmg[:,:] = fliplr(image[t,z,:,:])
-                    img[t,z,:,:] = flipud(jmg)
-            image = img
-        elif hdr['filetype'] == '4dfp':
-            dot = string.rfind(filename,".4dfp.img")
-            if dot < 0:
-                dot = string.rfind(filename,".4dfp.ifh")
-            if dot < 0:
-                imgfile = filename + ".4dfp.img"
-            else:
-                imgfile = filename[:dot] + ".4dfp.img"
-            f_img = open(imgfile,"r")
-            image = fromstring(f_img.read(length),numtype).byteswapped().astype(Float)
-        elif hdr['filetype'] == 'cub':
-    #       Advance file pointer to the end of the header.
-            f_img = open(filename,'r')
-            while 1:
-                line = f_img.readline()
-                if line == '\f\n': 
-                    break
-            image = fromstring(f_img.read(len),numtype).byteswapped().astype(Float)
-            image = reshape(image,(zdim,ydim,xdim))
-    #       Flip images left to right and top to bottom.
-            img = zeros((zdim,ydim,xdim)).astype(Float)
-            jmg = zeros((ydim,xdim)).astype(Float)
-            for z in range(zdim):
-                jmg[:,:] = fliplr(image[z,:,:])
-                img[z,:,:] = flipud(jmg)
-            image = img
-        elif hdr['filetype'] == 'tes':
-            f_img = open(filename,'r')
-            while 1:
-                line = f_img.readline()
-                if line == '\f\n': 
-                    break
+        # now load values into self
+        map(self.__setattr__, zip(field_formats, values))
 
-    #       Read mask.
-            mask = zeros((zdim*ydim*xdim)).astype(Int0)
-            mask[:] = fromstring(f_img.read(xdim*ydim*zdim),Int0)
-            idx = nonzero(mask)
-            nidx = shape(idx)[0]
+    #-------------------------------------------------------------------------
+    def load_image(self, filename):
 
-    #       Read image.
-            image = zeros((tdim,zdim*ydim*xdim)).astype(Float)
-            length = tdim*hdr['data_length']
-            for i in range(nidx):
-                image[:,idx[i]] = fromstring(f_img.read(length),numtype).byteswapped().astype(Float)
-        else:
-            print "read_file error: Image type %s is not supported." % hdr['filetype']
-            sys.exit(1)
-
-        f_img.close()
-        if tdim > 1:
-            image = reshape(image,(tdim,zdim,ydim,xdim))
-        else:
-            image = reshape(image,(zdim,ydim,xdim))
-
-        return {'header':hdr,'image':image}
+        # bytes per pixel
+        bytepix = self.bitpix/8
+        numtype = datatype2typecode[(self.datatype,self.bitpix)]
+        new_numtype = self.datatype==COMPLEX and Complex32 or Float32
+        datasize = xdim*ydim*zdim*tdim*bytepix
+        image = fromstring(file(filename).read(datasize),numtype)\
+                .astype(new_numtype)
+        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
+                          or (self.zdim, self.ydim, self.xdim)
+        self.setData(reshape(image, dims))
 
 
 ##############################################################################
 class AnalyzeWriter (object):
     """
+    Write images in Analyze7.5 format.
     """
-
-    # (datatype, bitpix) for each Analyze datatype
-    # datatype is a bit flag into a datatype byte of the Analyze header
-    # bitpix is the number of bits per pixel (or voxel, as the case may be)
-    BYTE = (2,8)
-    SHORT = (4,16)
-    INTEGER = (8,32)
-    FLOAT = (16,32)
-    COMPLEX = (32,64)
-    DOUBLE = (64,64)
-
-    # map Numeric typecode to Analyze datatype
-    typecode2datatype = {
-      Int8: BYTE,
-      Int16: SHORT,
-      Int32: INTEGER,
-      Float32: FLOAT,
-      Float64: DOUBLE,
-      Complex32: COMPLEX}
 
     # map Analyze datatype to Numeric typecode
     datatype2typecode = dict([(v,k) for k,v in typecode2datatype.items()])
 
     #-------------------------------------------------------------------------
-    def __init__(self, image, datatype=None, byteswap=False):
+    def __init__(self, image, datatype=None):
         self.image = image
-        self.datatype = \
-          datatype or self.typecode2datatype[image.data.typecode()]
-        self.byteswap = byteswap
+        self.datatype = datatype or typecode2datatype[image.data.typecode()]
 
     #-------------------------------------------------------------------------
     def write(self, filestem):
@@ -280,19 +191,19 @@ class AnalyzeWriter (object):
     def write_header(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
-        ndim, tdim, zdim, ydim, xdim = get_dims(image.data)
         scale_factor = getattr(image, "scale_factor", 1. )
         tr = getattr(image, "tr", 0.)
-        datatype, bitpix = self.datatype
+        datatype = self.datatype
+        bitpix = datatype2bitpix[datatype]
         cd = sd = " "
         hd = id = 0
         fd = 0.
 
-        format = "%si 10s 18s i h 1s 1s 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s 1s 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"%\
-                 (self.byteswap and ">" or "<")
+        format = "=i 10s 18s i h 1s 1s 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s 1s 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"
         # why is TR used...?
         binary_header = struct.pack(
-          format, 348, sd, sd, id, hd, cd, cd, ndim, xdim, ydim, zdim, tdim,
+          format, 348, sd, sd, id, hd, cd, cd, image.ndim, image.xdim,
+          image.ydim, image.zdim, image.tdim,
           hd, hd, hd, sd, sd, hd, datatype, bitpix, hd, fd, image.xsize,
           image.ysize, image.zsize, tr, fd, fd, fd, fd, scale_factor,
           fd, fd, fd, fd, id, id, id, id, sd, sd, cd, image.x0, image.y0,
@@ -307,11 +218,11 @@ class AnalyzeWriter (object):
         imagedata = self.image.data
 
         # if requested datatype does not correspond to image datatype, cast
-        if self.datatype != self.typecode2datatype[imagedata.typecode()]:
-            typecode = self.datatype2typecode[self.datatype]
+        if self.datatype != typecode2datatype[imagedata.typecode()]:
+            typecode = datatype2typecode[self.datatype]
 
             # Make sure image values are within the range of the desired datatype
-            if self.datatype in (self.BYTE, self.SHORT, self.INTEGER):
+            if self.datatype in (BYTE, SHORT, INTEGER):
                 maxval = amax(abs(imagedata).flat)
                 if maxval == 0.: maxval = 1.e20
                 maxrange = maxranges[typecode]
@@ -322,10 +233,7 @@ class AnalyzeWriter (object):
             # cast image values to the desired datatype
             imagedata = imagedata.astype( typecode )
 
-        if self.datatype != self.COMPLEX: imagedata = abs(imagedata)
-
-        # perform byteswap if requested
-        if self.byteswap: imagedata = imagedata.byteswapped()
+        if self.datatype != COMPLEX: imagedata = abs(imagedata)
 
         # Write the image file.
         f = file( filename, "w" )
@@ -333,3 +241,7 @@ class AnalyzeWriter (object):
         f.close()
 
 
+#-----------------------------------------------------------------------------
+def write_analyze(image, filename, datatype=None):
+    writer = AnalyzeWriter(image, datatype=datatype)
+    writer.write(filename)
