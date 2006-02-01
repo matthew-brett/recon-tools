@@ -1,0 +1,3 @@
+#!/bin/sh
+export PYTHON_PATH=../../root
+epydoc -qqqq --output ../api --name imaging-tools $PYTHON_PATH/*.py $PYTHON_PATH/imaging
