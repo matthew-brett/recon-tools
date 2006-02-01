@@ -5,9 +5,9 @@ class odict(dict):
     this order.
     """
 
-    def __init__(self, dict = None):
-        self._keys = []
-        dict.__init__(self, dict)
+    def __init__(self, items=()):
+        self._keys = map(lambda t: t[0], items)
+        dict.__init__(self, items)
 
     def __delitem__(self, key):
         dict.__delitem__(self, key)
