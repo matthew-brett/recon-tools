@@ -1,8 +1,7 @@
 ------------------------------------------------------------------------------
-imaging-tools-0.2                                                   unreleased 
+imaging-tools-0.2                                                    1/31/2006 
 ------------------------------------------------------------------------------
 - Added the recon tool.
-- Added the image-merge tool
 - Fixed dimension size bug in fdf2img tool
 - add LR flip to fdf2img tool
 
