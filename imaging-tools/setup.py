@@ -3,7 +3,7 @@ from distutils.core import setup
 
 setup(
   name='python-imaging-tools',
-  version='0.1',
+  version='0.2',
   description='Tools for manipulating MRI data, specializing in k-space reconstruction.',
   author='Brian Hawthorne',
   author_email='brian.lee.hawthorne@gmail.com',
