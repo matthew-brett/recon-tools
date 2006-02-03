@@ -46,8 +46,8 @@ typecode2datatype = \
 HEADER_SIZE = 384
 struct_fields = odict((
     ('sizeof_hdr','i'),
-    ('data_type[10]','10s'),
-    ('db_name[18]','18s'),
+    ('data_type','10s'),
+    ('db_name','18s'),
     ('extents','i'),
     ('session_error','h'),
     ('regular','c'),
@@ -60,8 +60,8 @@ struct_fields = odict((
     ('dim5','h'),
     ('dim6','h'),
     ('dim7','h'),
-    ('vox_units[4]','4s'),
-    ('cal_units[8]','8s'),
+    ('vox_units','4s'),
+    ('cal_units','8s'),
     ('unused1','h'),
     ('datatype','h'),
     ('bitpix','h'),
@@ -75,7 +75,7 @@ struct_fields = odict((
     ('pixdim6','f'),
     ('pixdim7','f'),
     ('vox_offset','f'),
-    ('funused1','f'),
+    ('scale_factor','f'),
     ('funused2','f'),
     ('funused3','f'),
     ('cal_max','f'),
@@ -84,19 +84,19 @@ struct_fields = odict((
     ('verified','i'),
     ('glmax','i'),
     ('glmin','i'),
-    ('descrip[80]','80s'),
-    ('aux_file[24]','24s'),
+    ('descrip','80s'),
+    ('aux_file','24s'),
     ('orient','c'),
     ('x0','h'),
     ('y0','h'),
     ('z0','h'),
     ('sunused','4s'),
-    ('generated[10]','10s'),
-    ('scannum[10]','10s'),
-    ('patient_id[10]','10s'),
-    ('exp_date[10]','10s'),
-    ('exp_time[10]','10s'),
-    ('hist_un0[3]','3s'),
+    ('generated','10s'),
+    ('scannum','10s'),
+    ('patient_id','10s'),
+    ('exp_date','10s'),
+    ('exp_time','10s'),
+    ('hist_un0','3s'),
     ('views','i'),
     ('vols_added','i'),
     ('start_field','i'),
@@ -172,13 +172,18 @@ class AnalyzeWriter (object):
     Write images in Analyze7.5 format.
     """
 
-    # map Analyze datatype to Numeric typecode
-    datatype2typecode = dict([(v,k) for k,v in typecode2datatype.items()])
+    _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
+    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '', 's': ''}
 
     #-------------------------------------------------------------------------
     def __init__(self, image, datatype=None):
         self.image = image
         self.datatype = datatype or typecode2datatype[image.data.typecode()]
+
+    #-------------------------------------------------------------------------
+    def _default_field_value(self, fieldname, descriptor):
+        return self._defaults_for_fieldname.get(fieldname, None) or \
+               self._defaults_for_descriptor[descriptor[-1]]
 
     #-------------------------------------------------------------------------
     def write(self, filestem):
@@ -191,9 +196,20 @@ class AnalyzeWriter (object):
     def write_header(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
-        scale_factor = getattr(image, "scale_factor", 1. )
-        tr = getattr(image, "tr", 0.)
+        values = {
+          'datatype': self.datatype,
+          'bitpix': datatype2bitpix[self.datatype],
+          'ndim': image.ndim,
+          'xdim': image.xdim,
+          'ydim': image.ydim,
+          'zdim': image.zdim,
+          'tdim': image.tdim,
+          'xsize': image.xsize,
+          'xsize': image.xsize,
+          'xsize': image.xsize,
+          'xsize': image.xsize}
         datatype = self.datatype
+        scale_factor = 1.
         bitpix = datatype2bitpix[datatype]
         cd = sd = " "
         hd = id = 0
@@ -205,7 +221,7 @@ class AnalyzeWriter (object):
           format, 348, sd, sd, id, hd, cd, cd, image.ndim, image.xdim,
           image.ydim, image.zdim, image.tdim,
           hd, hd, hd, sd, sd, hd, datatype, bitpix, hd, fd, image.xsize,
-          image.ysize, image.zsize, tr, fd, fd, fd, fd, scale_factor,
+          image.ysize, image.zsize, image.tsize, fd, fd, fd, fd, scale_factor,
           fd, fd, fd, fd, id, id, id, id, sd, sd, cd, image.x0, image.y0,
           image.z0, sd, sd, sd, sd, sd, sd, sd, id, id, id, id, id, id, id, id)
         f = open(filename,'w')
@@ -242,6 +258,9 @@ class AnalyzeWriter (object):
 
 
 #-----------------------------------------------------------------------------
-def write_analyze(image, filename, datatype=None):
+def writeImage(image, filename, datatype=None):
     writer = AnalyzeWriter(image, datatype=datatype)
     writer.write(filename)
+
+#-----------------------------------------------------------------------------
+def readImage(filename): pass
