@@ -4,7 +4,7 @@ from LinearAlgebra import *
 import math
 from sliceview import sliceview
 from imaging.util import exec_cmd, unwrap_phase
-from imaging.imageio import write_analyze
+from imaging.analyze import writeImage
 from imaging.operations import Operation, Parameter
 
 
