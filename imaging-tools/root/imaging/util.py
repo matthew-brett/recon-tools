@@ -90,14 +90,13 @@ def median_filter(image, N):
 
 #-----------------------------------------------------------------------------
 def unwrap_phase(image):
-    from imaging.analyze import AnalyzeImage
-    from imaging.imageio import write_analyze
+    from imaging.analyze import readImage, writeImage
     wrapped_fname = "wrapped"
     unwrapped_fname = "unwrapped"
-    write_analyze(image, wrapped_fname)
+    writeImage(image, wrapped_fname)
     exec_cmd("prelude --complex=%s.img --unwrap=%s.img -v -t 2000"%\
       (wrapped_fname, unwrapped_fname))
-    unwrapped_image = AnalyzeImage(unwrapped_fname)
+    unwrapped_image = readImage #AnalyzeImage(unwrapped_fname)
     exec_cmd("/usr/bin/rm %s*"%wrapped_fname, unwrapped_fname)
     return unwrapped_image
 
