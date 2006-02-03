@@ -1,5 +1,5 @@
 #!/bin/sh
-export PYTHON_PATH=../../root
+export PYTHONPATH=../../root
 scripts=../../scripts
 outfile=../tool-usage.txt
 echo > $outfile
@@ -10,11 +10,11 @@ echo "#######################################################################" >
 $scripts/recon --help >> $outfile
 echo >> $outfile
 
-#echo "#######################################################################" >> $outfile
-#echo "#  fdf2img tool usage:">> $outfile
-#echo "#######################################################################" >> $outfile
-#$scripts/fdf2img >> $outfile
-#echo >> $outfile
+echo "#######################################################################" >> $outfile
+echo "#  fdf2img tool usage:">> $outfile
+echo "#######################################################################" >> $outfile
+$scripts/fdf2img >> $outfile
+echo >> $outfile
 
 echo "#######################################################################" >> $outfile
 echo "#  getparam tool usage:">> $outfile
