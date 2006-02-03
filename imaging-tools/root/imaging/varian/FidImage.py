@@ -27,26 +27,29 @@ def complex_fromstring(data, numtype):
 class FidImage (BaseImage, ProcParImageMixin):
 
     """
-    FidImage loads a FID formatted file from a Varian system. It knows how to re-assemble 
-    volume data from various scanner sequences. A FidImage is both a BaseImage, giving it 
-    a clean, predictable interface appropriate for an image, and a ProcParImageMixin, giving 
-    it access to the parsed data from the procpar file. Additionally, FidImage loads more 
-    specific volume data such as reference and navigator data. FidImage calls on the FidFile 
-    class to interface with the actual data on-disk. FidImage contains a multitude of 
-    potentially useful image information that is freely accessible (due to Python's design), 
-    mainly assigned in the loadParams(...) and the loadData(...)methods.
+    FidImage loads a FID formatted file from a Varian system. It knows how to
+    reassemble volume data from various scanner sequences. A FidImage is both
+    a BaseImage, giving it a clean, predictable interface appropriate for an
+    image, and a ProcParImageMixin, giving it access to the parsed data from
+    the procpar file. Additionally, FidImage loads more specific volume data
+    such as reference and navigator data. FidImage calls on the FidFile class
+    to interface with the actual data on-disk. FidImage contains a multitude
+    of potentially useful image information that is freely accessible (due to
+    Python's design), mainly assigned in the loadParams(...) and the
+    loadData(...) methods.
     
     @cvar _procpar: holds the contents of the procpar file
     """
     #-------------------------------------------------------------------------
     def __init__(self, datadir, tr=None):
         self.loadParams(datadir, tr=tr)
+        self.initializeData()
         self.loadData(datadir)
 
     #-------------------------------------------------------------------------
     def loadParams(self, datadir, tr=None):
         "calls superclass function, and potentially over-rides tr"
-	ProcParImageMixin.loadParams(self, datadir)
+        ProcParImageMixin.loadParams(self, datadir)
 
         # manually override tr
         if tr > 0: self.tr = tr
@@ -70,12 +73,26 @@ class FidImage (BaseImage, ProcParImageMixin):
         print "Slice thickness: %7.2f" % self.zsize
 
     #-------------------------------------------------------------------------
+    def initializeData(self):
+        "Allocate data matrices."
+        self.data = zeros(
+          (self.nvol, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
+        self.nav_data = zeros(
+          (self.nvol, self.nslice, self.nav_per_slice, self.n_fe_true),
+          Complex32)
+        self.ref_data = zeros(
+          (self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
+        self.ref_nav_data = zeros(
+          (self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
+
+    #-------------------------------------------------------------------------
     def _load_petable(self):
         """
-        Read the phase-encode table and organize it into arrays which map k-space 
-        line number (recon_epi convention) to the acquisition order. These arrays 
-        will be used to read the data into the recon_epi as slices of k-space data. 
-        Assumes navigator echo is aquired at the beginning of each segment
+        Read the phase-encode table and organize it into arrays which map
+        k-space line number (recon_epi convention) to the acquisition order.
+        These arrays will be used to read the data into the recon_epi as
+        slices of k-space data.  Assumes navigator echo is aquired at the
+        beginning of each segment.
         """
         nav_per_seg = self.nav_per_seg
         nseg = self.nseg
@@ -129,44 +146,44 @@ class FidImage (BaseImage, ProcParImageMixin):
                     i += 1
 
     #-------------------------------------------------------------------------
-    def _read_compressed_volume(self, fid, vol):
+    def _read_compressed_volume(self, fidfile, vol):
         """
-	Reads a given block of compressed data from a FID file
-	@return: block of data with shape (nslice*n_pe, n_fe_true)
-	"""
-	block = fid.getBlock(vol)
+        Reads one volume from a compressed FID file.
+        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        """
+        block = fidfile.getBlock(vol)
         bias = complex(block.lvl, block.tlt)
         volume = complex_fromstring(block.getData(), self.raw_typecode)
         volume = (volume - bias).astype(Complex32)
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-    def _read_uncompressed_volume(self, fid, vol):
-    	"""
-	Reads a given block of uncompressed data from a FID file
-	@return: block of data with shape (nslice*n_pe, n_fe_true)
-	"""        
-	volume = empty((self.nslice, self.n_pe*self.n_fe_true), Complex32)
+    def _read_uncompressed_volume(self, fidfile, vol):
+        """
+        Reads one volume from an uncompressed FID file.
+        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        """        
+        volume = empty((self.nslice, self.n_pe*self.n_fe_true), Complex32)
         for slice_num, slice in enumerate(volume):
-            block = fid.getBlock(self.nslice*vol + slice_num)
+            block = fidfile.getBlock(self.nslice*vol + slice_num)
             bias = complex(block.lvl, block.tlt)
             slice[:] = complex_fromstring(block.getData(), self.raw_typecode)
             slice[:] = (slice - bias).astype(Complex32)
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-    def _read_epi2fid_volume(self, fid, vol):
+    def _read_epi2fid_volume(self, fidfile, vol):
         """
-	Reads a given block of epi2fid data from a FID file
-	@return: block of data with shape (nslice*n_pe, n_fe_true)
-	"""        
-	volume = empty(
+        Reads one volume from an epi2fid FID file.
+        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        """        
+        volume = empty(
           (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),Complex32)
         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
         for seg in range(self.nseg):
             for slice in range(self.nslice):
                 for pe in range(pe_true_per_seg):
-                    block = fid.getBlock(
+                    block = fidfile.getBlock(
                       self.nslice*(self.nvol*(seg*pe_true_per_seg + pe) + vol)
                       + slice)
                     volume[slice, seg, self.nav_per_seg+pe, :] = \
@@ -174,14 +191,14 @@ class FidImage (BaseImage, ProcParImageMixin):
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-    def _read_asems_ncsnn_volume(self, fid, vol):
-	"""
-	Reads a given block of asems_ncsnn data from a FID file
-	@return: block of data with shape (nslice*n_pe, n_fe_true)
-	"""
+    def _read_asems_ncsnn_volume(self, fidfile, vol):
+        """
+        Reads one volume from an asems_ncsnn FID file.
+        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        """
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
-            block = fid.getBlock(pe*self.nvol + vol)
+            block = fidfile.getBlock(pe*self.nvol + vol)
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_typecode)
@@ -189,15 +206,16 @@ class FidImage (BaseImage, ProcParImageMixin):
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-    def _read_asems_nccnn_volume(self, fid, vol):
+    def _read_asems_nccnn_volume(self, fidfile, vol):
         """
-	Reads a given block of asems_nccnn data from a FID file
-	@return: block of data with shape (nslice*n_pe, n_fe_true)
-	"""
+        Reads one volume from an asems_nccnn FID file.
+        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        """
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
             for slice in range(self.nslice):
-                block = fid.getBlock(((pe*self.nslice+slice)*self.nvol + vol))
+                block = fidfile.getBlock(
+                  ((pe*self.nslice+slice)*self.nvol + vol))
                 bias = complex(block.lvl, block.tlt)
                 trace = complex_fromstring(block.getData(), self.raw_typecode)
                 volume[slice,pe] = (trace - bias).astype(Complex32)
@@ -238,18 +256,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         nvol_true = self.nvol_true
         numrefs = len(self.ref_vols)
 
-        # allocate data matrices
-        self.data = zeros(
-          (nvol, nslice, n_pe_true, n_fe_true), Complex32)
-        self.nav_data = zeros(
-          (nvol, nslice, nav_per_slice, n_fe_true), Complex32)
-        self.ref_data = zeros(
-          (nslice, n_pe_true, n_fe_true), Complex32)
-        self.ref_nav_data = zeros(
-          (nslice, nav_per_slice, n_fe_true), Complex32)
-
         # open fid file
-        fid = FidFile(os.path.join(datadir, "fid")) 
+        fidfile = FidFile(os.path.join(datadir, "fid")) 
 
         # determine fid type using fid file attributes nblocks and ntraces
         fidformat = {
@@ -258,10 +266,10 @@ class FidImage (BaseImage, ProcParImageMixin):
           (nvol_true*nslice*n_pe_true, 1): "epi2fid",
           (nvol_true*n_pe, nslice):        "asems_ncsnn",
           (nvol_true*nslice*n_pe, 1):      "asems_nccnn"
-        }.get( (fid.nblocks, fid.ntraces) )
+        }.get( (fidfile.nblocks, fidfile.ntraces) )
         if fidformat is None:
           raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"\
-            (fid.nblocks, fid.ntraces)
+            (fidfile.nblocks, fidfile.ntraces)
         print "Fid Format:", fidformat
 
         # choose which method to use to read the volume based on the format
@@ -276,7 +284,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         # determine if time reversal needs to be performed
         time_reverse = \
           (fidformat=="compressed" and pulse_sequence != "epi_se") or \
-          (fidformat=="uncompressed" and pulse_sequence not in ("epidw", "epidw_se"))
+          (fidformat=="uncompressed" and \
+           pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
 
         needs_pe_reordering = \
@@ -288,7 +297,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         for vol in range(nvol_true):
 
             # read the next image volume
-            volume = volreader(fid, vol)
+            volume = volreader(fidfile, vol)
 
             # time-reverse the data
             if time_reverse:
@@ -315,9 +324,11 @@ class FidImage (BaseImage, ProcParImageMixin):
             if time_reverse:
                 for slice in range(0,nslice,2):
                     for pe in range(n_pe_true):
-                        ksp_image[slice,pe] = take(ksp_image[slice,pe], time_rev)
+                        ksp_image[slice,pe] = \
+                          take(ksp_image[slice,pe], time_rev)
                     for pe in range(nav_per_slice):
-                        navigators[slice,pe] = take(navigators[slice,pe], time_rev)
+                        navigators[slice,pe] = \
+                          take(navigators[slice,pe], time_rev)
 
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:
@@ -341,9 +352,10 @@ class FidImage (BaseImage, ProcParImageMixin):
             dtypemap = {
               MAGNITUDE_TYPE: analyze.SHORT,
               COMPLEX_TYPE: analyze.COMPLEX }
+            datatype = dtypemap[data_type]
             for volnum, volimage in enumerate(self.subImages()):
                 analyze.write_analyze(volimage,
-                  "%s_%04d"%(outfile, volnum), datatype=dtypemap[data_type])
+                  "%s_%04d"%(outfile, volnum), datatype=datatype)
 
         elif file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
