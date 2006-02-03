@@ -4,7 +4,7 @@ from pylab import asarray
 from FDFFile import FDFFile, FDFHeader
 from ProcPar import ProcPar, ProcParImageMixin
 from imaging.imageio import BaseImage
-from imaging.analyze import write_analyze
+from imaging.analyze import writeImage
 
 
 #-----------------------------------------------------------------------------
@@ -44,4 +44,4 @@ class FDFImage (BaseImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def save(self, outputdir):
         for volnum, volimage in enumerate(self.subImages()):
-            write_analyze(volimage, pjoin(outputdir, "image%04d"%volnum))
+            writeImage(volimage, pjoin(outputdir, "image%04d"%volnum))

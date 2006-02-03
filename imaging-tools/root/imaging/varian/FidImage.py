@@ -354,7 +354,7 @@ class FidImage (BaseImage, ProcParImageMixin):
               COMPLEX_TYPE: analyze.COMPLEX }
             datatype = dtypemap[data_type]
             for volnum, volimage in enumerate(self.subImages()):
-                analyze.write_analyze(volimage,
+                analyze.writeImage(volimage,
                   "%s_%04d"%(outfile, volnum), datatype=datatype)
 
         elif file_format == FIDL_FORMAT:
