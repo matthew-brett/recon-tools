@@ -125,7 +125,6 @@ class ProcParImageMixin (object):
         procpar = self._procpar = ProcPar(pjoin(datadir, "procpar"))
         self.n_fe = procpar.np[0]
         self.n_pe = procpar.nv[0]
-        self.tr = procpar.tr[0]
         self.petable_name = procpar.petable[0]
         self.orient = procpar.orient[0]
         pulse_sequence = procpar.pslabel[0]
@@ -200,17 +199,17 @@ class ProcParImageMixin (object):
         # this quiet_interval may need to be added to tr in some way...
         #quiet_interval = procpar.get("dquiet", (0,))[0]
         self.n_fe_true = self.n_fe/2
-        self.tr = nseg*self.tr
+        self.tr = nseg*procpar.tr[0]
         self.nav_per_slice = nseg*self.nav_per_seg
         self.n_pe_true =  self.n_pe - self.nav_per_slice
         self.pe_per_seg = self.n_pe/nseg
-        fov = procpar.lro[0]
         self.x0 = 0.
         self.y0 = 0.
         self.z0 = 0.
-        self.xsize = 10.*float(fov)/self.n_pe_true
-        self.ysize = 10.*float(fov)/self.n_fe_true
+        self.xsize = 10.*float(procpar.lro[0])/self.n_pe_true
+        self.ysize = 10.*float(procpar.lpe[0])/self.n_fe_true
         self.zsize = float(self.thk) + slice_gap
+        self.tsize = self.tr
 
         self.datasize, self.raw_typecode = \
           procpar.dp[0]=="y" and (4, Int32) or (2, Int16)
@@ -221,9 +220,13 @@ class ProcParImageMixin (object):
         if(self.petable_name.find("alt") >= 0):
             self.echo_time = procpar.te[0] - f - procpar.at[0]
         else:
-            self.echo_time = procpar.te[0] - floor(self.pe_per_seg)/2.0*self.echo_spacing
-        self.pe_times = asarray([self.echo_time + pe*self.echo_spacing \
-                          for pe in range(self.pe_per_seg)])
+            self.echo_time = procpar.te[0] - \
+              floor(self.pe_per_seg)/2.0*self.echo_spacing
+
+        # calculate phase encode times
+        self.pe_times = asarray(
+          [self.echo_time + pe*self.echo_spacing\
+           for pe in range(self.pe_per_seg)])
 
 
 ##############################################################################
