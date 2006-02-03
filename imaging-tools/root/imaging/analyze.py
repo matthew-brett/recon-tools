@@ -43,7 +43,7 @@ datatype2typecode = {
 typecode2datatype = \
   dict([(v,k) for k,v in datatype2typecode.items()])
 
-HEADER_SIZE = 384
+HEADER_SIZE = 348
 struct_fields = odict((
     ('sizeof_hdr','i'),
     ('data_type','10s'),
@@ -106,6 +106,7 @@ struct_fields = odict((
     ('smax','i'),
     ('smin','i'),
 ))
+field_formats = struct_fields.values()
 
 # struct byte order constants
 NATIVE = "="
@@ -118,6 +119,10 @@ def struct_format(byte_order, elements):
 def struct_unpack(infile, byte_order, elements):
     format = struct_format(byte_order, elements)
     return struct.unpack(format, infile.read(struct.calcsize(format)))
+
+def struct_pack(byte_order, elements, values):
+    format = struct_format(byte_order, elements)
+    return struct.pack(format, *values)
 
 
 ##############################################################################
@@ -134,7 +139,6 @@ class AnalyzeImage (BaseImage):
     #-------------------------------------------------------------------------
     def load_header(self, filename):
         "Load Analyze7.5 header from the given filename"
-        field_formats = struct_fields.values()
 
         # Determine byte order of the header.  The first header element is the
         # header size.  It should always be 384.  If it is not then you know
@@ -172,8 +176,10 @@ class AnalyzeWriter (object):
     Write images in Analyze7.5 format.
     """
 
+    #[STATIC]
     _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
-    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '', 's': ''}
+    #[STATIC]
+    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
 
     #-------------------------------------------------------------------------
     def __init__(self, image, datatype=None):
@@ -181,9 +187,10 @@ class AnalyzeWriter (object):
         self.datatype = datatype or typecode2datatype[image.data.typecode()]
 
     #-------------------------------------------------------------------------
-    def _default_field_value(self, fieldname, descriptor):
+    def _default_field_value(self, fieldname, fieldformat):
+        "[STATIC] Get the default value for the given field."
         return self._defaults_for_fieldname.get(fieldname, None) or \
-               self._defaults_for_descriptor[descriptor[-1]]
+               self._defaults_for_descriptor[fieldformat[-1]]
 
     #-------------------------------------------------------------------------
     def write(self, filestem):
@@ -196,7 +203,7 @@ class AnalyzeWriter (object):
     def write_header(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
-        values = {
+        imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
           'ndim': image.ndim,
@@ -208,25 +215,14 @@ class AnalyzeWriter (object):
           'xsize': image.xsize,
           'xsize': image.xsize,
           'xsize': image.xsize}
-        datatype = self.datatype
-        scale_factor = 1.
-        bitpix = datatype2bitpix[datatype]
-        cd = sd = " "
-        hd = id = 0
-        fd = 0.
 
-        format = "=i 10s 18s i h 1s 1s 8h 4s 8s h h h h 8f f f f f f f i i 2i 80s 24s 1s 3h 4s 10s 10s 10s 10s 10s 3s i i i i 2i 2i"
-        # why is TR used...?
-        binary_header = struct.pack(
-          format, 348, sd, sd, id, hd, cd, cd, image.ndim, image.xdim,
-          image.ydim, image.zdim, image.tdim,
-          hd, hd, hd, sd, sd, hd, datatype, bitpix, hd, fd, image.xsize,
-          image.ysize, image.zsize, image.tsize, fd, fd, fd, fd, scale_factor,
-          fd, fd, fd, fd, id, id, id, id, sd, sd, cd, image.x0, image.y0,
-          image.z0, sd, sd, sd, sd, sd, sd, sd, id, id, id, id, id, id, id, id)
-        f = open(filename,'w')
-        f.write(binary_header)
-        f.close()
+        def fieldvalue(fieldname, fieldformat):
+            return imagevalues.get(fieldname) or\
+                   self._default_field_value(fieldname, fieldformat)
+
+        fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
+        header = struct_pack(NATIVE, field_formats, fieldvalues)
+        file(filename,'w').write(header)
 
     #-------------------------------------------------------------------------
     def write_image(self, filename):
