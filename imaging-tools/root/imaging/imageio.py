@@ -15,7 +15,8 @@ def get_dims(data):
 #-----------------------------------------------------------------------------
 def subimage(image, data):
     return BaseImage(data,
-      image.xsize, image.ysize, image.zsize, image.x0, image.y0, image.z0)
+      image.xsize, image.ysize, image.zsize, image.tsize,
+      image.x0, image.y0, image.z0)
 
 
 ##############################################################################
@@ -23,8 +24,8 @@ class BaseImage (object):
     """
     Interface definition for an Image.
     Attributes:
-      data:  3 or 4 dimensional matrix representing a single volume or a
-        timecourse of volumes.
+      data:  2, 3, or 4 dimensional matrix representing a slice, single
+             volume, or a timecourse of volumes.
       ndim:  number of dimensions
       tdim:  number of volumes in a timecourse
       zdim:  number of slices per volume
@@ -33,15 +34,17 @@ class BaseImage (object):
       xsize: spacial width of column
       ysize: spacial height of a row
       zsize: spacial slice thickness
+      tsize: duration of each time-series volume
       x0:  position of first column
       y0:  position of first row
       z0:  position of first slice
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, x0, y0, z0):
+    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0):
         self.setData(data)
-        self.xsize, self.ysize, self.zsize = (xsize, ysize, zsize)
+        self.xsize, self.ysize, self.zsize, self.tsize = \
+          (xsize, ysize, zsize, tsize)
         self.x0, self.y0, self.z0 = (x0, y0, z0)
 
     #-------------------------------------------------------------------------
@@ -69,12 +72,6 @@ class BaseImage (object):
     def subImages(self):
         for subdata in self.data: yield subimage(self, subdata)
 
-
-#-----------------------------------------------------------------------------
-def write_analyze(image, filename, datatype=None):
-    from imaging.analyze import AnalyzeWriter
-    writer = AnalyzeWriter(image, datatype=datatype)
-    writer.write(filename)
 
 readers = {}
 writers = {}
