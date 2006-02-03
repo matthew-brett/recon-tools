@@ -21,3 +21,9 @@ class Rot90 (Operation):
                 reshape(slice, rotated.shape)
                 slice[:] = rotated.copy()
         image.setData(data)
+
+        # swap x and y origin locations (...is this right?)
+        image.y0, image.x0 = image.x0, image.y0
+
+        # swap x and y dimension sizes
+        image.ysize, image.xsize = image.xsize, image.ysize
