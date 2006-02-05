@@ -307,7 +307,8 @@ class FidImage (BaseImage, ProcParImageMixin):
                     for pe in range(base+1, base+f, 2): 
                         volume[pe] = take(volume[pe], time_rev)
 
-            # Reorder data according to phase encode table
+            # Reorder data according to phase encode table and separate
+            # k-space data from navigator echos
             if needs_pe_reordering:
                 ksp_image = take(volume, self.petable)
                 navigators = take(volume, self.navtable) 
