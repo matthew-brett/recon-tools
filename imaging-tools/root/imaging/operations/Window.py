@@ -9,14 +9,13 @@ def getWindow(winName, xSize, ySize):
     @param winName: name of the window; can be blackman, hamming, or hanning
     """    
 
-    #actually gets a KeyError on a bad winName, should fix later
     window = {
         "blackman": blackman,
         "hamming": hamming,
         "hanning": hanning
-    }[winName]
+    }.get(winName)
     if winName is None:
-        raise "unsupported window type: %s"%winName
+        raise ValueError("unsupported window type: %s"%winName)
     
     p = outerproduct(window(ySize), window(xSize))
     
