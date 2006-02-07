@@ -2,20 +2,19 @@
 from imaging.operations import Operation, Parameter
 from pylab import hanning, hamming, blackman, outerproduct, Complex32
 
+window_types = {
+    "blackman": blackman,
+    "hamming": hamming,
+    "hanning": hanning}
+
 def getWindow(winName, xSize, ySize):
     """
     generates a 2D window in following manner:
     outerproduct(window(ySize), window(xSize))
     @param winName: name of the window; can be blackman, hamming, or hanning
     """    
-
-    window = {
-        "blackman": blackman,
-        "hamming": hamming,
-        "hanning": hanning
-    }.get(winName)
-    if winName is None:
-        raise ValueError("unsupported window type: %s"%winName)
+    window = window_types.get(winName)
+    if window is None: raise ValueError("unsupported window type: %s"%winName)
     
     p = outerproduct(window(ySize), window(xSize))
     
@@ -25,17 +24,9 @@ def getWindow(winName, xSize, ySize):
 
 class Window (Operation):
     params = (
-        Parameter(name="win_name", type="str", default=None,
-                  description="name of desired window"),
-        )
+      Parameter(name="win_name", type="str", default=None,
+        description="Type of window.  Can be blackman, hamming, or hanning."),)
 
     def run(self, image):
-        #this will be killed in some future revision:
-        image.setData(image.data)
-        #start here:
-        winFilt = getWindow(self.win_name, image.xdim, image.ydim)
-        for vol in image.data:
-            for slice in vol:
-                slice[:] = slice*winFilt
-
-        #done
+        # multiply the window by each slice of the image
+        image.data *= getWindow(self.win_name, image.xdim, image.ydim)
