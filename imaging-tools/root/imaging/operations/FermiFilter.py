@@ -33,9 +33,7 @@ class FermiFilter (Operation):
     #-------------------------------------------------------------------------
     def run(self, image):
         rows, cols = image.data.shape[-2:]
-        kernel = fermi_filter(
+        image.data *= fermi_filter(
           rows, cols, self.cutoff, self.trans_width).astype(Float32)
-        for volume in image.data:
-          for slice in volume: slice *= kernel
 
 
