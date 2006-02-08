@@ -115,7 +115,6 @@ class FidImage (BaseImage, ProcParImageMixin):
             table_filename = os.path.join(tablib, self.petable_name)
             line = file(table_filename).readline().split()
             line = [int(i) for i in line]
-        print "line: ",line
 
         self.petable = empty(n_pe_true*nslice, Int16)
         i = 0 
@@ -130,7 +129,6 @@ class FidImage (BaseImage, ProcParImageMixin):
                 # Find location of the pe'th phase-encode line in acquisition order.
                 self.petable[i] = line.index(pe) + offset
                 i += 1
-        print "petable: ",self.petable
             
         self.navtable = empty(nav_per_slice*nslice, Int16)
         if nav_per_seg == 1:    
@@ -342,22 +340,20 @@ class FidImage (BaseImage, ProcParImageMixin):
         # shift data for easier fft'ing later
         shift(self.data, 0, n_fe_true/2)
 
+        self.setData(self.data)
+
     #-------------------------------------------------------------------------
     def save(self, outfile, file_format, data_type):
         "Save the image data to disk."
-        from imaging import analyze
         data = self.data
 
         print "Saving to disk (%s format). Please Wait"%file_format
         if file_format == ANALYZE_FORMAT:
+            from imaging import analyze
             dtypemap = {
-              MAGNITUDE_TYPE: analyze.SHORT,
+              MAGNITUDE_TYPE: analyze.FLOAT,
               COMPLEX_TYPE: analyze.COMPLEX }
-            datatype = dtypemap[data_type]
-            for volnum, volimage in enumerate(self.subImages()):
-                analyze.writeImage(volimage,
-                  "%s_%04d"%(outfile, volnum), datatype=datatype)
-
+            analyze.writeImage(self, outfile, dtypemap[data_type], 3)
         elif file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
             if data_type == MAGNITUDE_TYPE: data = abs(data)

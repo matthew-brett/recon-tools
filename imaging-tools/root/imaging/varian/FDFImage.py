@@ -42,6 +42,4 @@ class FDFImage (BaseImage, ProcParImageMixin):
         self.setData(asarray(volumes))
 
     #-------------------------------------------------------------------------
-    def save(self, outputdir):
-        for volnum, volimage in enumerate(self.subImages()):
-            writeImage(volimage, pjoin(outputdir, "image%04d"%volnum))
+    def save(self, outputdir): writeImage(self, pjoin(outputdir, "image"))
