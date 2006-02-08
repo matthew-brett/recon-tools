@@ -1,4 +1,4 @@
 #!/bin/sh
-datadir=../../testdata/epi_coronals_s8.dat
-export PYTHONPATH=../root
-python ../scripts/fdf2img $datadir 
+. ./test-config.sh
+dataset=$testdata_dir/epi_coronals_s8.dat
+python ../scripts/fdf2img $dataset
