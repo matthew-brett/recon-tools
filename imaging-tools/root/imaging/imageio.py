@@ -10,13 +10,7 @@ def get_dims(data):
     ndim = len(shape)
     if ndim < 2 or ndim > 4:
         raise ValueError("data shape %s must be 2, 3, or 4 dimensional"%shape)
-    return (ndim,)+(1,)*(4-ndim)+shape
-
-#-----------------------------------------------------------------------------
-def subimage(image, data):
-    return BaseImage(data,
-      image.xsize, image.ysize, image.zsize, image.tsize,
-      image.x0, image.y0, image.z0)
+    return (ndim,) + (0,)*(4-ndim) + shape
 
 
 ##############################################################################
@@ -48,6 +42,22 @@ class BaseImage (object):
         self.x0, self.y0, self.z0 = (x0, y0, z0)
 
     #-------------------------------------------------------------------------
+    def info(self):
+        print "ndim =",self.ndim
+        print "xdim =",self.xdim
+        print "ydim =",self.ydim
+        print "zdim =",self.zdim
+        print "tdim =",self.tdim
+        print "xsize =",self.xsize
+        print "ysize =",self.ysize
+        print "zsize =",self.zsize
+        print "x0 =",self.x0
+        print "y0 =",self.y0
+        print "z0 =",self.z0
+        print "data.shape =",self.data.shape
+        print "data.typecode =",self.data.typecode()
+
+    #-------------------------------------------------------------------------
     def setData(self, data):
         self.data = data
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
@@ -66,12 +76,52 @@ class BaseImage (object):
         self.setData(concatenate((self.data, image.data), axis))
 
     #-------------------------------------------------------------------------
-    def subImage(self, subnum): return subimage(self, self.data[subnum])
+    def subImage(self, subnum):
+        ##!! Need to fix sizes and locations here !!##
+        return BaseImage(self.data[subnum],
+          self.xsize, self.ysize, self.zsize, self.tsize,
+          self.x0, self.y0, self.z0)
 
     #-------------------------------------------------------------------------
     def subImages(self):
-        for subdata in self.data: yield subimage(self, subdata)
+        for subnum in xrange(len(self.data)): yield self.subImage(subnum)
 
 
-readers = {}
-writers = {}
+#-----------------------------------------------------------------------------
+_readers = {
+    "analyze": ("imaging.analyze","readImage"),
+    "fid": ("imaging.varian.FidImage","FidImage"),
+    "fdf": ("imaging.varian.FDFImage","FDFImage")}
+
+_writers = {
+    "analyze": ("imaging.analyze","writeImage")}
+
+#-----------------------------------------------------------------------------
+def _import((modulename, objectname)):
+    module = __import__(modulename, globals(), locals(), (objectname,))
+    return getattr(module, objectname)
+
+#-----------------------------------------------------------------------------
+def _get_reader(format):
+    readerspec = _readers.get(format)
+    if readerspec is None:
+        raise ValueError("Reader '%s' not found.  Avaliable readers are: %s"%\
+          (format, ", ".join(_readers.keys())))
+    return _import(readerspec)
+
+#-----------------------------------------------------------------------------
+def _get_writer(format):
+    writerspec = _writers.get(format)
+    if writerspec is None:
+        raise ValueError("Writer '%s' not found.  Avaliable writers are: %s"%\
+          (format, ", ".join(_writers.keys())))
+    return _import(writerspec)
+
+#-----------------------------------------------------------------------------
+def readImage(filename, format, **kwargs):
+    return _get_reader(format)(filename, **kwargs)
+
+#-----------------------------------------------------------------------------
+def writeImage(image, filename, format, **kwargs):
+    return _get_writer(format)(image, filename, **kwargs)
+
