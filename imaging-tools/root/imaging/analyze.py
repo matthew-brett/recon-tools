@@ -1,5 +1,6 @@
 "This module implements details of the Analyze7.5 file format."
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, Complex32
+from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
+  Complex32, fromstring, reshape
 import struct
 
 from odict import odict
@@ -150,30 +151,29 @@ class AnalyzeImage (BaseImage):
 
         # unpack all header values
         values = struct_unpack(file(filename), byte_order, field_formats)
-        print len(field_formats),len(values)
 
         # now load values into self
-        map(self.__setattr__, zip(field_formats, values))
+        map(self.__setattr__, struct_fields.keys(), values)
 
     #-------------------------------------------------------------------------
     def load_image(self, filename):
 
         # bytes per pixel
         bytepix = self.bitpix/8
-        numtype = datatype2typecode[(self.datatype,self.bitpix)]
-        new_numtype = self.datatype==COMPLEX and Complex32 or Float32
-        datasize = xdim*ydim*zdim*tdim*bytepix
-        image = fromstring(file(filename).read(datasize),numtype)\
-                .astype(new_numtype)
+        numtype = datatype2typecode[self.datatype]
+        #new_numtype = self.datatype==COMPLEX and Complex32 or Float32
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
                           or (self.zdim, self.ydim, self.xdim)
+        datasize = bytepix * reduce(lambda x,y: x*y, dims)
+        image = fromstring(file(filename).read(datasize),numtype)#\
+                #.astype(new_numtype)
         self.setData(reshape(image, dims))
 
 
 ##############################################################################
 class AnalyzeWriter (object):
     """
-    Write images in Analyze7.5 format.
+    Write a given image into a single Analyze7.5 format hdr/img pair.
     """
 
     #[STATIC]
@@ -196,11 +196,11 @@ class AnalyzeWriter (object):
     def write(self, filestem):
         "Write ANALYZE format header, image file pair."
         headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
-        self.write_header(headername)
-        self.write_image(imagename)
+        self.write_hdr(headername)
+        self.write_img(imagename)
 
     #-------------------------------------------------------------------------
-    def write_header(self, filename):
+    def write_hdr(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
         imagevalues = {
@@ -225,15 +225,18 @@ class AnalyzeWriter (object):
         file(filename,'w').write(header)
 
     #-------------------------------------------------------------------------
-    def write_image(self, filename):
+    def write_img(self, filename):
         "Write ANALYZE format image (.img) file."
         imagedata = self.image.data
+
+        if self.datatype != COMPLEX: imagedata = abs(imagedata)
 
         # if requested datatype does not correspond to image datatype, cast
         if self.datatype != typecode2datatype[imagedata.typecode()]:
             typecode = datatype2typecode[self.datatype]
 
-            # Make sure image values are within the range of the desired datatype
+            # Make sure image values are within the range of the desired
+            # data type
             if self.datatype in (BYTE, SHORT, INTEGER):
                 maxval = amax(abs(imagedata).flat)
                 if maxval == 0.: maxval = 1.e20
@@ -244,19 +247,47 @@ class AnalyzeWriter (object):
 
             # cast image values to the desired datatype
             imagedata = imagedata.astype( typecode )
-
-        if self.datatype != COMPLEX: imagedata = abs(imagedata)
+            print "CASTING"
 
         # Write the image file.
         f = file( filename, "w" )
         f.write( imagedata.tostring() )
         f.close()
 
+#-----------------------------------------------------------------------------
+def _concatenate(listoflists):
+    "Flatten a list of lists by one degree."
+    finallist = []
+    for sublist in listoflists: finallist += sublist
+    return finallist
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filename, datatype=None):
-    writer = AnalyzeWriter(image, datatype=datatype)
-    writer.write(filename)
+def writeImage(image, filestem, datatype=None, targetdim=3):
+    """
+    Write the given image to the filesystem as one or more Analyze7.5 format
+    hdr/img pairs.
+    @param filestem:  will be prepended to each hdr and img file.
+    @param targetdim:  indicates the dimensionality of data to be written into
+      a single hdr/img pair.  For example, if a volumetric time-series is
+      given, and targetdim==3, then each volume will get its own file pair.
+      Likewise, if targetdim==2, then every slice of each volume will get its
+      own pair.
+    """
+    dimnames = {3:"volume", 2:"slice"}
+    def images_and_names(image, stem, targetdim):
+        # base case
+        if targetdim >= image.ndim: return [(image, stem)]
+        
+        # recursive case
+        subimages = tuple(image.subImages())
+        substems = ["%s_%s%d"%(stem, dimnames[image.ndim-1], i)\
+                    for i in range(len(subimages))]
+        return _concatenate(
+          [images_and_names(subimage, substem, targetdim)\
+           for subimage,substem in zip(subimages, substems)])
+
+    for subimage, substem in images_and_names(image, filestem, targetdim):
+        AnalyzeWriter(subimage, datatype=datatype).write(substem)
 
 #-----------------------------------------------------------------------------
-def readImage(filename): pass
+def readImage(filename): return AnalyzeImage(filename)
