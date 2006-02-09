@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle
+from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle, normalize, pi
+from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
 def iscomplex(a): return hasattr(a, "imag")
@@ -205,34 +206,43 @@ class ColPlot (FigureCanvas):
 class SlicePlot (FigureCanvas):
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, cmap=cm.bone):
+    def __init__(self, data, cmap=cm.bone, norm=None):
+        self.norm = None
         fig = Figure(figsize=figaspect(data))
         ax  = fig.add_axes([0.05, 0.1, 0.85, 0.85])
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
         FigureCanvas.__init__(self, fig)
         self.cmap = cmap
-        self.setData(data)
+        self.setData(data, norm=norm)
 
     #-------------------------------------------------------------------------
-    def setData(self, data):
+    def setData(self, data, norm=None):
         ax = self.figure.axes[0]
-        if not hasattr(self, "data"):
-            ax.imshow(data, interpolation="nearest", cmap=self.cmap)
-        else: ax.images[0].set_data(data)
-        nr, nc = data.shape[:2]
-        ax.set_xlim((0,nc))
-        ax.set_ylim((nr,0))
+
+        if len(ax.images) == 0:
+            ax.imshow(data, interpolation="nearest",
+              cmap=self.cmap, norm=self.norm)
+        elif norm != self.norm:
+            ax.images[0] = AxesImage(ax, interpolation="nearest",
+              cmap=self.cmap, norm=self.norm)
+        ax.images[0].set_data(data)
+
+        self.norm = norm
+        nrows, ncols = data.shape[:2]
+        ax.set_xlim((0,ncols))
+        ax.set_ylim((nrows,0))
         self.data = data
         self.draw()
 
 
 ##############################################################################
 class sliceview (gtk.Window):
+    mag_norm = normalize()
+    phs_norm = normalize(-pi, pi)
 
     #-------------------------------------------------------------------------
     def __init__(self, data, dim_names=[], title="sliceview", cmap=cm.bone):
-        self.adjustments = []
         self.data = asarray(data)
 
         # if data is complex, show the magnitude by default
@@ -296,7 +306,8 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def updateSlice(self):
-        self.sliceplot.setData(self.getSlice())
+        norm = self.transform == phs_xform and self.phs_norm or self.mag_norm
+        self.sliceplot.setData(self.getSlice(), norm=norm)
         self.rowplot.setData(self.getRow())
         self.colplot.setData(self.getCol())
 
@@ -310,7 +321,8 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def spinnerHandler(self, adj):
-        print "VolumeViewer::spinnerHandler slice_dims", self.control_panel.slice_dims
+        print "VolumeViewer::spinnerHandler slice_dims", \
+               self.control_panel.slice_dims
 
     #-------------------------------------------------------------------------
     def radioHandler(self, button, transform):
