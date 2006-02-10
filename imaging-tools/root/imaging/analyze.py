@@ -1,6 +1,6 @@
 "This module implements details of the Analyze7.5 file format."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape
+  Complex32, fromstring, reshape, amin, amax
 import struct
 
 from odict import odict
@@ -28,8 +28,7 @@ datatype2bitpix = {
   INTEGER: 32,
   FLOAT: 32,
   DOUBLE: 64,
-  COMPLEX: 64,
-}
+  COMPLEX: 64}
 
 # map Analyze datatype to Numeric typecode
 datatype2typecode = {
@@ -105,8 +104,8 @@ struct_fields = odict((
     ('omax','i'),
     ('omin','i'),
     ('smax','i'),
-    ('smin','i'),
-))
+    ('smin','i')))
+
 field_formats = struct_fields.values()
 
 # struct byte order constants
@@ -136,6 +135,10 @@ class AnalyzeImage (BaseImage):
     def __init__(self, filestem):
         self.load_header(filestem+".hdr")
         self.load_image(filestem+".img")
+
+    #-------------------------------------------------------------------------
+    def _dump_header(self):
+        for att in struct_fields.keys(): print att,"=",`getattr(self,att)`
 
     #-------------------------------------------------------------------------
     def load_header(self, filename):
@@ -177,7 +180,13 @@ class AnalyzeWriter (object):
     """
 
     #[STATIC]
-    _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
+    _defaults_for_fieldname = {
+      'sizeof_hdr': HEADER_SIZE,
+      'extents': 16384,
+      'regular': 'r',
+      'hkey_un0': ' ',
+      'vox_units': 'mm',
+      'scale_factor':1.}
     #[STATIC]
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
 
@@ -203,6 +212,7 @@ class AnalyzeWriter (object):
     def write_hdr(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
+        data_magnitude = abs(image.data)
         imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
@@ -212,15 +222,20 @@ class AnalyzeWriter (object):
           'zdim': image.zdim,
           'tdim': image.tdim,
           'xsize': image.xsize,
-          'xsize': image.xsize,
-          'xsize': image.xsize,
-          'xsize': image.xsize}
+          'ysize': image.ysize,
+          'zsize': image.zsize,
+          'tsize': image.tsize,
+          'glmin': amin(data_magnitude.flat),
+          'glmax': amax(data_magnitude.flat),
+          'orient': '\0'}   # kludge alert!  this must be fixed!
 
         def fieldvalue(fieldname, fieldformat):
-            return imagevalues.get(fieldname) or\
-                   self._default_field_value(fieldname, fieldformat)
+            if imagevalues.has_key(fieldname): return imagevalues[fieldname]
+            if hasattr(image, fieldname): return getattr(image, fieldname)
+            return self._default_field_value(fieldname, fieldformat)
 
         fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
+        #for f,v in zip(struct_fields.keys(),fieldvalues): print f,"=",`v`
         header = struct_pack(NATIVE, field_formats, fieldvalues)
         file(filename,'w').write(header)
 
@@ -247,7 +262,6 @@ class AnalyzeWriter (object):
 
             # cast image values to the desired datatype
             imagedata = imagedata.astype( typecode )
-            print "CASTING"
 
         # Write the image file.
         f = file( filename, "w" )
@@ -258,11 +272,11 @@ class AnalyzeWriter (object):
 def _concatenate(listoflists):
     "Flatten a list of lists by one degree."
     finallist = []
-    for sublist in listoflists: finallist += sublist
+    for sublist in listoflists: finallist.extend(sublist)
     return finallist
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=3):
+def writeImage(image, filestem, datatype=None, targetdim=None):
     """
     Write the given image to the filesystem as one or more Analyze7.5 format
     hdr/img pairs.
@@ -286,6 +300,7 @@ def writeImage(image, filestem, datatype=None, targetdim=3):
           [images_and_names(subimage, substem, targetdim)\
            for subimage,substem in zip(subimages, substems)])
 
+    if targetdim is None: targetdim = image.ndim
     for subimage, substem in images_and_names(image, filestem, targetdim):
         AnalyzeWriter(subimage, datatype=datatype).write(substem)
 
