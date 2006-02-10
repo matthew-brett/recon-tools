@@ -1,4 +1,6 @@
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, Complex32
+import pylab
+from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
+     Complex32, asarray
 
 #-----------------------------------------------------------------------------
 def get_dims(data):
@@ -63,7 +65,7 @@ class BaseImage (object):
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
 
     #-------------------------------------------------------------------------
-    def concatenate(image, axis=0):
+    def concatenate(self, image, axis=0, newdim=False):
         self_sizes = (self.xsize, self.ysize, self.zsize)
         image_sizes = (image.xsize, image.ysize, image.zsize)
 
@@ -73,14 +75,20 @@ class BaseImage (object):
               "cannot concatenate images with different pixel sizes: %s != %s"%\
               (self_sizes, image_sizes))
 
-        self.setData(concatenate((self.data, image.data), axis))
+        newdata = newdim and asarray((self.data, image.data) or\
+                    pylab.concatenate((self.data, image.data), axis))
+        return self._subimage(newdata)
+
+    #-------------------------------------------------------------------------
+    def _subimage(self, data):
+        return BaseImage(data,
+          self.xsize, self.ysize, self.zsize, self.tsize,
+          self.x0, self.y0, self.z0)
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
-        ##!! Need to fix sizes and locations here !!##
-        return BaseImage(self.data[subnum],
-          self.xsize, self.ysize, self.zsize, self.tsize,
-          self.x0, self.y0, self.z0)
+        ##!! Need to fix locations here !!##
+        return self._subimage(self.data[subnum])
 
     #-------------------------------------------------------------------------
     def subImages(self):
