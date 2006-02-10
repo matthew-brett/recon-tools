@@ -13,8 +13,8 @@ flip_slices=False
 
 [InverseFFT]
 
-#[Rot90]
-
 [ComputeFieldMap]
+
+#[Rot90]
 
 [ViewImage]
