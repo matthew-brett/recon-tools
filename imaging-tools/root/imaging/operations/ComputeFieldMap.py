@@ -1,12 +1,37 @@
-#import file_io
-from Numeric import *
+from pylab import empty, ones, Float32, Complex32, sum, multiply, pi
 from LinearAlgebra import *
 import math
 from sliceview import sliceview
-from imaging.util import exec_cmd, unwrap_phase
+from imaging.imageio import writeImage
+from imaging.util import unwrap_phase, compute_fieldmap
 from imaging.analyze import writeImage
-from imaging.operations import Operation, Parameter
+from imaging.operations import Operation
 
+#-----------------------------------------------------------------------------
+def checkerboard(rows, cols):
+    checkerboard = empty((rows,cols), Float32)
+    line = zeros(cols, Float32)
+    for x in xrange(cols): line[x] = x%2 and 1 or -1
+    for y in xrange(rows): checkerboard[y] = y%2 and line or -line
+    complex_mask = empty(checkerboard.shape, Complex32)
+    complex_mask.real = checkerboard
+    complex_mask.imag = -checkerboard
+    return complex_mask
+ 
+#-----------------------------------------------------------------------------
+def y_grating(rows, cols):
+    grating = empty((rows,cols), Float32)
+    row_of_ones = ones(cols, Float32)
+    for y in xrange(rows): grating[y] = y%2 and row_of_ones or -row_of_ones
+    complex_mask = empty(grating.shape, Complex32)
+    complex_mask.real = grating
+    complex_mask.imag = -grating
+    return complex_mask
+
+#-----------------------------------------------------------------------------
+def phase_offset(phase):
+    nvoxels = multiply.reduce(phase.shape)
+    return sum(phase.flat)/(nvoxels*2*pi)
 
 ##############################################################################
 class ComputeFieldMap (Operation):
@@ -14,29 +39,69 @@ class ComputeFieldMap (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
+
+        # Make sure it's an asems image
         if not hasattr(image._procpar, "asym_time"):
             self.log("No asym_time, can't compute field map.")
             return
+        asym_time = image._procpar.asym_time[1]
 
+        # Make sure there are at least two volumes
+        if image.tdim < 2:
+            self.log("Cannot calculate field map from only a single volume."\
+                     "  Must have at least two volumes.")
+            return
+
+        # Apply checkerboard
+        #chk = checkerboard(image.ydim, image.xdim)
+        #image.data *= chk
+
+        # Apply horizontal grating (horizontally constant,
+        # vertically alternating)
+        grate = y_grating(image.ydim, image.xdim)
+        image.data *= grate
+
+        # Unwrap phases.
+        unwrapped = unwrap_phase(image)
+
+        # Construct phase pairs
+        phase_pairs = []
+        unwrapped_vols = list(unwrapped.subImages())
+        for index, phasevol in enumerate(unwrapped_vols[1:]):
+            phase_pairs.append(
+              unwrapped_vols[index].concatenate(phasevol, newdim=True))
+            fmap = phasevol.data - unwrapped_vols[index].data
+            # does this need to be corrected for?
+            #offset = phase_offset(fmap)
+            fmap = (fmap/asym_time).astype(Complex32)
+            fmap_image = phasevol._subimage(fmap)
+            writeImage(fmap_image, "fieldmap-%d"%(index))
+            
+
+        # Compute field map for each phase pair
+        #fieldmaps = [compute_fieldmap(phasepair, asym_time, 1.)\
+        #             for phasepair in phase_pairs]
+        # Note: kludge alert!  asym_time should be an attribute of the image.
+        # No digging into the _procpar... Need to define interfaces for the
+        # different types of FidImages.
+
+        #sliceview(fieldmaps[0])
+ 
         # Get procpar info.
-        nvol = image.nvol
+        #nvol = image.nvol
         #asym_time = image._procpar.asym_time
         #print "asym_time:",asym_time
 
         # Create image filenames.
-        trange = range(nvol)
-        wrapped = ["wrapped_%04d.img"%t for t in trange]
-        phs_unwrapped = ["phs_unwrapped_%04d.img"%t for t in trange]
+        #trange = range(nvol)
+        #wrapped = ["wrapped_%04d.img"%t for t in trange]
+        #phs_unwrapped = ["phs_unwrapped_%04d.img"%t for t in trange]
         #fmap_files = ["fmap_%02d.img"%t for t in trange[:-1]]
         #pixshift_files = ["pixshift_%02d.img"%t for t in trange[:-1]]
         #fmap_file_fitted = "fmap_fitted.img"
         #phase_pair = "phase_pair.img"
         #phase_pair_hdr = "phase_pair.hdr"
 
-        # Unwrap phases.
-        unwrapped_volumes = [unwrap_phase(volume) for volume in image.data]
-        sliceview(unwrapped_volumes[0])
- 
         # Read header info and set for output.
         #hdr = file_io.read_header(wrapped[0])
         #xdim = hdr['xdim']
@@ -89,9 +154,9 @@ class ComputeFieldMap (Operation):
         #    file_io.write_analyze(fmap_file_fitted,fmap_hdr,fmap)
 
         # cleanup leftover files
-        sp = " "
-        exec_cmd("/bin/rm %s %s %s %s %s"%(
-          sp.join(wrapped), sp.join(phs_unwrapped), phase_pair))
+        #sp = " "
+        #exec_cmd("/bin/rm %s %s %s %s %s"%(
+        #  sp.join(wrapped), sp.join(phs_unwrapped), phase_pair))
 
         #======== Move this dwell time stuff into ProcParImageMixin =========
         # Determine dwell time.
