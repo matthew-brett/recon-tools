@@ -5,7 +5,7 @@ from Numeric import *
 import struct
 from Numeric import empty
 from FFT import inverse_fft
-from pylab import pi, mlab, fft, fliplr, zeros, fromstring
+from pylab import pi, mlab, fft, fliplr, zeros, fromstring, angle
 
 
 #-----------------------------------------------------------------------------
@@ -90,15 +90,34 @@ def median_filter(image, N):
 
 #-----------------------------------------------------------------------------
 def unwrap_phase(image):
-    from imaging.analyze import readImage, writeImage
-    wrapped_fname = "wrapped"
+    from imaging.imageio import readImage, writeImage
+    wrapped_fname = "wrapped_cmplx" 
     unwrapped_fname = "unwrapped"
-    writeImage(image, wrapped_fname)
-    exec_cmd("prelude --complex=%s.img --unwrap=%s.img -v -t 2000"%\
-      (wrapped_fname, unwrapped_fname))
-    unwrapped_image = readImage #AnalyzeImage(unwrapped_fname)
-    exec_cmd("/usr/bin/rm %s*"%wrapped_fname, unwrapped_fname)
+    writeImage(image, wrapped_fname, "analyze")
+    exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
+    unwrapped_image = readImage(unwrapped_fname, "analyze")
+    exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
     return unwrapped_image
+
+#-----------------------------------------------------------------------------
+def compute_fieldmap(phase_pair, asym_time, dwell_time):
+    """
+    Compute fieldmap using a time-series containing two unwrapped phase
+    volumes.
+    """
+    from imaging.imageio import readImage, writeImage
+    phasepair_fname = "phasepair"
+    fieldmap_fname = "fieldmap"
+    writeImage(phase_pair, phasepair_fname, "analyze")
+    pp = readImage(phasepair_fname, "analyze")
+    pp._dump_header()
+    exec_cmd("fugue -p %s --asym=%f --dwell=%f --savefmap=%s"%\
+        (phasepair_fname, asym_time, dwell_time, fieldmap_fname))
+    fieldmap = readImage(fieldmap_fname, "analyze")
+    exec_cmd("/bin/rm %s.* %s.*"%(fieldmap_fname, phasepair_fname))
+    return fieldmap
+
+
 
 #-----------------------------------------------------------------------------
 def exec_cmd(cmd, verbose=False, exit_on_error=False):
