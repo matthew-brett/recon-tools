@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle, normalize, pi
+from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle, normalize, pi, arange, meshgrid
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
@@ -235,6 +235,48 @@ class SlicePlot (FigureCanvas):
         self.data = data
         self.draw()
 
+    #def getColorbar(self):
+    #    ax = self.figure.colorbar(self.figure.axes[0].images[0],orientation='horizontal')
+        #ax_cpy[:] = ax
+        #self.figure.delaxes(ax)
+    #    return ax
+
+class ColorRange (FigureCanvas):
+
+    def __init__(self, dRange, cmap=cm.bone, norm=None):
+#    def __init__(self, ax, cmap=cm.bone, norm=None):
+        self.norm = None
+        fig = Figure(figsize = (5,1))
+        fig.add_axes((0.05, 0.3, 0.90, 0.6), label="Intensity Map")
+        #fig.add_axes(ax)
+        FigureCanvas.__init__(self, fig)
+        self.figure.axes[0].yaxis.set_visible(False)
+        self.cmap = cmap
+        self.draw()
+        self.setData(dRange, norm=norm)
+
+    def setData(self, dataRange, norm=None):
+        dMin, dMax = dataRange
+        ax = self.figure.axes[0]
+        r_pts = arange(dMin, dMax, (dMax-dMin)/128)
+        data, _ = meshgrid(r_pts, r_pts)
+        if len(ax.images) == 0:
+            ax.imshow(data[0:10,:], interpolation="nearest",
+              cmap=self.cmap, norm=self.norm, extent=(r_pts[0], r_pts[-1], 0, 1))
+        elif norm != self.norm:
+            ax.images[0] = AxesImage(ax, interpolation="nearest",
+              cmap=self.cmap, norm=self.norm, extent=(r_pts[0], r_pts[-1], 0, 1))
+        ax.images[0].set_data(data[0:10,:])
+        ax.xaxis.set_ticks(arange(r_pts[0], r_pts[-1], (r_pts[-1]-r_pts[0])/7))
+        self.data = data[0:10,:]
+        #self.figure.set_figsize_inches(figaspect(self.data))
+        #x_range = ax.xaxis.get_data_interval()
+        #x_range.val1().set(r_pts[0])
+        #x_range.val2().set(r_pts[-1])
+        #ax.set_xlim((dMin, dMax))
+        self.draw()
+
+        
 
 ##############################################################################
 class sliceview (gtk.Window):
@@ -249,7 +291,12 @@ class sliceview (gtk.Window):
         self.transform = iscomplex(data) and abs_xform or ident_xform
 
         # widget layout table
-        table = gtk.Table(2, 2)
+        table = gtk.Table(3, 2)
+
+        #button
+        #self.some_button = gtk.Button()
+        #self.some_button.set_size_request(400,50)
+        #table.attach(self.some_button, 0, 2, 2, 3)
 
         # control panel
         self.control_panel = ControlPanel(data.shape, dim_names, iscomplex(data))
@@ -274,6 +321,12 @@ class sliceview (gtk.Window):
         table.attach(self.sliceplot, 1, 2, 1, 2)
 
         self.updateDataRange()
+
+        # colorbar
+        self.cbar = ColorRange(self.sliceDataRange(), cmap=cmap)
+        #self.cbar = ColorRange(self.sliceplot.getColorbar(), cmap=cmap)
+        self.cbar.set_size_request(400,50)
+        table.attach(self.cbar, 1, 2, 2, 3)
 
         # main window
         gtk.Window.__init__(self)
@@ -310,8 +363,13 @@ class sliceview (gtk.Window):
         self.sliceplot.setData(self.getSlice(), norm=norm)
         self.rowplot.setData(self.getRow())
         self.colplot.setData(self.getCol())
+        self.cbar.setData(self.sliceDataRange(), norm=norm)
 
     #-------------------------------------------------------------------------
+    def sliceDataRange(self):
+        return amin(self.getSlice().flat), amax(self.getSlice().flat)
+
+    #------------------------------------------------------------------------- 
     def updateDataRange(self):
         flat_data = self.transform(self.data.flat)
         data_min = amin(flat_data)
