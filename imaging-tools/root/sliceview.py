@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle, normalize, pi, arange, meshgrid
+from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle,\
+     normalize, pi, arange, meshgrid, ravel, ones, outerproduct, floor
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
@@ -245,9 +246,9 @@ class ColorRange (FigureCanvas):
 
     def __init__(self, dRange, cmap=cm.bone, norm=None):
 #    def __init__(self, ax, cmap=cm.bone, norm=None):
-        self.norm = None
+        #self.norm = None
         fig = Figure(figsize = (5,1))
-        fig.add_axes((0.05, 0.3, 0.90, 0.6), label="Intensity Map")
+        fig.add_axes((0.05, 0.3, 0.85, 0.6), label="Intensity Map")
         #fig.add_axes(ax)
         FigureCanvas.__init__(self, fig)
         self.figure.axes[0].yaxis.set_visible(False)
@@ -256,27 +257,55 @@ class ColorRange (FigureCanvas):
         self.setData(dRange, norm=norm)
 
     def setData(self, dataRange, norm=None):
+        self.norm = norm
         dMin, dMax = dataRange
         ax = self.figure.axes[0]
-        r_pts = arange(dMin, dMax, (dMax-dMin)/128)
-        data, _ = meshgrid(r_pts, r_pts)
-        if len(ax.images) == 0:
-            ax.imshow(data[0:10,:], interpolation="nearest",
-              cmap=self.cmap, norm=self.norm, extent=(r_pts[0], r_pts[-1], 0, 1))
-        elif norm != self.norm:
-            ax.images[0] = AxesImage(ax, interpolation="nearest",
-              cmap=self.cmap, norm=self.norm, extent=(r_pts[0], r_pts[-1], 0, 1))
+        #make decently smooth gradient, try to include end-point
+        r_pts = arange(dMin, dMax+(dMax-dMin)/127, (dMax-dMin)/127)
+        data = outerproduct(ones(5),r_pts)
+        ax.clear()
+        ax.imshow(data[0:10,:], interpolation="nearest",
+              cmap=self.cmap, norm=norm, extent=(r_pts[0], r_pts[-1], 0, 1))
         ax.images[0].set_data(data[0:10,:])
         ax.xaxis.set_ticks(arange(r_pts[0], r_pts[-1], (r_pts[-1]-r_pts[0])/7))
         self.data = data[0:10,:]
-        #self.figure.set_figsize_inches(figaspect(self.data))
-        #x_range = ax.xaxis.get_data_interval()
-        #x_range.val1().set(r_pts[0])
-        #x_range.val2().set(r_pts[-1])
-        #ax.set_xlim((dMin, dMax))
         self.draw()
 
-        
+class StatusFrame (gtk.Frame):
+
+    def __init__(self):
+        gtk.Frame.__init__(self)
+        table = gtk.Table(2,2)
+        #vbox = gtk.VBox()
+        # pixel value
+        self.pix_stat = gtk.Statusbar()
+        table.attach(self.pix_stat, 1, 2, 0, 1)
+        self.pix_stat.set_size_request(160,25)
+
+        # neighborhood avg
+        self.av_stat = gtk.Statusbar()
+        table.attach(self.av_stat, 1, 2, 1, 2)
+        self.av_stat.set_size_request(160,25)
+
+        # neighborhood size selection (eg '9x9')
+        self.ent = gtk.Entry(3)
+        table.attach(self.ent, 0, 1, 0, 2)
+        self.ent.set_size_request(40,30)
+        #vbox.pack_start(self.status_bar, False, False, 0)
+        #vbox.pack_start(self.ent, False, False, 0)
+        self.context_id = self.pix_stat.get_context_id("Statusbar")
+        self.add(table)
+        self.show_all()
+        #self.add(vbox)
+        #self.status_bar.show()
+        #self.ent.show()
+
+    
+    def pop_item(self):
+        self.pix_stat.pop(self.context_id)
+
+    def push_item(self, buf):
+        self.pix_stat.push(self.context_id, buf)
 
 ##############################################################################
 class sliceview (gtk.Window):
@@ -317,16 +346,24 @@ class sliceview (gtk.Window):
 
         # slice image
         self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap)
+        self.sliceplot.mpl_connect('button_press_event', self.sliceClickHandler)
         self.sliceplot.set_size_request(400, 400)
         table.attach(self.sliceplot, 1, 2, 1, 2)
 
         self.updateDataRange()
+
+        # status
+        self.statbar = StatusFrame()
+        self.statbar.set_size_request(200,50)
+        table.attach(self.statbar, 0, 1, 2, 3)
 
         # colorbar
         self.cbar = ColorRange(self.sliceDataRange(), cmap=cmap)
         #self.cbar = ColorRange(self.sliceplot.getColorbar(), cmap=cmap)
         self.cbar.set_size_request(400,50)
         table.attach(self.cbar, 1, 2, 2, 3)
+
+        
 
         # main window
         gtk.Window.__init__(self)
@@ -367,7 +404,8 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def sliceDataRange(self):
-        return amin(self.getSlice().flat), amax(self.getSlice().flat)
+        flatSlice = ravel(self.getSlice())
+        return amin(flatSlice), amax(flatSlice)
 
     #------------------------------------------------------------------------- 
     def updateDataRange(self):
@@ -396,6 +434,14 @@ class sliceview (gtk.Window):
         elif adj.dim_num == col_dim_num: self.updateCol()
         else: self.updateSlice()
 
+    def sliceClickHandler(self, event):
+        if not (event.xdata and event.ydata):
+            buf = "clicked outside axes"
+        else:
+            buf = "pix val: %f"%self.getSlice()[int(event.xdata), int(event.ydata)]
+            
+        self.statbar.pop_item()
+        self.statbar.push_item(buf)
 
 ##############################################################################
 if __name__ == "__main__":
