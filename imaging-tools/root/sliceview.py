@@ -311,9 +311,9 @@ class StatusFrame (gtk.Frame):
         gtk.Frame.__init__(self)
         table = gtk.Table(2,2)
         # pixel value
-        self.pix_stat = gtk.Statusbar()
-        table.attach(self.pix_stat, 1, 2, 0, 1)
-        self.pix_stat.set_size_request(160,25)
+        self.px_stat = gtk.Statusbar()
+        table.attach(self.px_stat, 1, 2, 0, 1)
+        self.px_stat.set_size_request(160,25)
 
         # neighborhood avg
         self.av_stat = gtk.Statusbar()
@@ -327,26 +327,54 @@ class StatusFrame (gtk.Frame):
         self.ent.set_size_request(40,30)
 
         
-        self.pix_contxt = self.pix_stat.get_context_id("Pixel Value")
-        self.avg_contxt = self.av_stat.get_context_id("Neighborhood Avg")
+        self.px_context = self.px_stat.get_context_id("Pixel Value")
+        self.av_context = self.av_stat.get_context_id("Neighborhood Avg")
         # default area to average
         self.ent.set_text('1x1')
         self.add(table)
         self.show_all()
 
     #-------------------------------------------------------------------------
+    def report(self, event, data):
+        if not (event.xdata and event.ydata):
+            avbuf = pxbuf = "clicked outside axes"
+        else:
+            y, x = int(event.ydata), int(event.xdata)
+            pxbuf = "pix val: %f"%data[y, x]
+            avbuf = "%ix%i avg: %s"%self.squareAvg(y, x, data)
+        
+        self.pop_items()
+        self.push_items(pxbuf, avbuf)
+
+    #-------------------------------------------------------------------------
+    def squareAvg(self, y, x, data):
+        areaStr = self.getTxt()
+        #box is defined +/-yLim rows and +/-xLim cols
+        #if for some reason areaStr was entered wrong, default to (1, 1)
+        yLim, xLim = len(areaStr)==3 and (int(areaStr[0]), int(areaStr[2])) or (1, 1)
+        if y < yLim or x < xLim or y+yLim >= data.shape[0] or x+xLim >= data.shape[1]:
+            return (yLim, xLim, "outOfRange")
+
+        indices = fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim), (yLim*2+1, xLim*2+1))
+        scale = indices.shape[0]*indices.shape[1]
+        av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale, indices.flat))
+        
+        #return box dimensions and 7 significant digits of average
+        return (yLim, xLim, str(av)[0:8])
+
+    #-------------------------------------------------------------------------
     def getTxt(self):
         return self.ent.get_text()
 
     #-------------------------------------------------------------------------    
-    def pop_item(self, sbar_id):
-        sbar, context_id = sbar_id == 'avg' and (self.av_stat, self.avg_contxt) or (self.pix_stat, self.pix_contxt)
-        sbar.pop(context_id)
+    def pop_items(self):
+        self.av_stat.pop(self.av_context)
+        self.px_stat.pop(self.px_context)
 
     #-------------------------------------------------------------------------
-    def push_item(self, sbar_id, buf):
-        sbar, context_id = sbar_id == 'avg' and (self.av_stat, self.avg_contxt) or (self.pix_stat, self.pix_contxt)
-        sbar.push(context_id, buf)
+    def push_items(self, pxbuf, avbuf):
+        self.av_stat.push(self.av_context, avbuf)
+        self.px_stat.push(self.px_context, pxbuf)
 
 
 ##############################################################################
@@ -480,38 +508,9 @@ class sliceview (gtk.Window):
         self.updateSlice()
 
     #-------------------------------------------------------------------------
-    
-    #I want to move a lot of this action into the Status widget
     def sliceClickHandler(self, event):
-        if not (event.xdata and event.ydata):
-            avbuf = pbuf = "clicked outside axes"
-        else:
-            y, x = int(event.ydata), int(event.xdata)
-            pbuf = "pix val: %f"%self.getSlice()[y, x]
-            avbuf = "%ix%i avg: %s"%self.squareAvg(y, x, self.status.getTxt())
+        self.status.report(event, self.getSlice())
         
-        self.status.pop_item('pix')
-        self.status.push_item('pix', pbuf)
-        self.status.pop_item('avg')
-        self.status.push_item('avg', avbuf)
-
-    #-------------------------------------------------------------------------
-    def squareAvg(self, y, x, areaStr):
-        #box is defined +/-yLim rows and +/-xLim cols
-        
-        #if for some reason areaStr was entered wrong, default to (1, 1)
-        yLim, xLim = len(areaStr)==3 and (int(areaStr[0]), int(areaStr[2])) or (1, 1)
-        data = self.getSlice()
-        if y < yLim or x < xLim or y+yLim >= data.shape[0] or x+xLim >= data.shape[1]:
-            return (yLim, xLim, "outOfRange")
-
-        indices = fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim), (yLim*2+1, xLim*2+1))
-        scale = indices.shape[0]*indices.shape[1]
-        av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale, indices.flat))
-        
-        #return box dimensions and 7 significant digits of average
-        return (yLim, xLim, str(av)[0:8])
-
     #------------------------------------------------------------------------- 
     def setNorm(self):
         scale = -0.5*(self.conLevel-1.0) + 1.0
