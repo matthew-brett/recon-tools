@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import gtk
 from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle,\
-     normalize, pi, arange, meshgrid, ravel, ones, outerproduct, floor
+     normalize, pi, arange, meshgrid, ravel, ones, outerproduct, floor, fromfunction
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
@@ -90,6 +90,15 @@ class ControlPanel (gtk.Frame):
             main_vbox.pack_start(label, False, False, 0)
             main_vbox.pack_start(slider, False, False, 0)
 
+        # add a "contrast" slider
+        label = gtk.Label("Contrast")
+        label.set_alignment(0, 0.5)
+        self.c_slider = gtk.HScale(gtk.Adjustment(1.0, 0.05, 2.0, 0.05, 1))
+        self.c_slider.set_value_pos(gtk.POS_RIGHT)
+        self.c_slider.set_digits(2)
+        main_vbox.pack_start(label, False, False, 0)
+        main_vbox.pack_start(self.c_slider, False, False, 0)
+
         self.add(main_vbox)
 
     #-------------------------------------------------------------------------
@@ -105,7 +114,7 @@ class ControlPanel (gtk.Frame):
         self.slice_dims = (self.dimensions[-2][0], self.dimensions[-1][0])
 
     #-------------------------------------------------------------------------
-    def connect(self, spinner_handler, radio_handler, slider_handler):
+    def connect(self, spinner_handler, radio_handler, slider_handler, contrast_handler):
         # connect spinners
         self.row_spinner.get_adjustment().connect(
           "value-changed", spinner_handler)
@@ -118,6 +127,13 @@ class ControlPanel (gtk.Frame):
         # connect sliders
         for s in self.sliders:
             s.get_adjustment().connect("value_changed", slider_handler)
+
+        self.c_slider.get_adjustment().connect("value_changed", contrast_handler)
+
+
+    #-------------------------------------------------------------------------
+    def getContrastLevel(self):
+        return self.c_slider.get_adjustment().value
 
     #-------------------------------------------------------------------------
     def getDimIndex(self, dnum):
@@ -226,7 +242,7 @@ class SlicePlot (FigureCanvas):
               cmap=self.cmap, norm=self.norm)
         elif norm != self.norm:
             ax.images[0] = AxesImage(ax, interpolation="nearest",
-              cmap=self.cmap, norm=self.norm)
+              cmap=self.cmap, norm=norm)
         ax.images[0].set_data(data)
 
         self.norm = norm
@@ -236,47 +252,64 @@ class SlicePlot (FigureCanvas):
         self.data = data
         self.draw()
 
-    #def getColorbar(self):
-    #    ax = self.figure.colorbar(self.figure.axes[0].images[0],orientation='horizontal')
-        #ax_cpy[:] = ax
-        #self.figure.delaxes(ax)
-    #    return ax
 
+##############################################################################
 class ColorRange (FigureCanvas):
 
+    #-------------------------------------------------------------------------
     def __init__(self, dRange, cmap=cm.bone, norm=None):
-#    def __init__(self, ax, cmap=cm.bone, norm=None):
-        #self.norm = None
         fig = Figure(figsize = (5,1))
         fig.add_axes((0.05, 0.3, 0.85, 0.6), label="Intensity Map")
-        #fig.add_axes(ax)
         FigureCanvas.__init__(self, fig)
         self.figure.axes[0].yaxis.set_visible(False)
         self.cmap = cmap
         self.draw()
         self.setData(dRange, norm=norm)
 
+    #-------------------------------------------------------------------------
     def setData(self, dataRange, norm=None):
         self.norm = norm
         dMin, dMax = dataRange
         ax = self.figure.axes[0]
         #make decently smooth gradient, try to include end-point
-        r_pts = arange(dMin, dMax+(dMax-dMin)/127, (dMax-dMin)/127)
+        delta = (dMax-dMin)/127
+        r_pts = arange(dMin, dMax+delta, delta)
+        #sometimes forcing the end-point breaks
+        if len(r_pts) > 128:
+            r_pts = arange(dMin, dMax, delta)
         data = outerproduct(ones(5),r_pts)
+        # need to clear axes because axis Intervals weren't updating
         ax.clear()
-        ax.imshow(data[0:10,:], interpolation="nearest",
+        ax.imshow(data, interpolation="nearest",
               cmap=self.cmap, norm=norm, extent=(r_pts[0], r_pts[-1], 0, 1))
-        ax.images[0].set_data(data[0:10,:])
-        ax.xaxis.set_ticks(arange(r_pts[0], r_pts[-1], (r_pts[-1]-r_pts[0])/7))
-        self.data = data[0:10,:]
+        ax.images[0].set_data(data)
+
+        #set up tick marks
+        delta = (r_pts[-1] - r_pts[0])/7
+        eps = 0.1 * delta
+        tx = arange(r_pts[0], r_pts[-1], delta)
+        # if the last tick point is very far away from the end, add one more at the end
+        if (r_pts[-1] - tx[-1]) > .75*delta:
+            #there MUST be an easier way!
+            a = tx.tolist()
+            a.append(r_pts[-1])
+            tx = asarray(a)
+        # else if the last tick point is misleadingly close, replace it with the true endpoint
+        elif (r_pts[-1] - tx[-1]) > eps:
+            tx[-1] = r_pts[-1]
+        
+        ax.xaxis.set_ticks(tx)
+        self.data = data
         self.draw()
 
+
+##############################################################################
 class StatusFrame (gtk.Frame):
 
+    #-------------------------------------------------------------------------
     def __init__(self):
         gtk.Frame.__init__(self)
         table = gtk.Table(2,2)
-        #vbox = gtk.VBox()
         # pixel value
         self.pix_stat = gtk.Statusbar()
         table.attach(self.pix_stat, 1, 2, 0, 1)
@@ -287,30 +320,39 @@ class StatusFrame (gtk.Frame):
         table.attach(self.av_stat, 1, 2, 1, 2)
         self.av_stat.set_size_request(160,25)
 
-        # neighborhood size selection (eg '9x9')
+        # neighborhood size selection (eg '5x5', '3x4')
+        # these numbers refer to "radii", not box size
         self.ent = gtk.Entry(3)
         table.attach(self.ent, 0, 1, 0, 2)
         self.ent.set_size_request(40,30)
-        #vbox.pack_start(self.status_bar, False, False, 0)
-        #vbox.pack_start(self.ent, False, False, 0)
-        self.context_id = self.pix_stat.get_context_id("Statusbar")
+
+        
+        self.pix_contxt = self.pix_stat.get_context_id("Pixel Value")
+        self.avg_contxt = self.av_stat.get_context_id("Neighborhood Avg")
+        # default area to average
+        self.ent.set_text('1x1')
         self.add(table)
         self.show_all()
-        #self.add(vbox)
-        #self.status_bar.show()
-        #self.ent.show()
 
-    
-    def pop_item(self):
-        self.pix_stat.pop(self.context_id)
+    #-------------------------------------------------------------------------
+    def getTxt(self):
+        return self.ent.get_text()
 
-    def push_item(self, buf):
-        self.pix_stat.push(self.context_id, buf)
+    #-------------------------------------------------------------------------    
+    def pop_item(self, sbar_id):
+        sbar, context_id = sbar_id == 'avg' and (self.av_stat, self.avg_contxt) or (self.pix_stat, self.pix_contxt)
+        sbar.pop(context_id)
+
+    #-------------------------------------------------------------------------
+    def push_item(self, sbar_id, buf):
+        sbar, context_id = sbar_id == 'avg' and (self.av_stat, self.avg_contxt) or (self.pix_stat, self.pix_contxt)
+        sbar.push(context_id, buf)
+
 
 ##############################################################################
 class sliceview (gtk.Window):
-    mag_norm = normalize()
-    phs_norm = normalize(-pi, pi)
+    #mag_norm = normalize()
+    #phs_norm = normalize(-pi, pi)
 
     #-------------------------------------------------------------------------
     def __init__(self, data, dim_names=[], title="sliceview", cmap=cm.bone):
@@ -322,15 +364,10 @@ class sliceview (gtk.Window):
         # widget layout table
         table = gtk.Table(3, 2)
 
-        #button
-        #self.some_button = gtk.Button()
-        #self.some_button.set_size_request(400,50)
-        #table.attach(self.some_button, 0, 2, 2, 3)
-
         # control panel
         self.control_panel = ControlPanel(data.shape, dim_names, iscomplex(data))
         self.control_panel.connect(
-            self.spinnerHandler, self.radioHandler, self.sliderHandler)
+            self.spinnerHandler, self.radioHandler, self.sliderHandler, self.contrastHandler)
         self.control_panel.set_size_request(200, 200)
         table.attach(self.control_panel, 0, 1, 0, 1)
 
@@ -343,27 +380,30 @@ class sliceview (gtk.Window):
         self.colplot = ColPlot(self.getCol())
         self.colplot.set_size_request(200, 400)
         table.attach(self.colplot, 0, 1, 1, 2)
+        
+        # set up normilization BEFORE plotting images
+        # contrast level of 1.0 gives default normalization (changed by contrast slider)
+        self.conLevel = 1.0
+        self.norm = None
+        self.setNorm()
 
         # slice image
-        self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap)
+        self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap, norm=self.norm)
         self.sliceplot.mpl_connect('button_press_event', self.sliceClickHandler)
         self.sliceplot.set_size_request(400, 400)
         table.attach(self.sliceplot, 1, 2, 1, 2)
 
-        self.updateDataRange()
-
         # status
-        self.statbar = StatusFrame()
-        self.statbar.set_size_request(200,50)
-        table.attach(self.statbar, 0, 1, 2, 3)
+        self.status = StatusFrame()
+        self.status.set_size_request(200,50)
+        table.attach(self.status, 0, 1, 2, 3)
 
         # colorbar
         self.cbar = ColorRange(self.sliceDataRange(), cmap=cmap)
-        #self.cbar = ColorRange(self.sliceplot.getColorbar(), cmap=cmap)
         self.cbar.set_size_request(400,50)
         table.attach(self.cbar, 1, 2, 2, 3)
 
-        
+        self.updateDataRange()        
 
         # main window
         gtk.Window.__init__(self)
@@ -396,11 +436,11 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def updateSlice(self):
-        norm = self.transform == phs_xform and self.phs_norm or self.mag_norm
-        self.sliceplot.setData(self.getSlice(), norm=norm)
+        self.setNorm()
+        self.sliceplot.setData(self.getSlice(), norm=self.norm)
         self.rowplot.setData(self.getRow())
         self.colplot.setData(self.getCol())
-        self.cbar.setData(self.sliceDataRange(), norm=norm)
+        self.cbar.setData(self.sliceDataRange(), norm=self.norm)
 
     #-------------------------------------------------------------------------
     def sliceDataRange(self):
@@ -434,14 +474,56 @@ class sliceview (gtk.Window):
         elif adj.dim_num == col_dim_num: self.updateCol()
         else: self.updateSlice()
 
+    #-------------------------------------------------------------------------
+    def contrastHandler(self, adj):
+        self.conLevel = self.control_panel.getContrastLevel()
+        self.updateSlice()
+
+    #-------------------------------------------------------------------------
+    
+    #I want to move a lot of this action into the Status widget
     def sliceClickHandler(self, event):
         if not (event.xdata and event.ydata):
-            buf = "clicked outside axes"
+            avbuf = pbuf = "clicked outside axes"
         else:
-            buf = "pix val: %f"%self.getSlice()[int(event.xdata), int(event.ydata)]
-            
-        self.statbar.pop_item()
-        self.statbar.push_item(buf)
+            y, x = int(event.ydata), int(event.xdata)
+            pbuf = "pix val: %f"%self.getSlice()[y, x]
+            avbuf = "%ix%i avg: %s"%self.squareAvg(y, x, self.status.getTxt())
+        
+        self.status.pop_item('pix')
+        self.status.push_item('pix', pbuf)
+        self.status.pop_item('avg')
+        self.status.push_item('avg', avbuf)
+
+    #-------------------------------------------------------------------------
+    def squareAvg(self, y, x, areaStr):
+        #box is defined +/-yLim rows and +/-xLim cols
+        
+        #if for some reason areaStr was entered wrong, default to (1, 1)
+        yLim, xLim = len(areaStr)==3 and (int(areaStr[0]), int(areaStr[2])) or (1, 1)
+        data = self.getSlice()
+        if y < yLim or x < xLim or y+yLim >= data.shape[0] or x+xLim >= data.shape[1]:
+            return (yLim, xLim, "outOfRange")
+
+        indices = fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim), (yLim*2+1, xLim*2+1))
+        scale = indices.shape[0]*indices.shape[1]
+        av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale, indices.flat))
+        
+        #return box dimensions and 7 significant digits of average
+        return (yLim, xLim, str(av)[0:8])
+
+    #------------------------------------------------------------------------- 
+    def setNorm(self):
+        scale = -0.5*(self.conLevel-1.0) + 1.0
+        dMin, dMax = self.sliceDataRange()
+        # only scale the minimum value if it is below zero (?)
+        sdMin = dMin < 0 and dMin * scale or dMin
+        # if the norm scalings haven't changed, don't change norm
+        if self.norm and (sdMin, dMin*scale) == (self.norm.vmin, self.norm.vmax):
+            return
+        # else set it to an appropriate scaling
+        self.norm = self.transform == phs_xform and normalize(-pi*scale, pi*scale) or normalize(sdMin, scale*dMax)
+   
 
 ##############################################################################
 if __name__ == "__main__":
