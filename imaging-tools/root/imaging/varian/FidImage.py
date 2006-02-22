@@ -268,8 +268,6 @@ class FidImage (BaseImage, ProcParImageMixin):
         if fidformat is None:
           raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"\
             (fidfile.nblocks, fidfile.ntraces)
-        print "Fid Format:", fidformat
-
         # choose which method to use to read the volume based on the format
         volreader = {
           "compressed":   self._read_compressed_volume,
@@ -286,8 +284,9 @@ class FidImage (BaseImage, ProcParImageMixin):
            pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
 
-        needs_pe_reordering = \
-          fidformat not in ("epi2fid", "asems_ncsnn", "asems_nccnn")
+        #needs_pe_reordering = \
+        #  fidformat not in ("epi2fid", "asems_ncsnn", "asems_nccnn")
+        needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn")
         #needs_pe_reordering = fidformat not in ("epi2fid",)
 
         if needs_pe_reordering: self._load_petable()
