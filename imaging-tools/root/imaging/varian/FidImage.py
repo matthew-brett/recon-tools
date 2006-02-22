@@ -182,10 +182,10 @@ class FidImage (BaseImage, ProcParImageMixin):
             for slice in range(self.nslice):
                 for pe in range(pe_true_per_seg):
                     block = fidfile.getBlock(
-                      self.nslice*(self.nvol*(seg*pe_true_per_seg + pe) + vol)
-                      + slice)
+                        self.nslice*(self.nvol_true*(seg*pe_true_per_seg + pe) + vol)
+                        + slice)
                     volume[slice, seg, self.nav_per_seg+pe, :] = \
-                      complex_fromstring(block.getData(), self.raw_typecode)
+                                  complex_fromstring(block.getData(), self.raw_typecode) 
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
