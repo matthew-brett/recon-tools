@@ -26,7 +26,7 @@ class SegmentationCorrection (Operation):
         nav_phs = angle(inverse_fft(image.nav_data))
 
         # phase difference between ref navs and image navs
-        phsdiff = normalize_angle(ref_nav_phs - nav_phs)
+        phsdiff = ref_nav_phs - nav_phs
 
         # weight phase difference by the phase encode timing during each segment
         pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,NewAxis]
