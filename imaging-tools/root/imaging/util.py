@@ -5,7 +5,8 @@ from Numeric import *
 import struct
 from Numeric import empty
 from FFT import inverse_fft
-from pylab import pi, mlab, fft, fliplr, zeros, fromstring, angle
+from pylab import pi, mlab, fft, fliplr, zeros, fromstring, angle, frange,\
+  meshgrid, sqrt, exp, ones, empty
 
 
 #-----------------------------------------------------------------------------
@@ -40,22 +41,37 @@ def shift(matrix, axis, shift):
     matrix[:] = new
 
 #-----------------------------------------------------------------------------
-def shifted_fft(a):
-    tmp = a.copy()
-    shift_width = a.shape[-1]/2 - 1
-    #shift(tmp, 0, shift_width)
-    tmp = fft(tmp)
-    shift(tmp, 0, shift_width)
+def half_shift(matrix, dim=0):
+    tmp = matrix.copy()
+    shift(tmp, dim, matrix.shape[-1-dim]/2)
     return tmp
 
 #-----------------------------------------------------------------------------
-def shifted_inverse_fft(a):
-    tmp = a.copy()
-    shift_width = a.shape[-1]/2 + 1
-    shift(tmp, 0, shift_width)
-    tmp = inverse_fft(tmp)
-    #shift(tmp, 0, shift_width)
-    return tmp
+def shifted_fft(a): return half_shift(fft(a))
+
+#-----------------------------------------------------------------------------
+def shifted_inverse_fft(a): return inverse_fft(half_shift(a))
+
+#-----------------------------------------------------------------------------
+def checkerboard(rows, cols):
+    checkerboard = empty((rows,cols), Float32)
+    line = zeros(cols, Float32)
+    for x in xrange(cols): line[x] = x%2 and 1 or -1
+    for y in xrange(rows): checkerboard[y] = y%2 and line or -line
+    complex_mask = empty(checkerboard.shape, Complex32)
+    complex_mask.real = checkerboard
+    complex_mask.imag = -checkerboard
+    return complex_mask
+ 
+#-----------------------------------------------------------------------------
+def y_grating(rows, cols):
+    grating = empty((rows,cols), Float32)
+    row_of_ones = ones(cols, Float32)
+    for y in xrange(rows): grating[y] = y%2 and row_of_ones or -row_of_ones
+    complex_mask = empty(grating.shape, Complex32)
+    complex_mask.real = grating
+    complex_mask.imag = -grating
+    return complex_mask
 
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
