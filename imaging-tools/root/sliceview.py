@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 import gtk
 from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray, cm, angle,\
-     normalize, pi, arange, meshgrid, ravel, ones, outerproduct, floor, fromfunction
+     normalize, pi, arange, ravel, ones, outerproduct, floor, fromfunction, zeros
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 
@@ -271,12 +271,33 @@ class ColorRange (FigureCanvas):
         self.norm = norm
         dMin, dMax = dataRange
         ax = self.figure.axes[0]
-        #make decently smooth gradient, try to include end-point
-        delta = (dMax-dMin)/127
-        r_pts = arange(dMin, dMax+delta, delta)
-        #sometimes forcing the end-point breaks
-        if len(r_pts) > 128:
-            r_pts = arange(dMin, dMax, delta)
+
+        if dMin == dMax:
+            r_pts = zeros((128,))
+            tx = asarray([0])
+        else:
+            #make decently smooth gradient, try to include end-point
+            delta = (dMax-dMin)/127
+            r_pts = arange(dMin, dMax+delta, delta)
+            #sometimes forcing the end-point breaks
+            if len(r_pts) > 128:
+                r_pts = arange(dMin, dMax, delta)
+
+            #set up tick marks
+            delta = (r_pts[-1] - r_pts[0])/7
+            eps = 0.1 * delta
+            tx = arange(r_pts[0], r_pts[-1], delta)
+            # if the last tick point is very far away from the end, add one more at the end
+            if (r_pts[-1] - tx[-1]) > .75*delta:
+                #there MUST be an easier way!
+                a = tx.tolist()
+                a.append(r_pts[-1])
+                tx = asarray(a)
+            # else if the last tick point is misleadingly close, replace it with the true endpoint
+            elif (r_pts[-1] - tx[-1]) > eps:
+                tx[-1] = r_pts[-1]
+        
+
         data = outerproduct(ones(5),r_pts)
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
@@ -284,19 +305,6 @@ class ColorRange (FigureCanvas):
               cmap=self.cmap, norm=norm, extent=(r_pts[0], r_pts[-1], 0, 1))
         ax.images[0].set_data(data)
 
-        #set up tick marks
-        delta = (r_pts[-1] - r_pts[0])/7
-        eps = 0.1 * delta
-        tx = arange(r_pts[0], r_pts[-1], delta)
-        # if the last tick point is very far away from the end, add one more at the end
-        if (r_pts[-1] - tx[-1]) > .75*delta:
-            #there MUST be an easier way!
-            a = tx.tolist()
-            a.append(r_pts[-1])
-            tx = asarray(a)
-        # else if the last tick point is misleadingly close, replace it with the true endpoint
-        elif (r_pts[-1] - tx[-1]) > eps:
-            tx[-1] = r_pts[-1]
         
         ax.xaxis.set_ticks(tx)
         self.data = data
@@ -312,13 +320,22 @@ class StatusFrame (gtk.Frame):
         table = gtk.Table(2,2)
         # pixel value
         self.px_stat = gtk.Statusbar()
+        self.px_stat.set_has_resize_grip(False)
         table.attach(self.px_stat, 1, 2, 0, 1)
         self.px_stat.set_size_request(160,25)
 
         # neighborhood avg
         self.av_stat = gtk.Statusbar()
+        self.av_stat.set_has_resize_grip(False)
         table.attach(self.av_stat, 1, 2, 1, 2)
         self.av_stat.set_size_request(160,25)
+
+        # try to label entry box
+        #label = gtk.Label("Radius")
+        #label.set_alignment(0, 0.2)
+        #table.attach(label, 0, 1, 0, 2)
+        #label.set_size_request(10,45)
+        #label.set_line_wrap(True)
 
         # neighborhood size selection (eg '5x5', '3x4')
         # these numbers refer to "radii", not box size
@@ -330,18 +347,18 @@ class StatusFrame (gtk.Frame):
         self.px_context = self.px_stat.get_context_id("Pixel Value")
         self.av_context = self.av_stat.get_context_id("Neighborhood Avg")
         # default area to average
-        self.ent.set_text('1x1')
+        self.ent.set_text('3x3')
         self.add(table)
         self.show_all()
 
     #-------------------------------------------------------------------------
     def report(self, event, data):
         if not (event.xdata and event.ydata):
-            avbuf = pxbuf = "clicked outside axes"
+            avbuf = pxbuf = "  clicked outside axes"
         else:
             y, x = int(event.ydata), int(event.xdata)
-            pxbuf = "pix val: %f"%data[y, x]
-            avbuf = "%ix%i avg: %s"%self.squareAvg(y, x, data)
+            pxbuf = "  pix val: %f"%data[y, x]
+            avbuf = "  %ix%i avg: %s"%self.squareAvg(y, x, data)
         
         self.pop_items()
         self.push_items(pxbuf, avbuf)
@@ -513,7 +530,7 @@ class sliceview (gtk.Window):
         
     #------------------------------------------------------------------------- 
     def setNorm(self):
-        scale = -0.5*(self.conLevel-1.0) + 1.0
+        scale = -0.75*(self.conLevel-1.0) + 1.0
         dMin, dMax = self.sliceDataRange()
         # only scale the minimum value if it is below zero (?)
         sdMin = dMin < 0 and dMin * scale or dMin
