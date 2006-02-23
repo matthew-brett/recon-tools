@@ -1,19 +1,18 @@
 from FFT import inverse_fft
 from pylab import angle, conjugate, sin, cos, Complex32, fft, product, arange, reshape, take
 from imaging.operations import Operation
+from imaging.util import shift
 
 class UnbalPhaseCorrection (Operation):
 
     def run(self, image):
-        if len(image.ref_vols) < 1:
+        if not image.ref_data:
             self.log("No reference volume, quitting")
             return
         if len(image.ref_vols) > 1:
             self.log("Could be performing Balanced Phase Correction!")
-            refVol = image.ref_data[0]
-        else:
-            refVol = image.ref_data
 
+        refVol = image.ref_data[0]
         origShape = refVol.shape
         #get total number of rows in data set (across slices)    
         nrows = product(origShape)/origShape[-1]
@@ -29,5 +28,4 @@ class UnbalPhaseCorrection (Operation):
         #apply corrections
         image.data[:] = fft(inverse_fft(image.data)*correction).astype(Complex32)
 
-        #set ref data back to previous shape
-        refVol = reshape(refVol, origShape)
+        #no need to shift, already in correct order (why?)

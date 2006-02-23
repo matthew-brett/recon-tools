@@ -18,10 +18,11 @@ class SegmentationCorrection (Operation):
         if image.nseg < 2:
             self.log("Image is non-segmented, nothing to do.")
             return
+        refNav = image.ref_nav_data[0]
         pe_per_seg = image.n_pe_true/image.nseg
 
         # phase angle of inverse fft'd ref navs and image navs
-        ref_nav_phs = angle(inverse_fft(image.ref_nav_data))
+        ref_nav_phs = angle(inverse_fft(refNav))
         nav_phs = angle(inverse_fft(image.nav_data))
 
         # phase difference between ref navs and image navs

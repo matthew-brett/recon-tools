@@ -75,15 +75,16 @@ class FidImage (BaseImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def initializeData(self):
         "Allocate data matrices."
+        nrefs = len(self.ref_vols)
         self.data = zeros(
           (self.nvol, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
         self.nav_data = zeros(
           (self.nvol, self.nslice, self.nav_per_slice, self.n_fe_true),
           Complex32)
         self.ref_data = zeros(
-          (self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
+          (nrefs, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
         self.ref_nav_data = zeros(
-          (self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
+          (nrefs, self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
 
     #-------------------------------------------------------------------------
     def _load_petable(self):
@@ -329,8 +330,8 @@ class FidImage (BaseImage, ProcParImageMixin):
 
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:
-                self.ref_data[:] = ksp_image
-                self.ref_nav_data[:] = navigators
+                self.ref_data[vol] = ksp_image
+                self.ref_nav_data[vol] = navigators
             else:
                 self.data[vol-numrefs] = ksp_image
                 self.nav_data[vol-numrefs] = navigators

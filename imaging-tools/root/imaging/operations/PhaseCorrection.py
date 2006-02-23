@@ -13,10 +13,13 @@ class PhaseCorrection (Operation):
         if not image.ref_data:
             self.log("No reference data, nothing to do.")
             return
+        if len(image.ref_vols) > 1:
+            self.log("Could be performing Balanced Phase Correction!")
 
+        refVol = image.ref_data[0]                             
         # phase angle of inverse fft'd reference volume
-        ref_phs = angle(inverse_fft(image.ref_data))
-
+        ref_phs = angle(inverse_fft(refVol))
+        
         # apply correction to image data
         image.data = apply_phase_correction(image.data, -ref_phs)
 
