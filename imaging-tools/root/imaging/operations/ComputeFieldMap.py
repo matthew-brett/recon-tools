@@ -3,30 +3,10 @@ from LinearAlgebra import *
 import math
 from sliceview import sliceview
 from imaging.imageio import writeImage
-from imaging.util import unwrap_phase, compute_fieldmap
+from imaging.util import unwrap_phase, compute_fieldmap, y_grating
 from imaging.analyze import writeImage
 from imaging.operations import Operation
 
-#-----------------------------------------------------------------------------
-def checkerboard(rows, cols):
-    checkerboard = empty((rows,cols), Float32)
-    line = zeros(cols, Float32)
-    for x in xrange(cols): line[x] = x%2 and 1 or -1
-    for y in xrange(rows): checkerboard[y] = y%2 and line or -line
-    complex_mask = empty(checkerboard.shape, Complex32)
-    complex_mask.real = checkerboard
-    complex_mask.imag = -checkerboard
-    return complex_mask
- 
-#-----------------------------------------------------------------------------
-def y_grating(rows, cols):
-    grating = empty((rows,cols), Float32)
-    row_of_ones = ones(cols, Float32)
-    for y in xrange(rows): grating[y] = y%2 and row_of_ones or -row_of_ones
-    complex_mask = empty(grating.shape, Complex32)
-    complex_mask.real = grating
-    complex_mask.imag = -grating
-    return complex_mask
 
 #-----------------------------------------------------------------------------
 def phase_offset(phase):
