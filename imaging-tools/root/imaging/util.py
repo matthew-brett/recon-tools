@@ -42,8 +42,8 @@ def shift(matrix, axis, shift):
 #-----------------------------------------------------------------------------
 def shifted_fft(a):
     tmp = a.copy()
-    shift_width = a.shape[0]/2
-    shift(tmp, 0, shift_width)
+    shift_width = a.shape[-1]/2 - 1
+    #shift(tmp, 0, shift_width)
     tmp = fft(tmp)
     shift(tmp, 0, shift_width)
     return tmp
@@ -51,16 +51,36 @@ def shifted_fft(a):
 #-----------------------------------------------------------------------------
 def shifted_inverse_fft(a):
     tmp = a.copy()
-    shift_width = a.shape[0]/2
+    shift_width = a.shape[-1]/2 + 1
     shift(tmp, 0, shift_width)
     tmp = inverse_fft(tmp)
-    shift(tmp, 0, shift_width)
+    #shift(tmp, 0, shift_width)
     return tmp
+
+#-----------------------------------------------------------------------------
+def apply_phase_correction(image, phase):
+    corrector = cos(phase) + 1.j*sin(phase)
+    return fft(inverse_fft(image)*corrector).astype(image.typecode())
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
     "@return the given angle between -pi and pi"
     return a + where(a<-pi, 2.*pi, 0) + where(a>pi, -2.*pi, 0)
+
+#-----------------------------------------------------------------------------
+def fermi_filter(rows, cols, cutoff, trans_width):
+    """
+    @return: a Fermi filter kernel.
+    @param cutoff: distance from the center at which the filter drops to 0.5.
+      Units for cutoff are percentage of radius.
+    @param trans_width: width of the transition.  Smaller values will result
+      in a sharper dropoff.
+    """
+    row_end = (rows-1)/2.0; col_end = (cols-1)/2.0
+    row_vals = frange(-row_end, row_end)**2
+    col_vals = frange(-col_end, col_end)**2
+    X, Y = meshgrid(row_vals, col_vals)
+    return 1/(1 + exp((sqrt(X + Y) - cutoff*cols/2.0)/trans_width))
 
 #-----------------------------------------------------------------------------
 def median_filter(image, N):
