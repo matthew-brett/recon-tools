@@ -58,11 +58,13 @@ class ComputeFieldMap (Operation):
 
         # Apply horizontal grating (horizontally constant,
         # vertically alternating)
-        grate = y_grating(image.ydim, image.xdim)
-        image.data *= grate
+        #grate = y_grating(image.ydim, image.xdim)
+        #image.data *= grate
 
         # Unwrap phases.
         unwrapped = unwrap_phase(image)
+        #unwrapped = image
+        sliceview(unwrapped.data)
 
         # Construct phase pairs
         phase_pairs = []
