@@ -284,11 +284,10 @@ class FidImage (BaseImage, ProcParImageMixin):
            pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
 
-        #needs_pe_reordering = \
-        #  fidformat not in ("epi2fid", "asems_ncsnn", "asems_nccnn")
+        # determine if phase encodes need reordering
         needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn")
-        #needs_pe_reordering = fidformat not in ("epi2fid",)
 
+        # load phase encode table
         if needs_pe_reordering: self._load_petable()
 
         for vol in range(nvol_true):
@@ -335,9 +334,6 @@ class FidImage (BaseImage, ProcParImageMixin):
             else:
                 self.data[vol-numrefs] = ksp_image
                 self.nav_data[vol-numrefs] = navigators
-
-        # shift data for easier fft'ing later
-        shift(self.data, 0, n_fe_true/2)
 
         self.setData(self.data)
 
