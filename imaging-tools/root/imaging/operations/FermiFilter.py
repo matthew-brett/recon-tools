@@ -1,4 +1,4 @@
-from pylab import frange, meshgrid, exp, sqrt, Float32
+from pylab import Float32
 from imaging.operations import Operation, Parameter
 from imaging.util import fermi_filter
 
