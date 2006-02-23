@@ -2,7 +2,7 @@ from Numeric import empty, NewAxis
 from FFT import inverse_fft
 from pylab import mlab, pi, fft, floor, angle, where, amax, cos, sin, Float, Complex32
 from imaging.operations import Operation
-from imaging.util import normalize_angle
+from imaging.util import normalize_angle, shift, apply_phase_correction
 
 
 ##############################################################################
@@ -33,11 +33,5 @@ class SegmentationCorrection (Operation):
         theta[:,:,:pe_per_seg] = phsdiff[:,:,NewAxis,0]*pe_times
         theta[:,:,pe_per_seg:] = phsdiff[:,:,NewAxis,1]*pe_times
 
-        # Compute the phase correction.
-        correction = cos(theta) + 1.0j*sin(theta)
-
         # Apply the phase correction.
-        image.data = fft(inverse_fft(image.data)*correction).astype(Complex32)
-                            
-
-
+        image.data = apply_phase_correction(image.data, theta)

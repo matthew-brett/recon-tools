@@ -1,7 +1,8 @@
 from Numeric import empty
 from FFT import inverse_fft
-from pylab import mlab, angle, fft, cos, sin, Float, Complex32
+from pylab import mlab, angle, fft, cos, sin, Float, Complex32, asarray
 from imaging.operations import Operation
+from imaging.util import shift, apply_phase_correction
 
 
 ##############################################################################
@@ -16,8 +17,8 @@ class PhaseCorrection (Operation):
         # phase angle of inverse fft'd reference volume
         ref_phs = angle(inverse_fft(image.ref_data))
 
-        # compute phase correction
-        correction = cos(-ref_phs) + 1.j*sin(-ref_phs)
-
         # apply correction to image data
-        image.data = fft(inverse_fft(image.data)*correction).astype(Complex32)
+        image.data = apply_phase_correction(image.data, -ref_phs)
+
+        # put back in increasing frequency domain
+        shift(image.data, 0, image.data.shape[-1]/2)

@@ -9,8 +9,11 @@ class InverseFFT (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
+        n_pe, n_fe = image.data.shape[-2:]
         for volume in image.data:
             for slice in volume:
+                shift(slice, 0 ,n_fe/2) 
+                shift(slice, 1, n_pe/2)
                 slice[:] = inverse_fft2d(slice).astype(Complex32)
 
         n_pe, n_fe = image.data.shape[-2:]
