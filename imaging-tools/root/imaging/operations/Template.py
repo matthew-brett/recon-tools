@@ -1,23 +1,30 @@
 "This is a template module, which can be copied to build new operations"
-	
+
+#This file name is Template.py, found under root/imaging/operations
+
+#here I'm importing various definitions from outside of Python:	
 from imaging.operations import Operation, Parameter
 from pylab import reshape, arange, identity, matrixmultiply, inverse
 
-def doNothing(image, fprm, iprm):
+#I can define a helper function outside of run(image) if it makes
+#sense to do so:
+
+def doNothing(slice, fprm, iprm, xSize, ySize):
     """
     does a lot of nothing to data
+    @param slice: the 2D image
     @param fprm: a floating point number
     @param iprm: an integer number
-    @return: data, unchanged
+    @param xSize: # of columns in a slice
+    @param ySize: # of rows in a slice
+    @return: slice, unchanged
     """
-    xdim = image.xdim
-    ydim = image.ydim
    
     #giving some examples of working with arrays in Python
     #creating an identity matrix
-    id = identity(xdim)
+    id = identity(xSize)
     #creating a "column vector" [0 1 2 3 ... xdim-1]^T
-    b = reshape(arange(xdim), (xdim, 1))
+    b = reshape(arange(xSize), (xSize, 1))
     #in Python, be careful with your multiplications! If you say:
     #c = id*b
     #meaning to get a copy of b, you'd be surprised to get instead
@@ -40,12 +47,13 @@ def doNothing(image, fprm, iprm):
     little_id = inverse(big_id)
 	
     #can't do it on non-square matrices
-    if(ydim != xdim):
-        return image.data
+    if(ySize != xSize):
+        return slice
     #else return, NOTHING!
-    return matrixmultiply(id,image.data)
+    return matrixmultiply(id,slice)
     #done
-	
+
+#the following line declares a class, and from what class it inherits:	
 class Template (Operation):
     """
     A template for operations, with some pointers on Python math
@@ -54,18 +62,31 @@ class Template (Operation):
     @param iparm: an integer
     """
 
+    #the Parameter objects in params are all constructed with four
+    #elements: Parameter(name, type, default, description).
+    #I would skip these definitions if I weren't using parameters
+
+    #This params list is actually a Python "tuple". Examples:
+    # 3-tuple: (a, b, c); 2-tuple: (a, b); 1-tuple: (a,)
+    #The notation is not 100% obvious: be careful to add the
+    #trailing comma when defining only 1 Parameter!
+
     params=(
         Parameter(name="fparm", type="float", default=0.75,
                   description="A fractional number"),
         Parameter(name="iparm", type="int", default=4,
                   description="A whole number"))
 
+    #note the definition of run: the declaration MUST be this way 
     def run(self, image):
         # do something to image.data here...
 
+        (xSize, ySize) = (image.xdim, image.ydim)
         # a Python way of iterating through multiple dimensions
         for vol in image.data:
             for slice in vol:
-                image.data = doNothing(image, fparm, iparm)
-	
+                slice[:] = doNothing(slice, fparm, iparm, xSize, ySize)
+
+	# here the data is being changed in-place
+        # final note: the operation returns nothing
         # done

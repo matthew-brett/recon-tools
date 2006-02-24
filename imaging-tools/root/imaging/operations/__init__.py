@@ -21,7 +21,7 @@ class Parameter (object):
     Specifies a named, typed parameter for an Operation.  Is used for
     documentation and during config parsing.
     @cvar name: Text name of the parameter
-    @car type: Data type of the parameter
+    @car type: Data type of the parameter (can be str, bool, int, float, or complex)
     @cvar default: Default value 
     @cvar description: Optional description
     """

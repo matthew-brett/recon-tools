@@ -1,4 +1,6 @@
-from pylab import empty, ones, Float32, Complex32, sum, multiply, pi
+#from pylab import empty, ones, Float32, Complex32, sum, multiply, pi
+from pylab import ones, Float32, Complex32, multiply, pi
+from Numeric import empty, sum
 from LinearAlgebra import *
 import math
 from sliceview import sliceview

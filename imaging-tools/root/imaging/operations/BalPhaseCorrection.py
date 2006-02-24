@@ -3,11 +3,12 @@
 from FFT import inverse_fft
 from pylab import angle, conjugate, sin, cos, Complex32, fft
 from imaging.operations import Operation
+from imaging.util import shift
 
 class BalPhaseCorrection (Operation):
 
     def run(self, image):
-        if len(image.ref_vols) < 2:
+        if not image.ref_data or len(image.ref_vols) < 2:
             self.log("Not enough reference volumes, quitting.")
             return
 
@@ -20,4 +21,6 @@ class BalPhaseCorrection (Operation):
 
         #apply the correction in image space, take back to k space (correction volume
         #gets repeatedly multiplied to any volume in image.data)
-        image.data = fft(inverse_fft(image.data)*correction).astype(Complex32)
+        image.data[:] = fft(inverse_fft(image.data)*correction).astype(Complex32)
+
+        #shift(image.data, 0, image.data.shape[-1]/2)
