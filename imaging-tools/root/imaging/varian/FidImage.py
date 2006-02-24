@@ -145,6 +145,33 @@ class FidImage (BaseImage, ProcParImageMixin):
                     i += 1
 
     #-------------------------------------------------------------------------
+    #### A note for using FidFiles in all volume readers ####
+    #
+    # FidFiles and DataBlocks:
+    # The ONLY two things that should be understood about
+    # the low-level fid file handling are how a FidFile
+    # object addresses blocks, and how DataBlock objects
+    # yield data. Every fid file has a FID Header followed
+    # by a number (fidfile.nblocks) of data blocks. Each of
+    # these data blocks is then made out of a Block Header
+    # followed by a number (fidfile.ntraces) of traces.
+    # Every trace has a certain number of points, and will
+    # correspond to one phase encode line. How the volume
+    # is split up among the blocks in the fid file
+    # distinguishes the format of the file (see fidformat
+    # switching logic in loadData(self, datadir))
+    #
+    # How a FidFile addresses blocks:
+    #     block = fidfile.getBlock(block_number)
+    # This statement yields a DataBlock object which represents
+    # the (block_number+1)th block in the fid file
+    #
+    # How a DataBlock yields data:
+    #     data = block.getData()
+    # This statement returns all the data in the given block.
+    # The particular volume reader method knows where to
+    # put the block data into the volume it is constructing.
+    
     def _read_compressed_volume(self, fidfile, vol):
         """
         Reads one volume from a compressed FID file.
@@ -175,7 +202,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         """
         Reads one volume from an epi2fid FID file.
         @return: block of data with shape (nslice*n_pe, n_fe_true)
-        """        
+        """
+        # procpar indicates navigator lines, but none are read in? huh
         volume = empty(
           (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),Complex32)
         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
@@ -238,11 +266,11 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         ref_data: A rank 4 array containing time-domain reference scan data 
           (phase-encode gradients are kept at zero). This array is dimensioned 
-          as ref_data(nslice,n_pe_true,n_fe_true). 
+          as ref_data(numrefs, nslice,n_pe_true,n_fe_true). 
 
         ref_nav_data: A rank 4 array containing time-domain data for the 
           navigator echoes of the reference scan data which is dimensioned as 
-          ref_nav_data(nslice,nav_per_slice,n_fe_true).
+          ref_nav_data(numrefs, nslice,nav_per_slice,n_fe_true).
         """
         nav_per_slice = self.nav_per_slice
         n_pe = self.n_pe
@@ -258,7 +286,18 @@ class FidImage (BaseImage, ProcParImageMixin):
         # open fid file
         fidfile = FidFile(os.path.join(datadir, "fid")) 
 
-        # determine fid type using fid file attributes nblocks and ntraces
+        # Use a Python-style switch statement to determine fid
+        # type by looking at the block and trace distribution
+        # (see note preceeding volume reader methods for more)
+        # 1) a compressed file will have one block per volume.
+        # 2) an uncompressed file will have one block per slice
+        # 3) an epi2fid file will have one block for each pe line (discontiguously ordered)
+        # 4) an asems_ncsnn file will have ??
+        # 5) an asems_nccnn file will have ??
+        # ntraces is always how many pe lines are in a block
+        # eg, if one block contains a single slice, ntraces must
+        # be n_pe--this is the uncompressed case
+        
         fidformat = {
           (nvol_true, nslice*n_pe):        "compressed",
           (nvol_true*nslice, n_pe):        "uncompressed",
