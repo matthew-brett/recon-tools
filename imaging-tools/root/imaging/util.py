@@ -4,8 +4,8 @@ import os
 from Numeric import *
 import struct
 from Numeric import empty
-from FFT import inverse_fft
-from pylab import pi, mlab, fft, fliplr, zeros, fromstring, angle, frange,\
+from FFT import fft as _fft, inverse_fft as _ifft
+from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
   meshgrid, sqrt, exp, ones, empty
 
 
@@ -43,14 +43,19 @@ def shift(matrix, axis, shift):
 #-----------------------------------------------------------------------------
 def half_shift(matrix, dim=0):
     tmp = matrix.copy()
-    shift(tmp, dim, matrix.shape[-1-dim]/2)
+    shift(tmp, dim, matrix.shape[-1-dim]/2+1)
     return tmp
 
 #-----------------------------------------------------------------------------
-def shifted_fft(a): return half_shift(fft(a))
+def fft(a, shift=False):
+    f = _fft(a)
+    if shift: return half_shift(f)
+    else: return f
 
 #-----------------------------------------------------------------------------
-def shifted_inverse_fft(a): return inverse_fft(half_shift(a))
+def ifft(a, shift=False):
+    if shift: a = half_shift(a)
+    return _ifft(a)
 
 #-----------------------------------------------------------------------------
 def checkerboard(rows, cols):
@@ -74,9 +79,9 @@ def y_grating(rows, cols):
     return complex_mask
 
 #-----------------------------------------------------------------------------
-def apply_phase_correction(image, phase):
+def apply_phase_correction(image, phase, shift=False):
     corrector = cos(phase) + 1.j*sin(phase)
-    return fft(inverse_fft(image)*corrector).astype(image.typecode())
+    return fft(ifft(image,shift)*corrector,shift).astype(image.typecode())
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
