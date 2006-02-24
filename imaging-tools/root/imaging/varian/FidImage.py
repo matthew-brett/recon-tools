@@ -286,28 +286,58 @@ class FidImage (BaseImage, ProcParImageMixin):
         # open fid file
         fidfile = FidFile(os.path.join(datadir, "fid")) 
 
-        # Use a Python-style switch statement to determine fid
-        # type by looking at the block and trace distribution
-        # (see note preceeding volume reader methods for more)
-        # 1) a compressed file will have one block per volume.
-        # 2) an uncompressed file will have one block per slice
-        # 3) an epi2fid file will have one block for each pe line (discontiguously ordered)
-        # 4) an asems_ncsnn file will have ??
-        # 5) an asems_nccnn file will have ??
-        # ntraces is always how many pe lines are in a block
-        # eg, if one block contains a single slice, ntraces must
-        # be n_pe--this is the uncompressed case
+        #length of data portion of fid file (nblocks * bytes/block)
+        fidDataLen = fidfile.nblocks*fidfile.bbytes
+        #length of block header in bytes
+        blk_hdr = 28
         
-        fidformat = {
-          (nvol_true, nslice*n_pe):        "compressed",
-          (nvol_true*nslice, n_pe):        "uncompressed",
-          (nvol_true*nslice*n_pe_true, 1): "epi2fid",
-          (nvol_true*n_pe, nslice):        "asems_ncsnn",
-          (nvol_true*nslice*n_pe, 1):      "asems_nccnn"
-        }.get( (fidfile.nblocks, fidfile.ntraces) )
-        if fidformat is None:
-          raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"\
-            (fidfile.nblocks, fidfile.ntraces)
+        # this format has one block per ???
+        len_asems_ncsnn = nvol_true*n_pe*(blk_hdr + nslice*n_fe*self.datasize)
+        # this format has one block per ???
+        len_asems_nccnn = nvol_true*nslice*n_pe*(blk_hdr + n_fe*self.datasize)
+        # this format has one block per volume
+        len_compressed = nvol_true*(blk_hdr + nslice*n_pe*n_fe*self.datasize)
+        # this format has one block per slice
+        len_uncompressed = nvol_true*nslice*(blk_hdr + n_pe*n_fe*self.datasize)
+        # this format has one block per pe line (but in a weird order!)
+        len_epi2fid = nvol_true*nslice*(n_pe-self.nseg)*(blk_hdr + n_fe*self.datasize)
+
+        if len_compressed == fidDataLen:
+            fidformat = "compressed"
+        elif len_uncompressed == fidDataLen:
+            fidformat = "uncompressed"
+        elif len_epi2fid == fidDataLen:
+            fidformat = "epi2fid"
+        elif len_asems_ncsnn == fidDataLen:
+            fidformat = "asems_ncsnn"
+        elif len_asems_nccnn == fidDataLen:
+            fidformat = "asems_nccnn"
+        else:
+            raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"\
+                  (fidfile.nblocks, fidfile.ntraces)
+
+##         # Use a Python-style switch statement to determine fid
+##         # type by looking at the block and trace distribution
+##         # (see note preceeding volume reader methods for more)
+##         # 1) a compressed file will have one block per volume.
+##         # 2) an uncompressed file will have one block per slice
+##         # 3) an epi2fid file will have one block for each pe line (discontiguously ordered)
+##         # 4) an asems_ncsnn file will have ??
+##         # 5) an asems_nccnn file will have ??
+##         # ntraces is always how many pe lines are in a block
+##         # eg, if one block contains a single slice, ntraces must
+##         # be n_pe--this is the uncompressed case        
+
+##         Fidformat = {
+##           (Nvol_true, nslice*n_pe):        "compressed",
+##           (nvol_true*nslice, n_pe):        "uncompressed",
+##           (nvol_true*nslice*n_pe_true, 1): "epi2fid",
+##           (nvol_true*n_pe, nslice):        "asems_ncsnn",
+##           (nvol_true*nslice*n_pe, 1):      "asems_nccnn"
+##         }.get( (fidfile.nblocks, fidfile.ntraces) )
+##         if fidformat is None:
+##           raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"\
+##             (fidfile.nblocks, fidfile.ntraces)
         # choose which method to use to read the volume based on the format
         volreader = {
           "compressed":   self._read_compressed_volume,
