@@ -1,8 +1,7 @@
 from Numeric import empty, NewAxis
-from FFT import inverse_fft
-from pylab import mlab, pi, fft, floor, angle, where, amax, cos, sin, Float, Complex32
+from pylab import mlab, pi, floor, angle, where, amax, cos, sin, Float, Complex32
 from imaging.operations import Operation
-from imaging.util import normalize_angle, shift, apply_phase_correction
+from imaging.util import normalize_angle, ifft, apply_phase_correction
 
 
 ##############################################################################
@@ -18,15 +17,14 @@ class SegmentationCorrection (Operation):
         if image.nseg < 2:
             self.log("Image is non-segmented, nothing to do.")
             return
-        refNav = image.ref_nav_data[0]
         pe_per_seg = image.n_pe_true/image.nseg
 
         # phase angle of inverse fft'd ref navs and image navs
-        ref_nav_phs = angle(inverse_fft(refNav))
-        nav_phs = angle(inverse_fft(image.nav_data))
+        ref_nav_phs = angle(ifft(image.ref_nav_data[0], shift=True))
+        nav_phs = angle(ifft(image.nav_data, shift=True))
 
         # phase difference between ref navs and image navs
-        phsdiff = ref_nav_phs - nav_phs
+        phsdiff = normalize_angle(ref_nav_phs - nav_phs)
 
         # weight phase difference by the phase encode timing during each segment
         pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,NewAxis]
@@ -35,4 +33,4 @@ class SegmentationCorrection (Operation):
         theta[:,:,pe_per_seg:] = phsdiff[:,:,NewAxis,1]*pe_times
 
         # Apply the phase correction.
-        image.data = apply_phase_correction(image.data, theta)
+        image.data = apply_phase_correction(image.data, theta, shift=True)
