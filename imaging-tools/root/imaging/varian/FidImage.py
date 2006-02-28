@@ -39,8 +39,6 @@ class FidImage (BaseImage, ProcParImageMixin):
     of potentially useful image information that is freely accessible (due to
     Python's design), mainly assigned in the loadParams(...) and the
     loadData(...) methods.
-    
-    @cvar _procpar: holds the contents of the procpar file
     """
     #-------------------------------------------------------------------------
     def __init__(self, datadir, tr=None):
@@ -253,6 +251,48 @@ class FidImage (BaseImage, ProcParImageMixin):
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
+    def _get_fidformat(self, fidfile):
+        """
+        Determine fid format from the number of blocks per volumen and the
+        number of traces per block.  Known formats are:
+          compressed
+          uncompressed
+          epi2fid
+          asems_ncsnn
+          asems_nccnn
+        """
+        n_pe = self.n_pe
+        n_pe_true = self.n_pe_true
+        nslice =  self.nslice
+        nvol_true = self.nvol_true
+        nblocks = fidfile.nblocks
+        ntraces = fidfile.ntraces
+
+        # compressed format has one block per volume
+        if nblocks == 1 and ntraces == nslice*n_pe:
+            return "compressed"
+
+        # uncompressed format has one block per slice
+        elif nblocks == nvol_true*nslice and ntraces == n_pe:
+            return "uncompressed"
+
+        # epi2fid format has one block per phase encode (but in a weird order!)
+        elif nblocks == nvol_true*nslice*n_pe_true and ntraces == 1:
+            return "epi2fid"
+
+        # asems_ncsnn format has one block per ???
+        elif nblocks == nvol_true*n_pe and ntraces == nslice:
+            return "asems_ncsnn"
+
+        # asems_nccnn format has one block per ???
+        elif nblocks == nvol_true*nslice*n_pe and ntraces == 1:
+            return "asems_nccnn"
+
+        else:
+            raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"%\
+                  (nblocks, ntraces)
+
+    #-------------------------------------------------------------------------
     def loadData(self, datadir):
         """
         This method reads the data from a fid file into following VarianData
@@ -290,37 +330,9 @@ class FidImage (BaseImage, ProcParImageMixin):
         # open fid file
         fidfile = FidFile(os.path.join(datadir, "fid")) 
 
-        ##############################
-        ### Fid format is determined by the number of blocks and the number of
-        ### traces per block.
+        # determine fid format
+        fidformat = self._get_fidformat(fidfile)
 
-        # this format has one block per volume
-        blockstraces_compressed = (nvol_true, nslice*n_pe)
-        # this format has one block per slice
-        blockstraces_uncompressed = (nvol_true*nslice, n_pe)
-        # this format has one block per phase encode (but in a weird order!)
-        blockstraces_epi2fid = (nvol_true*nslice*n_pe_true, 1)
-        # this format has one block per ???
-        blockstraces_asems_ncsnn = (nvol_true*n_pe, nslice)
-        # this format has one block per ???
-        blockstraces_asems_nccnn = (nvol_true*nslice*n_pe, 1)
-
-        # determine fid format based on number of blocks and traces per block
-        blockstraces = (fidfile.nblocks, fidfile.ntraces)
-        if blockstraces_compressed == blockstraces:
-            fidformat = "compressed"
-        elif blockstraces_uncompressed == blockstraces:
-            fidformat = "uncompressed"
-        elif blockstraces_epi2fid == blockstraces:
-            fidformat = "epi2fid"
-        elif blockstraces_asems_ncsnn == blockstraces:
-            fidformat = "asems_ncsnn"
-        elif blockstraces_asems_nccnn == fidDataLen:
-            fidformat = "asems_nccnn"
-        else:
-            raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"%\
-                  blockstraces
-        print "fidformat is %s"%fidformat
         # choose volume reading method based on fid format
         volreader = {
           "compressed":   self._read_compressed_volume,
@@ -337,6 +349,7 @@ class FidImage (BaseImage, ProcParImageMixin):
            pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
         if time_reverse: print "time reversing"
+
         # determine if phase encodes need reordering
         needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn")
 
@@ -393,26 +406,25 @@ class FidImage (BaseImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def save(self, outfile, file_format, data_type):
         "Save the image data to disk."
-        data = self.data
+        from imaging import analyze
+
+        # convert to format-specific datatype constant
+        data_type = {
+          MAGNITUDE_TYPE: analyze.FLOAT,
+          COMPLEX_TYPE: analyze.COMPLEX
+        }[data_type]
 
         print "Saving to disk (%s format). Please Wait"%file_format
         if file_format == ANALYZE_FORMAT:
-            from imaging import analyze
-            dtypemap = {
-              MAGNITUDE_TYPE: analyze.FLOAT,
-              COMPLEX_TYPE: analyze.COMPLEX }
-            analyze.writeImage(self, outfile, dtypemap[data_type], 3)
+            analyze.writeImage(self, outfile, data_type, 3)
         elif file_format == FIDL_FORMAT:
             f_img = open("%s.4dfp.img" % (outfile), "w")
-            if data_type == MAGNITUDE_TYPE: data = abs(data)
+            if data_type == MAGNITUDE_TYPE: data = abs(self.data)
             for volume in data:
-                f_img.write(vol_transformer(volume).byteswapped().tostring())
+                f_img.write(volume.byteswapped().tostring())
         elif file_format == NIFTI_DUAL or file_format == NIFTI_SINGLE:
             from imaging import nifti
-            dtypemap = {
-              MAGNITUDE_TYPE: analyze.FLOAT,
-              COMPLEX_TYPE: analyze.COMPLEX }
-            nifti.writeImage(self, outfile, dtypemap[data_type], 3, file_format[6:])
+            nifti.writeImage(self, outfile, data_type, 3, file_format[6:])
         else: print "Unsupported output type: %s"%file_format
 
         # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!
