@@ -14,6 +14,8 @@ from imaging.varian.FidFile import FidFile
 FIDL_FORMAT = "fidl"
 VOXBO_FORMAT = "voxbo"
 ANALYZE_FORMAT = "analyze"
+NIFTI_DUAL = "nifti dual"
+NIFTI_SINGLE = "nifti single"
 MAGNITUDE_TYPE = "magnitude"
 COMPLEX_TYPE = "complex"
 
@@ -318,7 +320,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         else:
             raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"%\
                   blockstraces
-
+        print "fidformat is %s"%fidformat
         # choose volume reading method based on fid format
         volreader = {
           "compressed":   self._read_compressed_volume,
@@ -334,7 +336,7 @@ class FidImage (BaseImage, ProcParImageMixin):
           (fidformat=="uncompressed" and \
            pulse_sequence not in ("epidw", "epidw_se"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
-
+        if time_reverse: print "time reversing"
         # determine if phase encodes need reordering
         needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn")
 
@@ -405,6 +407,12 @@ class FidImage (BaseImage, ProcParImageMixin):
             if data_type == MAGNITUDE_TYPE: data = abs(data)
             for volume in data:
                 f_img.write(vol_transformer(volume).byteswapped().tostring())
+        elif file_format == NIFTI_DUAL or file_format == NIFTI_SINGLE:
+            from imaging import nifti
+            dtypemap = {
+              MAGNITUDE_TYPE: analyze.FLOAT,
+              COMPLEX_TYPE: analyze.COMPLEX }
+            nifti.writeImage(self, outfile, dtypemap[data_type], 3, file_format[6:])
         else: print "Unsupported output type: %s"%file_format
 
         # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!

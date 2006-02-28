@@ -3,7 +3,7 @@ from optparse import OptionParser, Option
 
 from imaging.tools import OrderedConfigParser
 from imaging.varian.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT,\
-  MAGNITUDE_TYPE, COMPLEX_TYPE, FidImage
+  NIFTI_SINGLE, NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, FidImage
 from imaging.operations import OperationManager, RunLogger
 
 
@@ -16,7 +16,7 @@ class Recon (OptionParser):
     """
 
     _opmanager = OperationManager()
-    output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT)
+    output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, NIFTI_DUAL, NIFTI_SINGLE)
     output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
     options = (
 
@@ -39,7 +39,9 @@ class Recon (OptionParser):
             help="""{%s}
             fidl: save floating point file with interfile and 4D analyze headers.
             analyze: Save individual image for each frame in analyze format.
-            voxbo: Save in tes format."""%("|".join(output_format_choices))),
+            voxbo: Save in tes format.
+            nifti dual: save nifti file in (hdr, img) pair.
+            nifti single: save nifti file in single-file format."""%("|".join(output_format_choices))),
 
           Option("-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar."),
@@ -149,6 +151,7 @@ class Recon (OptionParser):
         # Apply operations to the data
         for operation_class, args in options.operations:
             operation = operation_class(**args)
+            print "running %s"%operation_class
             operation.run(image)
             runlogger.logop(operation)
 
