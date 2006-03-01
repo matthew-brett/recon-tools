@@ -20,8 +20,11 @@ class SegmentationCorrection (Operation):
         pe_per_seg = image.n_pe_true/image.nseg
 
         # phase angle of inverse fft'd ref navs and image navs
-        ref_nav_phs = angle(ifft(image.ref_nav_data[0], shift=True))
-        nav_phs = angle(ifft(image.nav_data, shift=True))
+        #ref_nav_phs = angle(ifft(image.ref_nav_data[0], shift=True))
+        #nav_phs = angle(ifft(image.nav_data, shift=True))
+
+        ref_nav_phs = angle(ifft(image.ref_nav_data[0]))
+        nav_phs = angle(ifft(image.nav_data))
 
         # phase difference between ref navs and image navs
         phsdiff = normalize_angle(ref_nav_phs - nav_phs)
@@ -33,4 +36,5 @@ class SegmentationCorrection (Operation):
         theta[:,:,pe_per_seg:] = phsdiff[:,:,NewAxis,1]*pe_times
 
         # Apply the phase correction.
-        image.data = apply_phase_correction(image.data, theta, shift=True)
+        #image.data = apply_phase_correction(image.data, theta, shift=True)
+        image.data = apply_phase_correction(image.data, theta)

@@ -6,8 +6,7 @@ import struct
 from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones, empty
-
+  meshgrid, sqrt, exp, ones
 
 #-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
@@ -47,15 +46,20 @@ def half_shift(matrix, dim=0):
     return tmp
 
 #-----------------------------------------------------------------------------
-def fft(a, shift=False):
-    f = _fft(a)
-    if shift: return half_shift(f)
-    else: return f
+# from image-space to k-space in FE direction (per PE line)
+# in image-space: shift from (-t/2,t/2-1) to (0,t-1)
+# in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
+def fft(a):
+    f = _fft(half_shift(a))
+    return half_shift(f)
 
 #-----------------------------------------------------------------------------
-def ifft(a, shift=False):
-    if shift: a = half_shift(a)
-    return _ifft(a)
+# from k-space to image-space in FE direction (per PE line)
+# in k-space: shift from (-N/2,N/2-1) to (0,N/2) U (-(N/2-1),-w0)
+# in iamge-space: shift from (0,t-1) to (-t/2,t/2-1)
+def ifft(a):
+    f = half_shift(a)
+    return half_shift(_ifft(f))
 
 #-----------------------------------------------------------------------------
 def checkerboard(rows, cols):
@@ -79,9 +83,9 @@ def y_grating(rows, cols):
     return complex_mask
 
 #-----------------------------------------------------------------------------
-def apply_phase_correction(image, phase, shift=False):
+def apply_phase_correction(image, phase):
     corrector = cos(phase) + 1.j*sin(phase)
-    return fft(ifft(image,shift)*corrector,shift).astype(image.typecode())
+    return fft(ifft(image)*corrector).astype(image.typecode())
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):

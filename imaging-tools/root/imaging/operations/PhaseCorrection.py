@@ -16,7 +16,7 @@ class PhaseCorrection (Operation):
             self.log("Could be performing Balanced Phase Correction!")
 
         # phase angle of inverse fft'd reference volume
-        ref_phs = angle(ifft(image.ref_data[0], shift=True))
+        ref_phs = angle(ifft(image.ref_data[0]))
         
         # apply correction to image data
-        image.data = apply_phase_correction(image.data, -ref_phs, shift=True)
+        image.data = apply_phase_correction(image.data, -ref_phs)
