@@ -35,30 +35,20 @@ class FidImage (BaseImage, ProcParImageMixin):
     image, and a ProcParImageMixin, giving it access to the parsed data from
     the procpar file. Additionally, FidImage loads more specific volume data
     such as reference and navigator data. FidImage calls on the FidFile class
-    to interface with the actual data on-disk. FidImage contains a multitude
-    of potentially useful image information that is freely accessible (due to
-    Python's design), mainly assigned in the loadParams(...) and the
-    loadData(...) methods.
+    to interface with the actual data on-disk.
     """
     #-------------------------------------------------------------------------
     def __init__(self, datadir, tr=None):
-        self.loadParams(datadir, tr=tr)
+        ProcParImageMixin.__init__(self, datadir, tr=tr)
         self.initializeData()
         self.loadData(datadir)
-
-    #-------------------------------------------------------------------------
-    def loadParams(self, datadir, tr=None):
-        "calls superclass function, and potentially over-rides tr"
-        ProcParImageMixin.loadParams(self, datadir)
-
-        # manually override tr
-        if tr > 0: self.tr = tr
 
     #-------------------------------------------------------------------------
     def logParams(self):
         "Report scan parameters to stdout."
         print "Phase encode table: ", self.petable_name
         print "Pulse sequence: %s" % self.pulse_sequence
+        print "Spinecho: %s" % self.spinecho
         print "Number of volumes: %d" % self.nvol
         print "Number of slices: %d" % self.nslice
         print "Number of segments: %d" % self.nseg
@@ -122,12 +112,13 @@ class FidImage (BaseImage, ProcParImageMixin):
         for slice in range(nslice):
             for pe in range(n_pe_true):
                 seg = pe/pe_true_per_seg
-                if pulse_sequence in ('epidw','epidw_se'):
+                if pulse_sequence == 'epidw':
                     offset = slice*n_pe + (seg+1)*nav_per_seg
                 else:
                     offset = (slice + seg*nslice)*pe_per_seg \
                              - seg*pe_per_seg + (seg+1)*nav_per_seg
-                # Find location of the pe'th phase-encode line in acquisition order.
+                # Find location of the pe'th phase-encode line in acquisition
+                # order.
                 self.petable[i] = line.index(pe) + offset
                 i += 1
             
@@ -137,7 +128,7 @@ class FidImage (BaseImage, ProcParImageMixin):
             # appears to not work if nav_per_seg > 1 ?
             for slice in range(nslice):
                 for seg in range(nseg):
-                    if pulse_sequence in ('epidw','epidw_se'):
+                    if pulse_sequence == 'epidw':
                         offset = slice*n_pe + seg*pe_per_seg 
                     else:
                         offset = (slice + seg*nslice)*pe_per_seg
@@ -213,10 +204,10 @@ class FidImage (BaseImage, ProcParImageMixin):
             for slice in range(self.nslice):
                 for pe in range(pe_true_per_seg):
                     block = fidfile.getBlock(
-                        self.nslice*(self.nvol_true*(seg*pe_true_per_seg + pe) + vol)
-                        + slice)
+                      self.nslice*(self.nvol_true*(seg*pe_true_per_seg + pe)\
+                      + vol) + slice)
                     volume[slice, seg, self.nav_per_seg+pe, :] = \
-                                  complex_fromstring(block.getData(), self.raw_typecode) 
+                      complex_fromstring(block.getData(), self.raw_typecode) 
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
@@ -332,6 +323,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         # determine fid format
         fidformat = self._get_fidformat(fidfile)
+        print "fidformat=",fidformat
 
         # choose volume reading method based on fid format
         volreader = {
@@ -344,10 +336,12 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         # determine if time reversal needs to be performed
         time_reverse = \
-          (fidformat=="compressed" and pulse_sequence != "epi_se") or \
-          (fidformat=="uncompressed" and \
-           pulse_sequence not in ("epidw", "epidw_se"))
+          (fidformat=="compressed" and not(pulse_sequence == "epi"\
+           and self.spinecho)) or \
+          (fidformat=="uncompressed" and pulse_sequence != "epidw")
+        print "time_reverse = ",time_reverse
         time_rev = n_fe_true - 1 - arange(n_fe_true)
+        print "time_rev= ",time_rev
         if time_reverse: print "time reversing"
 
         # determine if phase encodes need reordering

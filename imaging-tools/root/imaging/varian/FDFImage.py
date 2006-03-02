@@ -16,8 +16,8 @@ class FDFImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def __init__(self, datadir):
-	self.datadir = datadir
-        self.loadParams(datadir)
+        self.datadir = datadir
+        ProcParImageMixin.__init__(self, datadir)
         self.loadData()
  
     #-------------------------------------------------------------------------

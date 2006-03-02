@@ -60,22 +60,27 @@ def cast( toktup ):
 ##############################################################################
 class ProcPar (StaticObjectDictMixin, dict):
     """
-    A read-only representation of the named records found in a Varian procpar file.
-    Record values can be accessed by record name in either dictionary style or object
-    attribute style.  A record value is either a single element or a tuple of elements.
-    Each element is either a string, int, or float.
+    A read-only representation of the named records found in a Varian procpar
+    file.  Record values can be accessed by record name in either dictionary
+    style or object attribute style.  A record value is either a single element
+    or a tuple of elements.  Each element is either a string, int, or float.
     """
 
     def __init__( self, filename ):
-        class foo: pass # just need a mutable object to hang the negative flag on
+        # just need a mutable object to hang the negative flag on
+        class foo: pass
         state = foo()
-        state.isneg = False # flag indicating when we've parse a negative sign
 
-        # stream of each element's first two items (tokenid and token) from the raw
-        # token stream returned by the tokenize module's generate_tokens function
-        tokens = imap( lambda t: t[:2], generate_tokens( file( filename ).readline ) )
+        # flag indicating when we've parse a negative sign
+        state.isneg = False
 
-        # filter out negative ops (but remember them in case they come before a number)
+        # stream of each element's first two items (tokenid and token) from
+        # the raw token stream returned by the tokenize module's
+        # generate_tokens function
+        tokens = imap(lambda t: t[:2], generate_tokens(file(filename).readline))
+
+        # filter out negative ops (but remember them in case they come before
+        # a number)
         def negfilter( toktup ):
             tokid, tok = toktup
             if tok == "-":
@@ -98,7 +103,8 @@ class ProcPar (StaticObjectDictMixin, dict):
             def __iter__( self ): return self
             def next( self ):
                 toks = advanceTo( tokens, tokids.NAME )
-                if not toks or not toks[-1][0] == tokids.NAME: raise StopIteration
+                if not toks or not toks[-1][0] == tokids.NAME:
+                    raise StopIteration
                 else: name = toks[-1][1]
                 rest = advanceTo( tokens, tokids.NEWLINE )
                 numvalues = int( tokens.next()[1] )
@@ -109,124 +115,181 @@ class ProcPar (StaticObjectDictMixin, dict):
 
 
 ##############################################################################
+class CachedReadOnlyProperty (property):
+    _id = 0
+    def __init__(self, getter, doc):
+        key = CachedReadOnlyProperty._id
+        def cached_getter(self):
+            if not hasattr(self, "_propvals"): self._propvals = {}
+            return self._propvals.setdefault(key, getter(self))
+        CachedReadOnlyProperty._id += 1
+        property.__init__(self, fget=cached_getter, doc=doc)
+
+
+##############################################################################
 class ProcParImageMixin (object):
     """
-    Knows how to extract basic Image parameters from a procpar file.
+    Knows how to extract basic MRIImage parameters from a Varian procpar file.
     
-    ProcParImageMixin keeps a local ProcPar object, and then redefines some ProcPar 
-    parameters into image parameters.
-    
-    @cvar _procpar: The ProcPar object, created with a path to a given procpar file
+    ProcParImageMixin keeps a local ProcPar object, and then redefines some
+    ProcPar parameters into image parameters.
     """
 
-    #-------------------------------------------------------------------------
-    def loadParams(self, datadir):
-        "Adapt procpar params into image parameters."
-        procpar = self._procpar = ProcPar(pjoin(datadir, "procpar"))
-        self.n_fe = procpar.np[0]
-        self.n_pe = procpar.nv[0]
-        self.petable_name = procpar.petable[0]
-        self.orient = procpar.orient[0]
-        pulse_sequence = procpar.pslabel[0]
+    n_fe = CachedReadOnlyProperty(lambda self: self._procpar.np[0], "")
 
-        if hasattr(procpar, "asym_time"):
-            self.asym_times = procpar.asym_time
-            self.nvol_true = len(self.asym_times)
-        else:
-            self.asym_times = ()
-            self.nvol_true = procpar.images[0]
+    n_fe_true = CachedReadOnlyProperty(lambda self: self.n_fe/2, "")
 
-        if procpar.get("spinecho", ("",))[0] == "y":
-            if pulse_sequence == 'epidw': pulse_sequence = 'epidw_se'
-            else: pulse_sequence = 'epi_se'
+    n_pe = CachedReadOnlyProperty(lambda self: self._procpar.nv[0], "")
 
-        # try using procpar.cntr or procpar.image to know which volumes are reference
+    n_pe_true = CachedReadOnlyProperty(
+        lambda self: self.n_pe - self.nav_per_slice, "")
+
+    orient = CachedReadOnlyProperty(lambda self: self._procpar.orient[0], "")
+
+    spinecho = CachedReadOnlyProperty(
+        lambda self: self._procpar.get("spinecho", ("f",))[0] == "y", "")
+
+    isepi = CachedReadOnlyProperty(
+        lambda self: self.pulse_sequence.find("epi") != -1, "")
+
+    def _get_pulse_sequence(self):
+        pslabel = self._procpar.pslabel[0]
+        if pslabel == "Vsparse": pslabel = "epidw"
+        elif self.spinecho and pslabel== 'epidw':
+            pslabel = "epi%dse%dk" % (self.n_pe, self.nseg)
+        return pslabel
+    pulse_sequence = CachedReadOnlyProperty(_get_pulse_sequence, "")
+
+    def _get_petable_name(self):
+        petable = self._procpar.petable[0]
+        if self.isepi and self.spinecho and petable.rfind('epidw') < 0:
+            petable = "epi%dse%dk" % (self.n_pe, self.nseg)
+        return petable
+    petable_name = CachedReadOnlyProperty(_get_petable_name, "")
+
+    asym_times = CachedReadOnlyProperty(
+        lambda self: getattr(self._procpar, "asym_time", ()), "")
+
+    nvol_true = CachedReadOnlyProperty(
+        lambda self: self.asym_times and len(self.asym_times) or\
+                     self._procpar.images[0], "")
+
+    def _get_is_imagevol(self):
+        # try using procpar.cntr or procpar.image to know which volumes are
+        # reference
+        procpar = self._procpar
         if hasattr(procpar, "cntr") and len(procpar.cntr) == self.nvol_true:
-            is_imagevol = procpar.cntr
+            return procpar.cntr
         elif hasattr(procpar, "image") and len(procpar.image) == self.nvol_true:
-            is_imagevol = procpar.image
-        else: is_imagevol = [1]*self.nvol_true
-        self.ref_vols = []
-        self.image_vols = []
-        for i, isimage in enumerate(is_imagevol):
-            if isimage: self.image_vols.append(i)
-            if not isimage: self.ref_vols.append(i)
-        self.nvol = self.nvol_true - len(self.ref_vols)
+            return procpar.image
+        else: return [1]*self.nvol_true
+    is_imagevol = CachedReadOnlyProperty(_get_is_imagevol, "")
 
-        # determine number of slices, thickness, and gap
-        if pulse_sequence == 'mp_flash3d':
-            self.nslice = procpar.nv2[0]
-            self.thk = 10.*procpar.lpe2[0]
-            slice_gap = 0
-        else:
-            slice_positions = procpar.pss
-            self.nslice = len(slice_positions)
-            self.thk = procpar.thk[0]
-            min = 10.*slice_positions[0]
-            max = 10.*slice_positions[-1]
-            nslice = self.nslice
-            if nslice > 1:
-                slice_gap = ((max - min + self.thk) - (nslice*self.thk))/(nslice - 1)
-            else:
-                slice_gap = 0
+    ref_vols = CachedReadOnlyProperty(
+        lambda self:\
+        [i for i, isimage in enumerate(self.is_imagevol) if not isimage], "")
 
-        # Determine the number of navigator echoes per segment.
-        self.nav_per_seg = self.n_pe%32 and 1 or 0
+    image_vols = CachedReadOnlyProperty(
+        lambda self:\
+        [i for i, isimage in enumerate(self.is_imagevol) if isimage], "")
 
-        # sequence-specific logic for determining pulse_sequence, petable and nseg
+    nvol = CachedReadOnlyProperty(
+        lambda self: self.nvol_true - len(self.ref_vols), "")
+
+    slice_positions = CachedReadOnlyProperty(
+        lambda self: 10.*asarray(self._procpar.pss), "")
+
+    def _get_slice_gap(self):
+        if self.pulse_sequence == "mp_flash3d" or self.nslice < 2: return 0.
+        spos = self.slice_positions
+        return ((max(spos) - min(spos) + self.thk)
+               - (self.nslice*self.thk))/(self.nslice - 1)
+    slice_gap = CachedReadOnlyProperty(_get_slice_gap, "")
+
+    nslice = CachedReadOnlyProperty(
+        lambda self: self.pulse_sequence == "mp_flash3d" and\
+                     self._procpar.nv2[0] or len(self.slice_positions), "")
+
+    thk = CachedReadOnlyProperty(
+        lambda self: self.pulse_sequence == "mp_flash3d" and\
+                     10.*self._procpar.lpe2[0] or self._procpar.thk[0], "")
+
+    nav_per_seg = CachedReadOnlyProperty(
+        lambda self: self.n_pe%32 and 1 or 0, "")
+
+    pe_per_seg = CachedReadOnlyProperty(lambda self: self.n_pe/self.nseg, "")
+
+    nav_per_slice = CachedReadOnlyProperty(
+        lambda self: self.nseg*self.nav_per_seg, "")
+
+    def _get_nseg(self):
         # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
         # Leon's "spare" sequence is really the EPI sequence with delay.
-        if(pulse_sequence in ('epi','tepi','sparse','spare')):
-            nseg = int(self.petable_name[-2])
-        elif(pulse_sequence in ('epidw','Vsparse')):
-            pulse_sequence = 'epidw'
-            nseg = int(self.petable_name[-1])
-        elif(pulse_sequence in ('epi_se','epidw_se')):
-            nseg = procpar.nseg[0]
-            if self.petable_name.rfind('epidw') < 0:
-                petable_name = "epi%dse%dk" % (self.n_pe, nseg)
-            else:
-                pulse_sequence = 'epidw'
-        elif(pulse_sequence == 'asems'):
-            nseg = 1
+        if self.pulse_sequence in ('epi','tepi','sparse','spare'):
+            return int(self.petable_name[-2])
+        elif self._procpar.pslabel[0] == 'Vsparse':
+            return int(self.petable_name[-1])
+        elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
+            return self._procpar.nseg[0]
+        elif self.pulse_sequence == 'asems': return 1
+        else: raise ValueError(
+              "Could not identify sequence: %s" % (pulse_sequence))
+    nseg = CachedReadOnlyProperty(_get_nseg, "")
+
+    tr = CachedReadOnlyProperty(lambda self: self.nseg*self._procpar.tr[0], "")
+
+    x0 = CachedReadOnlyProperty(lambda self: 0., "")
+
+    y0 = CachedReadOnlyProperty(lambda self: 0., "")
+
+    z0 = CachedReadOnlyProperty(lambda self: 0., "")
+
+    xsize = CachedReadOnlyProperty(
+        lambda self: 10.*float(self._procpar.lro[0])/self.n_fe_true, "")
+
+    ysize = CachedReadOnlyProperty(
+        lambda self: 10.*float(self._procpar.lpe[0])/self.n_pe_true, "")
+
+    zsize = CachedReadOnlyProperty(
+        lambda self: float(self.thk) + self.slice_gap, "")
+
+    tsize = CachedReadOnlyProperty(lambda self: self.tr, "")
+
+    datasize = CachedReadOnlyProperty(
+        lambda self: self._procpar.dp[0]=="y" and 4 or 2, "")
+
+    raw_typecode = CachedReadOnlyProperty(
+        lambda self: self._procpar.dp[0]=="y" and Int32 or Int16, "")
+
+    echo_factor = CachedReadOnlyProperty(
+        lambda self: 2.0*abs(self._procpar.gro[0])\
+                     *self._procpar.trise[0]/self._procpar.gmax[0], "")
+
+    def _get_echo_time(self):
+        if self.petable_name.find("alt") != -1:
+            return self._procpar.te[0] - self.echo_factor - self._procpar.at[0]
         else:
-            print "Could not identify sequence: %s" % (pulse_sequence)
-            sys.exit(1)
-
-        self.nseg = nseg
-        self.pulse_sequence = pulse_sequence
-
-        # this quiet_interval may need to be added to tr in some way...
-        #quiet_interval = procpar.get("dquiet", (0,))[0]
-        self.n_fe_true = self.n_fe/2
-        self.tr = nseg*procpar.tr[0]
-        self.nav_per_slice = nseg*self.nav_per_seg
-        self.n_pe_true =  self.n_pe - self.nav_per_slice
-        self.pe_per_seg = self.n_pe/nseg
-        self.x0 = 0.
-        self.y0 = 0.
-        self.z0 = 0.
-        self.xsize = 10.*float(procpar.lro[0])/self.n_pe_true
-        self.ysize = 10.*float(procpar.lpe[0])/self.n_fe_true
-        self.zsize = float(self.thk) + slice_gap
-        self.tsize = self.tr
-
-        self.datasize, self.raw_typecode = \
-          procpar.dp[0]=="y" and (4, Int32) or (2, Int16)
-
-        # calculate echo times
-        f = 2.0*abs(procpar.gro[0])*procpar.trise[0]/procpar.gmax[0]
-        self.echo_spacing = f + procpar.at[0]
-        if(self.petable_name.find("alt") >= 0):
-            self.echo_time = procpar.te[0] - f - procpar.at[0]
-        else:
-            self.echo_time = procpar.te[0] - \
+            return self._procpar.te[0] - \
               floor(self.pe_per_seg)/2.0*self.echo_spacing
+    echo_time = CachedReadOnlyProperty(_get_echo_time, "")
 
-        # calculate phase encode times
-        self.pe_times = asarray(
+    echo_spacing = CachedReadOnlyProperty(
+        lambda self: self.echo_factor + self._procpar.at[0], "")
+
+    pe_times = CachedReadOnlyProperty(
+        lambda self: asarray(
           [self.echo_time + pe*self.echo_spacing\
-           for pe in range(self.pe_per_seg)])
+           for pe in range(self.pe_per_seg)]), "")
+
+    # this quiet_interval may need to be added to tr in some way...
+    quiet_interval = CachedReadOnlyProperty(
+        lambda self: self._procpar.get("dquiet", (0,))[0], "")
+
+    #-------------------------------------------------------------------------
+    def __init__(self, datadir, tr=None):
+        procpar = self._procpar = ProcPar(pjoin(datadir, "procpar"))
+        # allow manual override of tr value
+        self._tr = tr
 
 
 ##############################################################################
