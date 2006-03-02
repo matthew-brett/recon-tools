@@ -227,13 +227,14 @@ class ProcParImageMixin (object):
         # Leon's "spare" sequence is really the EPI sequence with delay.
         if self.pulse_sequence in ('epi','tepi','sparse','spare'):
             return int(self.petable_name[-2])
-        elif self._procpar.pslabel[0] == 'Vsparse':
+        elif self._procpar.pslabel[0] in ('epidw', 'Vsparse') and\
+          not self.spinecho:
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
             return self._procpar.nseg[0]
         elif self.pulse_sequence == 'asems': return 1
         else: raise ValueError(
-              "Could not identify sequence: %s" % (pulse_sequence))
+              "Could not identify sequence: %s" % (self.pulse_sequence))
     nseg = CachedReadOnlyProperty(_get_nseg, "")
 
     tr = CachedReadOnlyProperty(lambda self: self.nseg*self._procpar.tr[0], "")
