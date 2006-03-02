@@ -269,7 +269,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         ntraces = fidfile.ntraces
 
         # compressed format has one block per volume
-        if nblocks == 1 and ntraces == nslice*n_pe:
+        if nblocks == nvol_true and ntraces == nslice*n_pe:
             return "compressed"
 
         # uncompressed format has one block per slice
