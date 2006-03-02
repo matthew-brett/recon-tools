@@ -16,7 +16,12 @@ class Recon (OptionParser):
     """
 
     _opmanager = OperationManager()
-    output_format_choices = (FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT, NIFTI_DUAL, NIFTI_SINGLE)
+    output_format_choices = (
+      FIDL_FORMAT,
+      VOXBO_FORMAT,
+      ANALYZE_FORMAT,
+      NIFTI_DUAL,
+      NIFTI_SINGLE)
     output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
     options = (
 
