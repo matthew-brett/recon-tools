@@ -339,9 +339,7 @@ class FidImage (BaseImage, ProcParImageMixin):
           (fidformat=="compressed" and not(pulse_sequence == "epi"\
            and self.spinecho)) or \
           (fidformat=="uncompressed" and pulse_sequence != "epidw")
-        print "time_reverse = ",time_reverse
         time_rev = n_fe_true - 1 - arange(n_fe_true)
-        print "time_rev= ",time_rev
         if time_reverse: print "time reversing"
 
         # determine if phase encodes need reordering
