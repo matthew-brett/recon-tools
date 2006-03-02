@@ -3,7 +3,6 @@ from pylab import ones, Float32, Complex32, multiply, pi
 from Numeric import empty, sum
 from LinearAlgebra import *
 import math
-from sliceview import sliceview
 from imaging.imageio import writeImage
 from imaging.util import unwrap_phase, compute_fieldmap, y_grating
 from imaging.analyze import writeImage
@@ -34,19 +33,8 @@ class ComputeFieldMap (Operation):
                      "  Must have at least two volumes.")
             return
 
-        # Apply checkerboard
-        #chk = checkerboard(image.ydim, image.xdim)
-        #image.data *= chk
-
-        # Apply horizontal grating (horizontally constant,
-        # vertically alternating)
-        #grate = y_grating(image.ydim, image.xdim)
-        #image.data *= grate
-
         # Unwrap phases.
         unwrapped = unwrap_phase(image)
-        #unwrapped = image
-        sliceview(unwrapped.data)
 
         # Construct phase pairs
         phase_pairs = []
@@ -136,11 +124,6 @@ class ComputeFieldMap (Operation):
         #    fmap = median_filter(fmap,3)
         #    fmap_hdr = file_io.create_hdr(xdim,ydim,zdim,1,xsize,ysize,zsize,1.,0,0,0,'Float',32,1.,'analyze',fmap_file_fitted,0)
         #    file_io.write_analyze(fmap_file_fitted,fmap_hdr,fmap)
-
-        # cleanup leftover files
-        #sp = " "
-        #exec_cmd("/bin/rm %s %s %s %s %s"%(
-        #  sp.join(wrapped), sp.join(phs_unwrapped), phase_pair))
 
         #======== Move this dwell time stuff into ProcParImageMixin =========
         # Determine dwell time.
