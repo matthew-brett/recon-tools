@@ -46,19 +46,53 @@ def half_shift(matrix, dim=0):
     return tmp
 
 #-----------------------------------------------------------------------------
+def fft_unpack(matrix, dim=0):
+    """
+    Unpack k-space data after fft.
+    
+    >>> packed = asarray([0, 1, 2, 3, 4, -3, -2, -1])
+    >>> fft_unpack(packed)
+    [-3,-2,-1, 0, 1, 2, 3, 4,]
+
+    >>> packed = asarray([0, 1, 2, 3, 4, -4, -3, -2, -1])
+    >>> fft_unpack(packed)
+    [-4,-3,-2,-1, 0, 1, 2, 3, 4,]
+    """
+    tmp = matrix.copy()
+    shift(tmp, dim, -(matrix.shape[-1-dim]/2 + 1))
+    return tmp
+ 
+#-----------------------------------------------------------------------------
+def ifft_pack(matrix, dim=0):
+    """
+    Pack k-space data before inverse fft.
+    
+    >>> unpacked = asarray([-3, -2, -1, 0, 1, 2, 3, 4])
+    >>> ifft_pack(unpacked)
+    [ 0, 1, 2, 3, 4,-3,-2,-1,]
+
+    >>> unpacked = asarray([-4, -3, -2, -1, 0, 1, 2, 3, 4])
+    >>> ifft_pack(unpacked)
+    [ 0, 1, 2, 3, 4,-4,-3,-2,-1,]
+    """
+    tmp = matrix.copy()
+    shift(tmp, dim, matrix.shape[-1-dim]/2 + 1)
+    return tmp
+    
+#-----------------------------------------------------------------------------
 # from image-space to k-space in FE direction (per PE line)
 # in image-space: shift from (-t/2,t/2-1) to (0,t-1)
 # in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
 def fft(a):
     f = _fft(half_shift(a))
-    return half_shift(f)
+    return fft_unpack(f)
 
 #-----------------------------------------------------------------------------
 # from k-space to image-space in FE direction (per PE line)
 # in k-space: shift from (-N/2,N/2-1) to (0,N/2) U (-(N/2-1),-w0)
 # in iamge-space: shift from (0,t-1) to (-t/2,t/2-1)
 def ifft(a):
-    f = half_shift(a)
+    f = ifft_pack(a)
     return half_shift(_ifft(f))
 
 #-----------------------------------------------------------------------------
@@ -162,8 +196,6 @@ def compute_fieldmap(phase_pair, asym_time, dwell_time):
     exec_cmd("/bin/rm %s.* %s.*"%(fieldmap_fname, phasepair_fname))
     return fieldmap
 
-
-
 #-----------------------------------------------------------------------------
 def exec_cmd(cmd, verbose=False, exit_on_error=False):
     "Execute unix command and handle errors."
@@ -175,3 +207,9 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
         print cmd
         print "Aborting procedure\n\n"
         if exit_on_error: sys.exit(1)
+
+
+#-----------------------------------------------------------------------------
+if __name__ == "__main__":
+    import doctest
+    doctest.testmod()
