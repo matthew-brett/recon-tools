@@ -11,14 +11,6 @@ from imaging.varian import tablib
 from imaging.varian.ProcPar import ProcPar, ProcParImageMixin
 from imaging.varian.FidFile import FidFile
 
-FIDL_FORMAT = "fidl"
-VOXBO_FORMAT = "voxbo"
-ANALYZE_FORMAT = "analyze"
-NIFTI_DUAL = "nifti dual"
-NIFTI_SINGLE = "nifti single"
-MAGNITUDE_TYPE = "magnitude"
-COMPLEX_TYPE = "complex"
-
 #-----------------------------------------------------------------------------
 def complex_fromstring(data, numtype):
     return fromstring(
@@ -394,29 +386,3 @@ class FidImage (BaseImage, ProcParImageMixin):
                 self.nav_data[vol-numrefs] = navigators
 
         self.setData(self.data)
-
-    #-------------------------------------------------------------------------
-    def save(self, outfile, file_format, data_type):
-        "Save the image data to disk."
-        from imaging import analyze
-
-        # convert to format-specific datatype constant
-        data_type = {
-          MAGNITUDE_TYPE: analyze.FLOAT,
-          COMPLEX_TYPE: analyze.COMPLEX
-        }[data_type]
-
-        print "Saving to disk (%s format). Please Wait"%file_format
-        if file_format == ANALYZE_FORMAT:
-            analyze.writeImage(self, outfile, data_type, 3)
-        elif file_format == FIDL_FORMAT:
-            f_img = open("%s.4dfp.img" % (outfile), "w")
-            if data_type == MAGNITUDE_TYPE: data = abs(self.data)
-            for volume in data:
-                f_img.write(volume.byteswapped().tostring())
-        elif file_format == NIFTI_DUAL or file_format == NIFTI_SINGLE:
-            from imaging import nifti
-            nifti.writeImage(self, outfile, data_type, 3, file_format[6:])
-        else: print "Unsupported output type: %s"%file_format
-
-        # !!!!!!!!! WHERE IS THE CODE TO SAVE IN VOXBO FORMAT !!!!!!!!
