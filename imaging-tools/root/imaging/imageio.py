@@ -115,16 +115,20 @@ _readers = {
     "fid": ("imaging.varian.FidImage","FidImage"),
     "fdf": ("imaging.varian.FDFImage","FDFImage")}
 
+
 _writers = {
-    "analyze": ("imaging.analyze","writeImage")}
+    "analyze": ("imaging.analyze","writeImage"),
+    "nifti": ("imaging.nifti","writeImage")}
 
 #-----------------------------------------------------------------------------
 def _import((modulename, objectname)):
+    "Import and return objectname from modulename."
     module = __import__(modulename, globals(), locals(), (objectname,))
     return getattr(module, objectname)
 
 #-----------------------------------------------------------------------------
 def _get_reader(format):
+    "Return an image file reader for the specified format."
     readerspec = _readers.get(format)
     if readerspec is None:
         raise ValueError("Reader '%s' not found.  Avaliable readers are: %s"%\
@@ -133,6 +137,7 @@ def _get_reader(format):
 
 #-----------------------------------------------------------------------------
 def _get_writer(format):
+    "Return an image file writer for the specified format."
     writerspec = _writers.get(format)
     if writerspec is None:
         raise ValueError("Writer '%s' not found.  Avaliable writers are: %s"%\
@@ -141,9 +146,11 @@ def _get_writer(format):
 
 #-----------------------------------------------------------------------------
 def readImage(filename, format, **kwargs):
+    "Load an image in the specified format from the given filename."
     return _get_reader(format)(filename, **kwargs)
 
 #-----------------------------------------------------------------------------
 def writeImage(image, filename, format, **kwargs):
+    "Write the given image to the filesystem in the given format."
     return _get_writer(format)(image, filename, **kwargs)
 
