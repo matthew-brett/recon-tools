@@ -21,7 +21,8 @@ class Parameter (object):
     Specifies a named, typed parameter for an Operation.  Is used for
     documentation and during config parsing.
     @cvar name: Text name of the parameter
-    @car type: Data type of the parameter (can be str, bool, int, float, or complex)
+    @cvar type: Data type of the parameter (can be str, bool, int, float, or
+               complex)
     @cvar default: Default value 
     @cvar description: Optional description
     """
@@ -36,10 +37,7 @@ class Parameter (object):
 
     #-------------------------------------------------------------------------
     def __init__(self, name, type="str", default=None, description=""):
-        """
-	Sets up a named, typed Parameter with an optional descriptive tag. Such parameters are used in 	some image operations
-	"""
-	self.name=name
+        self.name=name
         if not self._type_map.has_key(type):
             raise ValueError("type must be one of %s"%self._type_map.keys())
         self.valuator=self._type_map[type]
@@ -48,28 +46,24 @@ class Parameter (object):
 
     #-------------------------------------------------------------------------
     def valuate(self, valspec): 
-	"""
-	Evaluates to an appropriate value, given self's type. For instance, if self is an int, valuate returns 	
-	an int from valspec.
-	"""
-	return self.valuator(valspec)
+        """
+        Evaluates valspec (a string) to the appropriate value according to
+        the type of self.
+        """
+        return self.valuator(valspec)
 
 
 ##############################################################################
 class Operation (object):
     """
-    The Operation class prototypes an abstract operation, which has parameters, and can be run on an image. In 
-    the actual implementation of operations, run will be overloaded, and params may or may not be filled out with 
-    Parameter objects. In initializing any of these subclasses, the constructor here is called, which passes control 
-    to the configure method, which sets up Parameter values from specifications found in the config file.
+    The Operation class prototypes an abstract operation, which has parameters,
+    and can be run on an image. In the actual implementation of operations, run
+    will be overloaded, and params may or may not be filled out with Parameter
+    objects. In initializing any of these subclasses, the constructor here is
+    called, which assigns parameter values based on its keyword arguments.
     
-    Operation gives Recon a systematic interface to any operation.
-    
-    @cvar params: A list of Parameter objects. This gives an Operation
-    a chance to have any number of parameters, despite having a standard
-    interface with the system. params is filled in by the subclass, and values
-    are given in the config file.
-    
+    @cvar params: A list of Parameter objects describing which configuration
+                  parameters this operations will accept.
     """
 
     class ConfigError (Exception): pass
@@ -81,15 +75,17 @@ class Operation (object):
 
     #-------------------------------------------------------------------------
     def configure(self, **kwargs):
-    	"""
-        This method fills in values of Parameter objects in the params list by popping values from the 	kwargs 
-	dict, using the Parameter name as a keyword. If the keyword is not in the dict, the default value of the 
-	Parameter is used. If there are are unused items in the dict (ie unanticipated parameters), an exception 
-	is raised.
-	
-	@param kwargs: a dict of parameters in {name: val} format
-	"""
-	for p in self.params:
+        """
+        Assign values to this Operation's Parameters based on provided keyword
+        arguments.  The keyword is the parameter name and the keyword value is
+        a string specifying the parameter value.  These strings are transformed
+        into values by the Parameter's valuate method.  Parameters with no
+        keyword value provided here will receive their declared default value.
+
+        A ConfigError is raised if unanticipated parameters are found (ie
+        parameters which are not declared in the Operation's params list).
+        """
+        for p in self.params:
             self.__dict__[p.name] = p.valuate(kwargs.pop(p.name, p.default))
 
         # All valid args should have been popped off the kwargs dict at this
@@ -106,15 +102,15 @@ class Operation (object):
 
     #-------------------------------------------------------------------------
     def run(self, image): 
-	"This is how the Recon system calls an operation to process an image"
-	pass
+        "This is how the Recon system calls an operation to process an image"
+        pass
 
 
 ##############################################################################
 class RunLogger (object):
     """
-     RunLogger is a simple class which can write info about an operation to an output stream. The log will be 
-     executable in the future.
+    RunLogger is a simple class which can write info about an operation to an
+    output stream. The log will be made executable in a future release.
     """
 
     # what command is used to run the executable log
@@ -134,11 +130,11 @@ class RunLogger (object):
     #-------------------------------------------------------------------------
     def logop(self, operation):
         """
-	Writes name and parameters of operations, in the same format as the config file.
-	The intention is to create record to facilitate reproduction of results.
-	"""
-	
-	self._format_doc(operation.__class__.__doc__)
+        Writes name and parameters of operations, in the same format as the
+        config file.  The intention is to record the provenance of analyses
+        and facilitate reproduction of results.
+        """
+        self._format_doc(operation.__class__.__doc__)
         print >> self.ostream, "[%s]"%operation.__class__.__name__
         for parameter in operation.params:
             self._format_doc(parameter.description)
@@ -153,28 +149,21 @@ class OperationManager (object):
     This class is responsible for knowing which operations are available
     and retrieving them by name.  It should be a global singleton in the
     system.
-    
-    @cvar _op_index: contains mapping from opname to opclass
     """
     class InvalidOperationName (Exception): pass
     class DuplicateOperationName (Exception): pass
 
     #-------------------------------------------------------------------------
     def __init__(self):
-        """
-	The constructor for OperationManager creates a list of all available imaging operation classes (scans 
-	for Python classes which are subclasses of Operation in imaging.operations). The list is indexed by 
-	the operation's name as a string. 
-	"""
-	self._op_index = {}
+        self._op_index = {}
         self._load_operation_index()
 
     #-------------------------------------------------------------------------
     def _load_operation_index(self):
-	"""
-	Steps through the returned list of (name, obj) pairs from _get_operation_modules, adding a new
-	{name: obj} dictionary entry into _op_index for any subclass of Operation
-	"""
+        """
+        Find and index by classname all Operation subclasses declared in any
+        module in the imaging.operations package.
+        """
         for opmodule in self._get_operation_modules():
             for name, obj in opmodule.__dict__.items():
                 if type(obj)==TypeType and issubclass(obj, Operation) \
@@ -185,11 +174,11 @@ class OperationManager (object):
 
     #-------------------------------------------------------------------------
     def _get_operation_modules(self):
-	"""
-	Finds and imports all Python modules in imaging/operation. Returns a list of the return value of 
-	__import__(...) for each module.
-	"""
-	opfiles = glob(join(dirname(__file__), "*.py"))
+        """
+        Find and import all modules in the imaging.operation package.
+        Return a list of the found module objects.
+        """
+        opfiles = glob(join(dirname(__file__), "*.py"))
         opmodules = []
         for opfile in opfiles:
             opmodname = basename(opfile).split(".")[0]
@@ -199,7 +188,7 @@ class OperationManager (object):
 
     #-------------------------------------------------------------------------
     def getOperationNames(self):
-        "@return: a sorted set of keys from the _op_index dictionary."
+        "@return: an alphabetically sorted list of all Operation class names."
         names = self._op_index.keys()
         names.sort()
         return names
@@ -207,9 +196,9 @@ class OperationManager (object):
     #-------------------------------------------------------------------------
     def getOperation(self, opname):
         """
-	queries _op_index for an operation class, given the opname
-	@return: the operation class for the given name
-	"""
+        Retrieve the Operation class object with the given opname.
+        @return: the Operation class with the given name.
+        """
         operation = self._op_index.get(opname, None)
         if not operation:
             raise self.InvalidOperationName("Operation '%s' not found."%opname)
