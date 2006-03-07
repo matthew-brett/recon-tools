@@ -49,17 +49,19 @@ def half_shift(matrix, dim=0):
 # from image-space to k-space in FE direction (per PE line)
 # in image-space: shift from (-t/2,t/2-1) to (0,t-1)
 # in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
+# use checkerboard masking as more efficient route
 def fft(a):
-    f = _fft(half_shift(a))
-    return half_shift(f)
+    chk = checkerboard1D(a.shape[-1])
+    return chk*_fft(chk*a)
 
 #-----------------------------------------------------------------------------
 # from k-space to image-space in FE direction (per PE line)
 # in k-space: shift from (-N/2,N/2-1) to (0,N/2) U (-(N/2-1),-w0)
-# in iamge-space: shift from (0,t-1) to (-t/2,t/2-1)
+# in image-space: shift from (0,t-1) to (-t/2,t/2-1)
+# use checkerboard masking as more efficient route
 def ifft(a):
-    f = half_shift(a)
-    return half_shift(_ifft(f))
+    chk = checkerboard1D(a.shape[-1])
+    return chk*_ifft(chk*a)
 
 #-----------------------------------------------------------------------------
 def checkerboard(rows, cols):
@@ -71,6 +73,10 @@ def checkerboard(rows, cols):
     complex_mask.real = checkerboard
     complex_mask.imag = -checkerboard
     return complex_mask
+
+#-----------------------------------------------------------------------------
+def checkerboard1D(cols):
+    return ones(cols) - 2*(arange(cols)%2)
  
 #-----------------------------------------------------------------------------
 def y_grating(rows, cols):
