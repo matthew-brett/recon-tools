@@ -1,9 +1,10 @@
-"Defines a command-line interface to Recon"
+"Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
 
 from imaging.tools import OrderedConfigParser
-from imaging.varian.FidImage import FIDL_FORMAT, VOXBO_FORMAT, ANALYZE_FORMAT,\
-  NIFTI_SINGLE, NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, FidImage
+from imaging.varian.FidImage import FidImage
+from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE,\
+    NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage 
 from imaging.operations import OperationManager, RunLogger
 
 
@@ -17,8 +18,6 @@ class Recon (OptionParser):
 
     _opmanager = OperationManager()
     output_format_choices = (
-      FIDL_FORMAT,
-      VOXBO_FORMAT,
       ANALYZE_FORMAT,
       NIFTI_DUAL,
       NIFTI_SINGLE)
@@ -30,28 +29,29 @@ class Recon (OptionParser):
             help="Name of the config file describing operations and operation"\
             " parameters."),
 
-          Option("-r", "--vol-range", dest="vol_range", type="string", default=":",
-            action="store",
-            help="Which image volumes to reconstruct.  Format is start:end, where "\
-            "either start or end may be omitted, indicating to start with the "\
-            "first or end with the last respectively.  The index of the first "\
-            "volume is 0.  The default value is a single colon with no start "\
-            "or end specified, meaning process all volumes.  (Note, this option "\
-            "refers specifically to image volumes, not to reference scans.)"),
+          Option("-r", "--vol-range", dest="vol_range", type="string",
+            default=":", action="store",
+            help="Which image volumes to reconstruct.  Format is start:end, "
+            "where either start or end may be omitted, indicating to start "\
+            "with the first or end with the last respectively.  The index of "\
+            "the first volume is 0.  The default value is a single colon "\
+            "with no start or end specified, meaning process all volumes.  "\
+            "(Note, this option refers specifically to image volumes, not to "\
+            "reference scans.)"),
 
           Option("-f", "--file-format", dest="file_format", action="store",
-            type="choice", default=ANALYZE_FORMAT, choices=output_format_choices,
+            type="choice", default=ANALYZE_FORMAT,
+            choices=output_format_choices,
             help="""{%s}
-            fidl: save floating point file with interfile and 4D analyze headers.
             analyze: Save individual image for each frame in analyze format.
-            voxbo: Save in tes format.
             nifti dual: save nifti file in (hdr, img) pair.
-            nifti single: save nifti file in single-file format."""%("|".join(output_format_choices))),
+            nifti single: save nifti file in single-file format."""%\
+              ("|".join(output_format_choices))),
 
           Option("-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar."),
 
-          Option("-y", "--output-data-type", dest="output_data_type",
+          Option("-y", "--output-data-type", dest="output_datatype",
             type="choice", default=MAGNITUDE_TYPE, action="store",
             choices=output_datatype_choices,
             help="""{%s}
@@ -60,7 +60,8 @@ class Recon (OptionParser):
             format)."""%("|".join(output_datatype_choices))),
 
           Option("-l", "--log-file", default="recon.log",
-            help="where to record reconstruction details ('recon.log' by default)")
+            help="where to record reconstruction details ('recon.log' by "\
+                 "default)")
         )
 
     #-------------------------------------------------------------------------
@@ -133,6 +134,14 @@ class Recon (OptionParser):
         return options
 
     #-------------------------------------------------------------------------
+    def runOperations(self, operations, image, runlogger):
+        "Run the given list of operation objects and record into runlogger."
+        for operation in operations:
+            operation.log("Running")
+            operation.run(image)
+            runlogger.logop(operation)
+
+    #-------------------------------------------------------------------------
     def run(self):
         """
         Run the recon tool.
@@ -145,7 +154,7 @@ class Recon (OptionParser):
         # Get the filename names and options from the command line.
         options = self.getOptions()
 
-        runlogger = RunLogger(file("recon.log",'w')) # file(options.log_file, 'w')
+        runlogger = RunLogger(file(options.log_file,'w'))
 
         # Load k-space image from the fid file.
         image = FidImage(options.datadir, options.TR)
@@ -153,13 +162,18 @@ class Recon (OptionParser):
         # Log some parameter info to the console.
         image.logParams()
 
-        # Apply operations to the data
-        for operation_class, args in options.operations:
-            operation = operation_class(**args)
-            print "running %s"%operation_class
-            operation.run(image)
-            runlogger.logop(operation)
+        # Instantiate the operations.
+        operations = [opclass(**args) for opclass,args in options.operations]
 
-        # Save data to disk.
-        image.save(options.outfile, options.file_format, options.output_data_type)
+        # Add operation for saving data.
+        operations.append(
+           WriteImage(
+            filename=options.outfile,
+            format=options.file_format,
+            datatype=options.output_datatype))
+
+        # Run the operations.
+        self.runOperations(operations, image, runlogger)
+
+        #image.save(options.outfile, options.file_format, options.output_datatype)
 
