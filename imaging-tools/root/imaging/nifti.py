@@ -1,7 +1,8 @@
 "This module can write NIFTI files."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape
+  Complex32, fromstring, reshape, product
 import struct
+import exceptions
 from analyze import _concatenate
 from odict import odict
 from imaging.imageio import BaseImage
@@ -40,7 +41,7 @@ datatype2bitpix = {
   COMPLEX: 64,
 }
 
-# map Analyze datatype to Numeric typecode
+# map NIFTI datatype to Numeric typecode
 datatype2typecode = {
   BYTE: Int8,
   SHORT: Int16,
@@ -49,7 +50,7 @@ datatype2typecode = {
   DOUBLE: Float64,
   COMPLEX: Complex32}
 
-# map Numeric typecode to Analyze datatype
+# map Numeric typecode to NIFTI datatype
 typecode2datatype = \
   dict([(v,k) for k,v in datatype2typecode.items()])
 
@@ -61,7 +62,7 @@ struct_fields = odict((
     ('extents','i'),
     ('session_error','h'),
     ('regular','c'),
-    ('dim_info','c'),
+    ('dim_info','B'),
     ('ndim','h'),
     ('xdim','h'),
     ('ydim','h'),
@@ -89,8 +90,8 @@ struct_fields = odict((
     ('scl_slope','f'),
     ('scl_inter','f'),
     ('slice_end','h'),
-    ('slice_code','s'),
-    ('xyzt_units','s'),
+    ('slice_code','B'),
+    ('xyzt_units','B'),
     ('cal_max','f'),
     ('cal_min','f'),
     ('slice_duration','f'),
@@ -144,16 +145,69 @@ def struct_pack(byte_order, elements, values):
     return struct.pack(format, *values)
 
 
+
+##############################################################################
+class NiftiImage (BaseImage):
+    """
+    Loads an image from a NIFTI file as a BaseImage
+    """
+    def __init__(self, filestem):
+        self.load_header(filestem)
+        self.load_image(filestem)
+
+    def load_header(self, filestem):
+        try:
+            fp = open(filestem+".hdr", 'r')
+        except exceptions.IOError:
+            try:
+                fp = open(filestem+".nii", 'r')
+            except exceptions.IOError:
+                raise "no NIFTI file found with this name: %s"%filestem
+            self.filetype = 'single'
+        else: self.filetype = 'dual'
+#        print self.filetype
+        byte_order = LITTLE_ENDIAN
+        reported_length = struct_unpack(fp, byte_order, field_formats[0:1])[0]
+        if reported_length != HEADER_SIZE: byte_order = BIG_ENDIAN
+        fp.seek(0)
+        # unpack all header values
+        values = struct_unpack(fp, byte_order, field_formats)
+        fp.close()
+        # now load values into self
+        map(self.__setattr__, struct_fields.keys(), values)
+        # sanity check? why not
+        if (self.filetype == 'single' and self.magic != 'n+1\x00') \
+           or (self.filetype == 'dual' and self.magic != 'ni1\x00'):
+            print "Got %s NIFTI file, but read %s magic string"%\
+                  (self.filetype, self.magic)
+            
+    def load_image(self, filestem):
+        if self.filetype == 'single':
+            fp = open(filestem+".nii", 'r')
+            fp.seek(self.vox_offset)
+        else:
+            fp = open(filestem+".img", 'r')
+
+        numtype = datatype2typecode[self.datatype]
+        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
+                          or (self.zdim, self.ydim, self.xdim)
+        datasize = (self.bitpix/8)*product(dims)
+        image = fromstring(fp.read(datasize), numtype)
+        self.setData(reshape(image, dims))
+        fp.close()
+
+
 ##############################################################################
 class NiftiWriter (object):
     """
-    Writes an image in single- or dual-file NIFTI format
+    Writes an image in single- or dual-file NIFTI format.
+    MANY useful features of this file format are not yet utilized!
     """
 
     #[STATIC]
     _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
     #[STATIC]
-    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
+    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': '', 'B': 0}
 
     def __init__(self, image, datatype=None, filetype="single"):
         self.image = image
@@ -174,7 +228,7 @@ class NiftiWriter (object):
             fname = "%s.nii"%filestem
             file(fname,'w').write(self.make_hdr())
             #write extension? 
-            #file(fname,'a').write(default_extension)
+            file(fname,'a').write(default_extension)
             file(fname,'a').write(self.format_img())
         else:
             headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
@@ -187,6 +241,7 @@ class NiftiWriter (object):
         "Pack a NIFTI format header."
         image = self.image
         imagevalues = {
+          'dim_info': (3<<4 | 2<<2 | 1),
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
           'ndim': image.ndim,
@@ -197,9 +252,9 @@ class NiftiWriter (object):
           'xsize': image.xsize,
           'ysize': image.ysize,
           'zsize': image.zsize,
-          'tsize': image.tsize
-          'xyzt_units': chr(NIFTI_UNITS_MM | NIFTI_UNITS_SEC)
-
+          'tsize': image.tsize,
+          'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC)}
+        
         if self.filetype=='single':
             imagevalues['vox_offset'] = HEADER_SIZE + self.sizeof_extension
             imagevalues['magic'] = 'n+1'
@@ -269,3 +324,6 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
     if targetdim is None: targetdim = image.ndim
     for subimage, substem in images_and_names(image, filestem, targetdim):
         NiftiWriter(subimage, datatype=datatype, filetype=filetype).write(substem)
+
+#-----------------------------------------------------------------------------
+def readImage(filestem): return NiftiImage(filestem)
