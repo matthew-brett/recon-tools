@@ -9,6 +9,12 @@ from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
   meshgrid, sqrt, exp, ones
 
 #-----------------------------------------------------------------------------
+def import_from(modulename, objectname):
+    "Import and return objectname from modulename."
+    module = __import__(modulename, globals(), locals(), (objectname,))
+    return getattr(module, objectname)
+
+#-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
     """
     Perform an in-place circular shift of the given matrix by the given
