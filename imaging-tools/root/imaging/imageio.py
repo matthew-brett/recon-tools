@@ -59,7 +59,6 @@ class BaseImage (object):
         self.xsize, self.ysize, self.zsize, self.tsize = \
           (xsize, ysize, zsize, tsize)
         self.x0, self.y0, self.z0 = (x0, y0, z0)
-        self._setCheckerboards()
 
     #-------------------------------------------------------------------------
     def info(self):
@@ -81,7 +80,6 @@ class BaseImage (object):
     def setData(self, data):
         self.data = data
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
-        self._setCheckerboards()
 
     #-------------------------------------------------------------------------
     def concatenate(self, image, axis=0, newdim=False):
@@ -112,19 +110,6 @@ class BaseImage (object):
     #-------------------------------------------------------------------------
     def subImages(self):
         for subnum in xrange(len(self.data)): yield self.subImage(subnum)
-
-    #-------------------------------------------------------------------------
-    def _setCheckerboards(self):
-        "1D and 2D checkerboards created to prepare data for FFT, IFFT routines"
-        # Use this to undo shifting/modulation effect of chosen k-space and
-        # image-space representation (ie: f in [-N/2,N/2-1], t in [-T/2,T/2-1]
-        # for 1D (I)FFTs in the FE direction. Apply on input and output.
-        # (this is not used currently)
-        self._1D_checkerboard = ones(self.xdim) - 2*(arange(self.xdim)%2)
-        
-        # Use this for similar reason in 2D case
-        pe_check = ones(self.ydim) - 2*(arange(self.ydim)%2)
-        self._2D_checkerboard = outerproduct(pe_check, self._1D_checkerboard)
 
 #-----------------------------------------------------------------------------
 def get_reader(format):
