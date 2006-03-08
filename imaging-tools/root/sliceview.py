@@ -258,10 +258,10 @@ class SlicePlot (FigureCanvas):
 
         if self.getImage() is None:
             ax.imshow(data, interpolation="nearest",
-              cmap=self.cmap, norm=self.norm)
+              cmap=self.cmap, norm=self.norm, origin="lower")
         elif norm != self.norm:
             self.setImage(AxesImage(ax, interpolation="nearest",
-              cmap=self.cmap, norm=norm))
+              cmap=self.cmap, norm=norm, origin="lower"))
 
         self.getImage().set_data(data)
         self.norm = norm
