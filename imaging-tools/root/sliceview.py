@@ -138,7 +138,6 @@ class ControlPanel (gtk.Frame):
         self.contrast_slider.get_adjustment().connect(
           "value_changed", contrast_handler)
 
-
     #-------------------------------------------------------------------------
     def getContrastLevel(self):
         return self.contrast_slider.get_adjustment().value
@@ -148,13 +147,23 @@ class ControlPanel (gtk.Frame):
         return int(self.sliders[dnum].get_adjustment().value)
 
     #-------------------------------------------------------------------------
+    def setDimIndex(self, dnum, index):
+        return self.sliders[dnum].get_adjustment().set_value(int(index))
+
+    #-------------------------------------------------------------------------
     def getRowIndex(self): return self.getDimIndex(self.slice_dims[0])
 
     #-------------------------------------------------------------------------
     def getColIndex(self): return self.getDimIndex(self.slice_dims[1])
 
+    #------------------------------------------------------------------------- 
+    def setRowIndex(self, index): self.setDimIndex(self.slice_dims[0], index)
+        
+    #------------------------------------------------------------------------- 
+    def setColIndex(self, index): self.setDimIndex(self.slice_dims[1], index)
+
     #-------------------------------------------------------------------------
-    def getSlices(self):
+    def getIndexSlices(self):
         return tuple([
           dnum in self.slice_dims and slice(0, dsize) or self.getDimIndex(dnum)
           for dnum, dsize, _ in self.dimensions])
@@ -165,12 +174,10 @@ class ControlPanel (gtk.Frame):
         row_adj = self.row_spinner.get_adjustment()
         col_adj = self.col_spinner.get_adjustment()
 
-        if adj.name == "row":
-            if newval >= int(col_adj.value):
-                col_adj.set_value(newval+1)
-        if adj.name == "col":
-            if newval <= int(row_adj.value):
-                row_adj.set_value(newval-1)
+        if adj.name == "row" and newval >= int(col_adj.value):
+            col_adj.set_value(newval+1)
+        if adj.name == "col" and newval <= int(row_adj.value):
+            row_adj.set_value(newval-1)
 
         self.slice_dims = (int(row_adj.value), int(col_adj.value))
 
@@ -270,6 +277,16 @@ class SlicePlot (FigureCanvas):
         ax.set_ylim((nrows,0))
         self.data = data
         self.draw()
+
+    #-------------------------------------------------------------------------
+    def getEventCoords(self, event):
+        if event.xdata is not None: x = int(event.xdata)
+        else: x = None
+        if event.ydata is not None:y = int(event.ydata)
+        else: y = None
+        if x < 0 or x >= self.data.shape[0]: x = None
+        if y < 0 or y >= self.data.shape[1]: y = None
+        return (y,x)
 
 
 ##############################################################################
@@ -394,8 +411,7 @@ class StatusBar (gtk.Frame):
         #box is defined +/-yLim rows and +/-xLim cols
         #if for some reason areaStr was entered wrong, default to (1, 1)
         yLim, xLim = len(areaStr)==3 and\
-                         (int(areaStr[0]), int(areaStr[2])) or\
-                         (1, 1)
+                     (int(areaStr[0]), int(areaStr[2])) or (1, 1)
         if y < yLim or x < xLim or\
            y+yLim >= data.shape[0] or\
            x+xLim >= data.shape[1]:
@@ -433,6 +449,7 @@ class sliceview (gtk.Window):
     #mag_norm = normalize()
     #phs_norm = normalize(-pi, pi)
     _mouse_x = _mouse_y = None
+    _dragging = False
 
     #-------------------------------------------------------------------------
     def __init__(self, data, dim_names=[], title="sliceview", cmap=cm.bone):
@@ -474,9 +491,13 @@ class sliceview (gtk.Window):
 
         # slice image
         self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap, norm=self.norm)
-        self.sliceplot.mpl_connect('button_press_event', self.sliceClickHandler)
-        self.sliceplot.mpl_connect('motion_notify_event', self.sliceMouseMotionHandler)
         self.sliceplot.set_size_request(400, 400)
+        self.sliceplot.mpl_connect(
+          'motion_notify_event', self.sliceMouseMotionHandler)
+        self.sliceplot.mpl_connect(
+          'button_press_event', self.sliceMouseDownHandler)
+        self.sliceplot.mpl_connect(
+          'button_release_event', self.sliceMouseUpHandler)
         table.attach(self.sliceplot, 1, 2, 1, 2)
 
         # status
@@ -507,7 +528,7 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def getSlice(self):
         return self.transform(
-          squeeze(self.data[self.control_panel.getSlices()]))
+          squeeze(self.data[self.control_panel.getIndexSlices()]))
 
     #-------------------------------------------------------------------------
     def updateRow(self): self.rowplot.setData(self.getRow())
@@ -538,7 +559,7 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def spinnerHandler(self, adj):
-        print "VolumeViewer::spinnerHandler slice_dims", \
+        print "sliceview::spinnerHandler slice_dims", \
                self.control_panel.slice_dims
 
     #-------------------------------------------------------------------------
@@ -561,24 +582,54 @@ class sliceview (gtk.Window):
         self.updateSlice()
 
     #-------------------------------------------------------------------------
-    def sliceClickHandler(self, event):
-        self.status.report(event, self.getSlice())
+    def sliceMouseDownHandler(self, event):
+        y, x = self.sliceplot.getEventCoords(event)
+        self._dragging = True
+        # make sure this registers as a "new" position
+        self._mouse_x = self._mouse_y = None
+        self.updateCoords(y,x)
+
+    #-------------------------------------------------------------------------
+    def sliceMouseUpHandler(self, event):
+        y, x = self.sliceplot.getEventCoords(event)
+        self._dragging = False
 
     #-------------------------------------------------------------------------
     def sliceMouseMotionHandler(self, event):
-        if event.xdata is None or event.ydata is None: x = y = None
-        else: x, y = int(event.xdata), int(event.ydata)
+        y, x = self.sliceplot.getEventCoords(event)
+        self.updateCoords(y,x)
+
+    #-------------------------------------------------------------------------
+    def updateCoords(self, y, x):
+
+        # do nothing if coords haven't changed
         if x == self._mouse_x and y == self._mouse_y: return
         self._mouse_x, self._mouse_y = x, y
-        slice = self.getSlice()
-        width, height = slice.shape[0], slice.shape[1]
 
-        text = ""
-        if x != None and y != None and\
-           x >= 0 and x < width and\
-           y >= 0 and y < height:
-            text = "[%d,%d] = %.4f"%(y, x, slice[y,x])
+        # update statusbar element value label
+        self.updateStatusLabel(y, x)
+
+        # update crosshairs and projection plots if button down
+        if self._dragging: self.updateProjections(y,x)
+
+    #------------------------------------------------------------------------- 
+    def updateStatusLabel(self, y, x):
+        if x != None and y != None:
+            text = "[%d,%d] = %.4f"%(y, x, self.getSlice()[y,x])
+        else: text = ""
         self.status.setLabel(text)
+
+    #------------------------------------------------------------------------- 
+    def updateProjections(self, y, x):
+        "Update crosshairs and row and column plots."
+        if x != None and y != None:
+            self.setCrosshairs(y,x)
+            self.control_panel.setRowIndex(y)
+            self.control_panel.setColIndex(x)
+
+    #------------------------------------------------------------------------- 
+    def setCrosshairs(self, y, x): pass
+        #print "sliceview::setCrosshairs(%s,%s)"%(y,x)
         
     #------------------------------------------------------------------------- 
     def setNorm(self):
