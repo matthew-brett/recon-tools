@@ -2,6 +2,23 @@ import pylab
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
      Complex32, asarray, arange, outerproduct, ones
 
+from odict import odict
+from imaging.util import import_from
+
+# module-private dict specifying available image readers
+_readers = odict((
+    ("analyze", ("imaging.analyze","readImage")),
+    ("fid", ("imaging.varian.FidImage","FidImage")),
+    ("fdf", ("imaging.varian.FDFImage","FDFImage"))))
+available_readers = _readers.keys()
+
+# module-private dict specifying available image writers
+_writers = odict((
+    ("analyze", ("imaging.analyze","writeImage")),
+    ("nifti", ("imaging.nifti","writeImage"))))
+available_writers = _writers.keys()
+
+
 #-----------------------------------------------------------------------------
 def get_dims(data):
     """
@@ -110,47 +127,30 @@ class BaseImage (object):
         self._2D_checkerboard = outerproduct(pe_check, self._1D_checkerboard)
 
 #-----------------------------------------------------------------------------
-_readers = {
-    "analyze": ("imaging.analyze","readImage"),
-    "fid": ("imaging.varian.FidImage","FidImage"),
-    "fdf": ("imaging.varian.FDFImage","FDFImage")}
-
-
-_writers = {
-    "analyze": ("imaging.analyze","writeImage"),
-    "nifti": ("imaging.nifti","writeImage")}
-
-#-----------------------------------------------------------------------------
-def _import((modulename, objectname)):
-    "Import and return objectname from modulename."
-    module = __import__(modulename, globals(), locals(), (objectname,))
-    return getattr(module, objectname)
-
-#-----------------------------------------------------------------------------
-def _get_reader(format):
+def get_reader(format):
     "Return an image file reader for the specified format."
     readerspec = _readers.get(format)
     if readerspec is None:
         raise ValueError("Reader '%s' not found.  Avaliable readers are: %s"%\
-          (format, ", ".join(_readers.keys())))
-    return _import(readerspec)
+          (format, ", ".join(available_readers)))
+    return import_from(*readerspec)
 
 #-----------------------------------------------------------------------------
-def _get_writer(format):
+def get_writer(format):
     "Return an image file writer for the specified format."
     writerspec = _writers.get(format)
     if writerspec is None:
         raise ValueError("Writer '%s' not found.  Avaliable writers are: %s"%\
-          (format, ", ".join(_writers.keys())))
-    return _import(writerspec)
+          (format, ", ".join(available_writers)))
+    return import_from(*writerspec)
 
 #-----------------------------------------------------------------------------
 def readImage(filename, format, **kwargs):
     "Load an image in the specified format from the given filename."
-    return _get_reader(format)(filename, **kwargs)
+    return get_reader(format)(filename, **kwargs)
 
 #-----------------------------------------------------------------------------
 def writeImage(image, filename, format, **kwargs):
     "Write the given image to the filesystem in the given format."
-    return _get_writer(format)(image, filename, **kwargs)
+    return get_writer(format)(image, filename, **kwargs)
 
