@@ -18,9 +18,15 @@ def imag_xform(data): return data.imag
 
 
 ##############################################################################
-class DimSpinner (gtk.SpinButton):
+class Dimension (object):
+    def __init__(self, index, size, name):
+        self.index = index
+        self.size = size
+        self.name = name
 
-    #-------------------------------------------------------------------------
+
+##############################################################################
+class DimSpinner (gtk.SpinButton):
     def __init__(self, name, value, start, end, handler):
         adj = gtk.Adjustment(0, start, end, 1, 1)
         adj.name = name
@@ -30,13 +36,19 @@ class DimSpinner (gtk.SpinButton):
 
 ##############################################################################
 class DimSlider (gtk.HScale):
-
-    #-------------------------------------------------------------------------
-    def __init__(self, dim_num, dim_size, dim_name):
-        adj = gtk.Adjustment(0, 0, dim_size-1, 1, 1)
-        adj.dim_num = dim_num
+    def __init__(self, dim):
+        adj = gtk.Adjustment(0, 0, dim.size-1, 1, 1)
+        adj.dim = dim
         gtk.HScale.__init__(self, adj)
         self.set_digits(0)
+        self.set_value_pos(gtk.POS_RIGHT)
+
+
+##############################################################################
+class ContrastSlider (gtk.HScale):
+    def __init__(self):
+        gtk.HScale.__init__(self, gtk.Adjustment(1.0, 0.05, 2.0, 0.05, 1))
+        self.set_digits(2)
         self.set_value_pos(gtk.POS_RIGHT)
 
 
@@ -85,24 +97,29 @@ class ControlPanel (gtk.Frame):
             main_vbox.pack_end(gtk.HSeparator(), False, False, 0)
 
         # slider for each data dimension
-        self.sliders = [DimSlider(*d) for d in self.dimensions]
-        for slider, dimension in zip(self.sliders, self.dimensions):
-            label = gtk.Label("%s:"%dimension[2])
-            label.set_alignment(0, 0.5)
-            main_vbox.pack_start(label, False, False, 0)
-            main_vbox.pack_start(slider, False, False, 0)
+        self.sliders = [DimSlider(dim) for dim in self.dimensions]
+        for slider, dim in zip(self.sliders, self.dimensions):
+            self._add_slider(slider, "%s:"%dim.name, main_vbox)
+
+        # start with the center row and column
+        rowdim = self.getRowDim()
+        self.sliders[rowdim.index].set_value(rowdim.size/2)
+        coldim = self.getColDim()
+        self.sliders[coldim.index].set_value(coldim.size/2)
 
         # slider for contrast adjustment
-        label = gtk.Label("Contrast")
-        label.set_alignment(0, 0.5)
-        self.contrast_slider = gtk.HScale(
-          gtk.Adjustment(1.0, 0.05, 2.0, 0.05, 1))
-        self.contrast_slider.set_value_pos(gtk.POS_RIGHT)
-        self.contrast_slider.set_digits(2)
-        main_vbox.pack_start(label, False, False, 0)
-        main_vbox.pack_start(self.contrast_slider, False, False, 0)
+        self.contrast_slider = ContrastSlider()
+        self._add_slider(self.contrast_slider, "Contrast:", main_vbox)
 
         self.add(main_vbox)
+
+    #-------------------------------------------------------------------------
+    def _add_slider(self, slider, label, vbox):
+        label = gtk.Label(label)
+        label.set_alignment(0, 0.5)
+        vbox.pack_start(label, False, False, 0)
+        vbox.pack_start(slider, False, False, 0)
+
 
     #-------------------------------------------------------------------------
     def _init_dimensions(self, dim_sizes, dim_names):
@@ -113,8 +130,8 @@ class ControlPanel (gtk.Frame):
             dim_names = ["Dim %s"%i for i in range(num_dims)]
         for dim_num, (dim_size, dim_name) in\
           enumerate(zip(dim_sizes, dim_names)):
-            self.dimensions.append( (dim_num, dim_size, dim_name) )
-        self.slice_dims = (self.dimensions[-2][0], self.dimensions[-1][0])
+            self.dimensions.append( Dimension(dim_num, dim_size, dim_name) )
+        self.slice_dims = (self.dimensions[-2].index, self.dimensions[-1].index)
 
     #-------------------------------------------------------------------------
     def connect(self,
@@ -158,15 +175,23 @@ class ControlPanel (gtk.Frame):
 
     #------------------------------------------------------------------------- 
     def setRowIndex(self, index): self.setDimIndex(self.slice_dims[0], index)
-        
+
     #------------------------------------------------------------------------- 
     def setColIndex(self, index): self.setDimIndex(self.slice_dims[1], index)
+
+    #------------------------------------------------------------------------- 
+    def getRowDim(self): return self.dimensions[self.slice_dims[0]]
+
+    #------------------------------------------------------------------------- 
+    def getColDim(self): return self.dimensions[self.slice_dims[1]]
 
     #-------------------------------------------------------------------------
     def getIndexSlices(self):
         return tuple([
-          dnum in self.slice_dims and slice(0, dsize) or self.getDimIndex(dnum)
-          for dnum, dsize, _ in self.dimensions])
+          dim.index in self.slice_dims and\
+            slice(0, dim.size) or\
+            self.getDimIndex(dim.index)
+          for dim in self.dimensions])
 
     #-------------------------------------------------------------------------
     def spinnerHandler(self, adj):
@@ -571,9 +596,9 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def sliderHandler(self, adj):
-        row_dim_num, col_dim_num = self.control_panel.slice_dims
-        if adj.dim_num == row_dim_num: self.updateRow()
-        elif adj.dim_num == col_dim_num: self.updateCol()
+        row_dim, col_dim= self.control_panel.slice_dims
+        if adj.dim == row_dim: self.updateRow()
+        elif adj.dim == col_dim: self.updateCol()
         else: self.updateSlice()
 
     #-------------------------------------------------------------------------
