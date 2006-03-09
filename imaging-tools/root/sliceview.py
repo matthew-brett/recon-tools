@@ -3,6 +3,7 @@ import gtk
 from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray,\
     cm, angle, normalize, pi, arange, ravel, ones, outerproduct, floor,\
     fromfunction, zeros
+from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
@@ -263,7 +264,7 @@ class ColPlot (FigureCanvas):
 class SlicePlot (FigureCanvas):
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, cmap=cm.bone, norm=None):
+    def __init__(self, data, x, y, cmap=cm.bone, norm=None):
         self.norm = None
         fig = Figure(figsize=figaspect(data))
         ax  = fig.add_axes([0.05, 0.1, 0.85, 0.85])
@@ -272,6 +273,24 @@ class SlicePlot (FigureCanvas):
         FigureCanvas.__init__(self, fig)
         self.cmap = cmap
         self.setData(data, norm=norm)
+        self._init_crosshairs(x, y)
+
+    #-------------------------------------------------------------------------
+    def _init_crosshairs(self, x, y):
+        row_data, col_data = self._crosshairs_data(x, y)
+        row_line = Line2D(row_data[0], row_data[1], color="r", alpha=.5)
+        col_line = Line2D(col_data[0], col_data[1], color="r", alpha=.5)
+        self.crosshairs = (row_line, col_line)
+        ax = self.getAxes()
+        ax.add_artist(row_line)
+        ax.add_artist(col_line)
+
+    #-------------------------------------------------------------------------
+    def _crosshairs_data(self, x, y):
+        data_height, data_width = self.data.shape
+        row_data = ((x+.5-data_width/4., x+.5+data_width/4.), (y+.5, y+.5))
+        col_data = ((x+.5, x+.5), (y+.5-data_height/4., y+.5+data_height/4.))
+        return row_data, col_data
 
     #-------------------------------------------------------------------------
     def getAxes(self): return self.figure.axes[0]
@@ -301,6 +320,14 @@ class SlicePlot (FigureCanvas):
         ax.set_xlim((0,ncols))
         ax.set_ylim((nrows,0))
         self.data = data
+        self.draw()
+
+    #------------------------------------------------------------------------- 
+    def setCrosshairs(self, x, y):
+        row_data, col_data = self._crosshairs_data(x, y)
+        row_line, col_line = self.crosshairs
+        row_line.set_data(*row_data)
+        col_line.set_data(*col_data)
         self.draw()
 
     #-------------------------------------------------------------------------
@@ -515,7 +542,10 @@ class sliceview (gtk.Window):
         self.setNorm()
 
         # slice image
-        self.sliceplot = SlicePlot(self.getSlice(), cmap=cmap, norm=self.norm)
+        self.sliceplot = SlicePlot(self.getSlice(),
+          self.control_panel.getRowIndex(),
+          self.control_panel.getColIndex(),
+          cmap=cmap, norm=self.norm)
         self.sliceplot.set_size_request(400, 400)
         self.sliceplot.mpl_connect(
           'motion_notify_event', self.sliceMouseMotionHandler)
@@ -648,13 +678,15 @@ class sliceview (gtk.Window):
     def updateProjections(self, y, x):
         "Update crosshairs and row and column plots."
         if x != None and y != None:
-            self.setCrosshairs(y,x)
             self.control_panel.setRowIndex(y)
             self.control_panel.setColIndex(x)
+            self.updateCrosshairs()
 
     #------------------------------------------------------------------------- 
-    def setCrosshairs(self, y, x): pass
-        #print "sliceview::setCrosshairs(%s,%s)"%(y,x)
+    def updateCrosshairs(self):
+        self.sliceplot.setCrosshairs(
+          self.control_panel.getColIndex(),
+          self.control_panel.getRowIndex())
         
     #------------------------------------------------------------------------- 
     def setNorm(self):
