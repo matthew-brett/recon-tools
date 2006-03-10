@@ -24,10 +24,10 @@ class Recon (OptionParser):
     output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
     options = (
 
-          Option("-c", "--config", dest="config", type="string",
-            default="recon.cfg", action="store",
-            help="Name of the config file describing operations and operation"\
-            " parameters."),
+##           Option("-c", "--config", dest="config", type="string",
+##             default="recon.cfg", action="store",
+##             help="Name of the config file describing operations and operation"\
+##             " parameters."),
 
           Option("-r", "--vol-range", dest="vol_range", type="string",
             default=":", action="store",
@@ -67,7 +67,7 @@ class Recon (OptionParser):
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         OptionParser.__init__(self, *args, **kwargs)
-        self.set_usage("usage: %prog [options] data output")
+        self.set_usage("usage: %prog [options] config data output")
         self.add_options(self.options)
 
     #-------------------------------------------------------------------------
@@ -119,10 +119,10 @@ class Recon (OptionParser):
         """
     
         options, args = self.parse_args()
-        if len(args) != 2: self.error("Expecting 2 arguments: datadir ouput")
+        if len(args) != 3: self.error("Expecting 3 arguments: config datadir ouput")
 
         # treat the raw args as named options
-        options.datadir, options.outfile = args
+        options.config, options.datadir, options.outfile = args
 
         # parse vol-range
         options.vol_start, options.vol_end = \
