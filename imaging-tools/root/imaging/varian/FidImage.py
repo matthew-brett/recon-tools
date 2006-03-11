@@ -328,9 +328,10 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         # determine if time reversal needs to be performed
         time_reverse = \
+          pulse_sequence not in ("gems", "mp_flash3d") and \
           (fidformat=="compressed" and not(pulse_sequence == "epi"\
-           and self.spinecho)) or \
-          (fidformat=="uncompressed" and pulse_sequence != "epidw")
+           and self.spinecho) or \
+          (fidformat=="uncompressed" and pulse_sequence != "epidw"))
         time_rev = n_fe_true - 1 - arange(n_fe_true)
         if time_reverse: print "time reversing"
 
@@ -344,6 +345,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
             # read the next image volume
             volume = volreader(fidfile, vol)
+
 
             # reverse ENTIRE negative-gradient read
             if vol in self.ref_vols and vol==1:
@@ -381,6 +383,13 @@ class FidImage (BaseImage, ProcParImageMixin):
                         navigators[slice,pe] = \
                           take(navigators[slice,pe], time_rev)
 
+            # Make a correction for mpflash data
+            if pulse_sequence == "mp_flash3d" and not self.flash_converted:
+                nline = int(n_fe_true/20)
+                scale = 2*nline*n_fe_true
+                for slice in ksp_image:
+                    slice[:] = (slice - (sum(slice[:nline,:].flat) + \
+                                 sum(slice[-nline:,:].flat))/scale).astype(Complex32)            
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:
                 self.ref_data[vol] = ksp_image

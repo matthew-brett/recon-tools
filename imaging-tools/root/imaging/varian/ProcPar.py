@@ -147,10 +147,16 @@ class ProcParImageMixin (object):
     orient = CachedReadOnlyProperty(lambda self: self._procpar.orient[0], "")
 
     spinecho = CachedReadOnlyProperty(
-        lambda self: self._procpar.get("spinecho", ("f",))[0] == "y", "")
+        lambda self: self._procpar.get("spinecho", ("n",))[0] == "y", "")
 
     isepi = CachedReadOnlyProperty(
         lambda self: self.pulse_sequence.find("epi") != -1, "")
+
+    flash_converted = CachedReadOnlyProperty(
+        lambda self: self._procpar.get("flash_converted", ("foo",))[0] != "foo", "")
+
+    acq_cycles = CachedReadOnlyProperty(
+        lambda self: self._procpar.get("acqcycles", ("0",))[0], "")
 
     def _get_pulse_sequence(self):
         pslabel = self._procpar.pslabel[0]
@@ -170,8 +176,15 @@ class ProcParImageMixin (object):
     asym_times = CachedReadOnlyProperty(
         lambda self: getattr(self._procpar, "asym_time", ()), "")
 
+    # seems to be that acq_cycles either equals num volumes, or
+    # num slices (in the case num volumes = 1)
+    mpflash_vols = CachedReadOnlyProperty(
+        lambda self: (self.acq_cycles != self.nslice and self.acq_cycles \
+                      or 1), "")
+
     nvol_true = CachedReadOnlyProperty(
-        lambda self: self.asym_times and len(self.asym_times) or\
+        lambda self: self.asym_times and len(self.asym_times) or \
+                     not self.isepi and self.mpflash_vols or \
                      self._procpar.images[0], "")
 
     def _get_is_imagevol(self):
@@ -232,7 +245,7 @@ class ProcParImageMixin (object):
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
             return self._procpar.nseg[0]
-        elif self.pulse_sequence == 'asems': return 1
+        elif self.pulse_sequence in ('gems', 'mp_flash3d', 'asems'): return 1
         else: raise ValueError(
               "Could not identify sequence: %s" % (self.pulse_sequence))
     nseg = CachedReadOnlyProperty(_get_nseg, "")
