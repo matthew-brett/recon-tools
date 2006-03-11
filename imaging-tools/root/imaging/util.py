@@ -78,6 +78,14 @@ def checkerboard(rows, cols):
     return outerproduct(checkerline(rows), checkerline(cols))
 
 #-----------------------------------------------------------------------------
+def checkercube(slices, rows, cols):
+    p = zeros((slices, rows, cols))
+    q = checkerboard(rows, cols)
+    for z in range(slices):
+        p[z] = (1 - 2*(z%2))*q
+    return p
+
+#-----------------------------------------------------------------------------
 def complex_checkerboard(rows, cols):
     return checkerboard(rows, cols) - 1.j*checkerboard(rows, cols)
  
