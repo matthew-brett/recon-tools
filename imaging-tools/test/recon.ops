@@ -2,19 +2,22 @@
 
 [SegmentationCorrection]
 
-#[FermiFilter]
-#trans_width=0.35
-#cutoff=0.92
+[FermiFilter]
+trans_width=0.3
+cutoff=0.95
 
 [ReorderSlices]
 flip_slices=False
 
-[TimeInterpolate]
+[Window]
+win_name = hanning
 
 [InverseFFT]
 
-[ComputeFieldMap]
-
-#[Rot90]
+#[InverseFFT3D]
 
 [ViewImage]
+
+[WriteImage]
+filename=./test-output/replace-this
+format=nifti single

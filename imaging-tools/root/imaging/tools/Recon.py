@@ -3,8 +3,6 @@ from optparse import OptionParser, Option
 
 from imaging.tools import OrderedConfigParser
 from imaging.varian.FidImage import FidImage
-from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE,\
-    NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage 
 from imaging.operations import OperationManager, RunLogger
 
 
@@ -13,22 +11,10 @@ class Recon (OptionParser):
     """
     Handle command-line aspects of the recon tool.
     @cvar options: tuple of Option objs, filled in by OptionParser
-    @cvar _opmanager: OperationManager used to find out opclasses given opnames
     """
 
     _opmanager = OperationManager()
-    output_format_choices = (
-      ANALYZE_FORMAT,
-      NIFTI_DUAL,
-      NIFTI_SINGLE)
-    output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE)
     options = (
-
-##           Option("-c", "--config", dest="config", type="string",
-##             default="recon.cfg", action="store",
-##             help="Name of the config file describing operations and operation"\
-##             " parameters."),
-
           Option("-r", "--vol-range", dest="vol_range", type="string",
             default=":", action="store",
             help="Which image volumes to reconstruct.  Format is start:end, "
@@ -39,25 +25,8 @@ class Recon (OptionParser):
             "(Note, this option refers specifically to image volumes, not to "\
             "reference scans.)"),
 
-          Option("-f", "--file-format", dest="file_format", action="store",
-            type="choice", default=ANALYZE_FORMAT,
-            choices=output_format_choices,
-            help="""{%s}
-            analyze: Save individual image for each frame in analyze format.
-            nifti dual: save nifti file in (hdr, img) pair.
-            nifti single: save nifti file in single-file format."""%\
-              ("|".join(output_format_choices))),
-
           Option("-t", "--tr", dest="TR", type="float", action="store",
             help="Use the TR given here rather than the one in the procpar."),
-
-          Option("-y", "--output-data-type", dest="output_datatype",
-            type="choice", default=MAGNITUDE_TYPE, action="store",
-            choices=output_datatype_choices,
-            help="""{%s}
-            Specifies whether output images should contain only magnitude or
-            both the real and imaginary components (only valid for analyze
-            format)."""%("|".join(output_datatype_choices))),
 
           Option("-l", "--log-file", default="recon.log",
             help="where to record reconstruction details ('recon.log' by "\
@@ -67,7 +36,7 @@ class Recon (OptionParser):
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         OptionParser.__init__(self, *args, **kwargs)
-        self.set_usage("usage: %prog [options] config data output")
+        self.set_usage("usage: %prog [options] oplist datadir")
         self.add_options(self.options)
 
     #-------------------------------------------------------------------------
@@ -119,10 +88,10 @@ class Recon (OptionParser):
         """
     
         options, args = self.parse_args()
-        if len(args) != 3: self.error("Expecting 3 arguments: config datadir ouput")
+        if len(args) != 2: self.error("Expecting 2 arguments: oplist datadir")
 
         # treat the raw args as named options
-        options.config, options.datadir, options.outfile = args
+        options.config, options.datadir = args
 
         # parse vol-range
         options.vol_start, options.vol_end = \
@@ -165,15 +134,7 @@ class Recon (OptionParser):
         # Instantiate the operations.
         operations = [opclass(**args) for opclass,args in options.operations]
 
-        # Add operation for saving data.
-        operations.append(
-           WriteImage(
-            filename=options.outfile,
-            format=options.file_format,
-            datatype=options.output_datatype))
-
         # Run the operations.
         self.runOperations(operations, image, runlogger)
 
-        #image.save(options.outfile, options.file_format, options.output_datatype)
 
