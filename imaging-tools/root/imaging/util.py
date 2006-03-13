@@ -90,16 +90,6 @@ def complex_checkerboard(rows, cols):
     return checkerboard(rows, cols) - 1.j*checkerboard(rows, cols)
  
 #-----------------------------------------------------------------------------
-def y_grating(rows, cols):
-    grating = empty((rows,cols), Float32)
-    row_of_ones = ones(cols, Float32)
-    for y in xrange(rows): grating[y] = y%2 and row_of_ones or -row_of_ones
-    complex_mask = empty(grating.shape, Complex32)
-    complex_mask.real = grating
-    complex_mask.imag = -grating
-    return complex_mask
-
-#-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     corrector = cos(phase) + 1.j*sin(phase)
     return fft(ifft(image)*corrector).astype(image.typecode())

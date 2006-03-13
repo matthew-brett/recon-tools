@@ -1,7 +1,7 @@
 from Numeric import empty
 from pylab import mlab, angle, cos, sin, Float, Complex32, asarray
 from imaging.operations import Operation
-from imaging.util import shift, ifft, apply_phase_correction, y_grating
+from imaging.util import shift, ifft, apply_phase_correction
 
 
 ##############################################################################
