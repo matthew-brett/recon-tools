@@ -41,7 +41,7 @@ class WriteImage (Operation):
           MAGNITUDE_TYPE: nifti.FLOAT,
           COMPLEX_TYPE: nifti.COMPLEX
         }[self.datatype]
-        nifti.writeImage(image, outfile, data_type, 3, self.format[6:])
+        nifti.writeImage(image, self.filename, data_type, 3, self.format[6:])
 
     #-------------------------------------------------------------------------
     def run(self, image):
