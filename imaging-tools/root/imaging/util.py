@@ -8,6 +8,23 @@ from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
   meshgrid, sqrt, exp, ones
 
+
+# struct byte order constants
+NATIVE = "="
+LITTLE_ENDIAN = "<"
+BIG_ENDIAN = ">"
+
+def struct_format(byte_order, elements):
+    return byte_order+" ".join(elements)
+    
+def struct_unpack(infile, byte_order, elements):
+    format = struct_format(byte_order, elements)
+    return struct.unpack(format, infile.read(struct.calcsize(format)))
+
+def struct_pack(byte_order, elements, values):
+    format = struct_format(byte_order, elements)
+    return struct.pack(format, *values)
+
 #-----------------------------------------------------------------------------
 def import_from(modulename, objectname):
     "Import and return objectname from modulename."

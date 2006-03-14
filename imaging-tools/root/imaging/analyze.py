@@ -4,6 +4,8 @@ from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
 import struct
 
 from odict import odict
+from imaging.util import struct_unpack, struct_pack, NATIVE, \
+                            LITTLE_ENDIAN, BIG_ENDIAN
 from imaging.imageio import BaseImage
 
 # maximum numeric range for some smaller data types

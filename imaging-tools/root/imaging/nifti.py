@@ -3,9 +3,12 @@ from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
   Complex32, fromstring, reshape, product
 import struct
 import exceptions
-from analyze import _concatenate
+
 from odict import odict
+from imaging.util import struct_unpack, struct_pack, NATIVE, \
+                            LITTLE_ENDIAN, BIG_ENDIAN
 from imaging.imageio import BaseImage
+from imaging.analyze import _concatenate
 
 # maximum numeric range for some smaller data types
 maxranges = {
@@ -127,23 +130,6 @@ field_formats = struct_fields.values()
 
 #define a 4 blank bytes for a null extension
 default_extension = struct.pack('l', 0)
-
-# struct byte order constants
-NATIVE = "="
-LITTLE_ENDIAN = "<"
-BIG_ENDIAN = ">"
-
-def struct_format(byte_order, elements):
-    return byte_order+" ".join(elements)
-    
-def struct_unpack(infile, byte_order, elements):
-    format = struct_format(byte_order, elements)
-    return struct.unpack(format, infile.read(struct.calcsize(format)))
-
-def struct_pack(byte_order, elements, values):
-    format = struct_format(byte_order, elements)
-    return struct.pack(format, *values)
-
 
 
 ##############################################################################
@@ -324,6 +310,10 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
     if targetdim is None: targetdim = image.ndim
     for subimage, substem in images_and_names(image, filestem, targetdim):
         NiftiWriter(subimage, datatype=datatype, filetype=filetype).write(substem)
+
+#-----------------------------------------------------------------------------
+def writeImageDual(image, filestem, datatype=None, targetdim=None):
+    writeImage(image, filestem, datatype, targetdim, filetype="dual")
 
 #-----------------------------------------------------------------------------
 def readImage(filestem): return NiftiImage(filestem)
