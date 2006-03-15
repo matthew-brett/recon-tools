@@ -8,6 +8,7 @@ from imaging.util import import_from
 # module-private dict specifying available image readers
 _readers = odict((
     ("analyze", ("imaging.analyze","readImage")),
+    ("nifti", ("imaging.nifti","readImage")),
     ("fid", ("imaging.varian.FidImage","FidImage")),
     ("fdf", ("imaging.varian.FDFImage","FDFImage"))))
 available_readers = _readers.keys()
@@ -15,7 +16,8 @@ available_readers = _readers.keys()
 # module-private dict specifying available image writers
 _writers = odict((
     ("analyze", ("imaging.analyze","writeImage")),
-    ("nifti", ("imaging.nifti","writeImage"))))
+    ("nifti", ("imaging.nifti","writeImage")),
+    ("nifti_dual", ("imaging.nifti","writeImageDual"))))
 available_writers = _writers.keys()
 
 
