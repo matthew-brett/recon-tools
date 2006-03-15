@@ -1,9 +1,10 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
-
+ 
+from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
+    NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
 from imaging.tools import OrderedConfigParser
-from imaging.varian.FidImage import FidImage
-from imaging.operations import OperationManager, RunLogger
+from imaging.operations import OperationManager, RunLogger, WriteImage
 
 
 ##############################################################################
@@ -14,24 +15,46 @@ class Recon (OptionParser):
     """
 
     _opmanager = OperationManager()
+    output_format_choices = ( 
+      ANALYZE_FORMAT, 
+      NIFTI_DUAL, 
+      NIFTI_SINGLE) 
+    output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE) 
+    default_logfile = "recon.log"
+
     options = (
-          Option("-r", "--vol-range", dest="vol_range", type="string",
-            default=":", action="store",
-            help="Which image volumes to reconstruct.  Format is start:end, "
-            "where either start or end may be omitted, indicating to start "\
-            "with the first or end with the last respectively.  The index of "\
-            "the first volume is 0.  The default value is a single colon "\
-            "with no start or end specified, meaning process all volumes.  "\
-            "(Note, this option refers specifically to image volumes, not to "\
-            "reference scans.)"),
 
-          Option("-t", "--tr", dest="TR", type="float", action="store",
-            help="Use the TR given here rather than the one in the procpar."),
+      Option("-r", "--vol-range", dest="vol_range", type="string",
+        default=":", action="store",
+        help="Which image volumes to reconstruct.  Format is start:end, "
+        "where either start or end may be omitted, indicating to start "\
+        "with the first or end with the last respectively.  The index of "\
+        "the first volume is 0.  The default value is a single colon "\
+        "with no start or end specified, meaning process all image volumes.  "\
+        "(NOTE: this option refers specifically to *image* volumes, not to "\
+        "reference scans, so that the first image volume means the first "\
+        "found after any reference scans.)"),
 
-          Option("-l", "--log-file", default="recon.log",
-            help="where to record reconstruction details ('recon.log' by "\
-                 "default)")
-        )
+      Option("-f", "--file-format", dest="file_format", action="store",
+        type="choice", default=WriteImage.ANALYZE_FORMAT,
+        choices=output_format_choices,
+        help="""{%s}
+        analyze: Save individual image for each frame in analyze format.
+        nifti dual: save nifti file in (hdr, img) pair.
+        nifti single: save nifti file in single-file format."""%\
+          ("|".join(output_format_choices))),
+
+      Option("-y", "--output-data-type", dest="output_datatype",
+        type="choice", default=MAGNITUDE_TYPE, action="store",
+        choices=output_datatype_choices,
+        help="""{%s}
+        Specifies whether output images should contain only magnitude or
+        both the real and imaginary components (only valid for analyze
+        format)."""%("|".join(output_datatype_choices))),
+
+      Option("-l", "--log-file", default=default_logfile,
+        help="where to record reconstruction details ('%s' by default)"\
+             %default_logfile))
 
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
@@ -42,7 +65,7 @@ class Recon (OptionParser):
     #-------------------------------------------------------------------------
     def configureOperations(self, configfile):
         """
-        Creates an OrderedConfigParser object to parse the config file
+        Creates an OrderedConfigParser object to parse the config file.
      
         Returns a list of (opclass, args) pairs by querying _opmanager for 
         the operation class by opname, and querying the OrderedConfigParser 
@@ -83,15 +106,17 @@ class Recon (OptionParser):
         object, including a resolved list of callable data operations.
     
         Uses OptionParser to fill in the options list from command line input; 
-        appends volume range specifications, and input/output directories as options;
-        asks for an index of requested operations from configureOperations()
+        appends volume range specifications, and input/output directories as
+        options; asks for an index of requested operations from
+        configureOperations()
         """
     
         options, args = self.parse_args()
-        if len(args) != 2: self.error("Expecting 2 arguments: oplist datadir")
+        if len(args) != 3:
+            self.error("Expecting 3 arguments: config datadir ouput")
 
         # treat the raw args as named options
-        options.config, options.datadir = args
+        options.config, options.datadir, options.outfile = args
 
         # parse vol-range
         options.vol_start, options.vol_end = \
@@ -120,21 +145,27 @@ class Recon (OptionParser):
         loops through image operation battery; saves processed image
         """
 
-        # Get the filename names and options from the command line.
+        # Parse command-line options.
         options = self.getOptions()
 
         runlogger = RunLogger(file(options.log_file,'w'))
 
         # Load k-space image from the fid file.
-        image = FidImage(options.datadir, options.TR)
+        image = self._opmanager.getOperation("ReadImage")(
+          filename=options.datadir, format="fid").run()
 
         # Log some parameter info to the console.
         image.logParams()
 
-        # Instantiate the operations.
+        # Instantiate the operations declared in config file.
         operations = [opclass(**args) for opclass,args in options.operations]
+
+        # Add an operation for saving data.
+        operations.append(
+           WriteImage.WriteImage(
+            filename=options.outfile,
+            format=options.file_format,
+            datatype=options.output_datatype))
 
         # Run the operations.
         self.runOperations(operations, image, runlogger)
-
-

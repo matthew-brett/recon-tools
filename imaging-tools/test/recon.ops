@@ -19,5 +19,5 @@ win_name = hanning
 [ViewImage]
 
 [WriteImage]
-filename=./test-output/replace-this
+filename=./test-output/asems_recon
 format=nifti single
