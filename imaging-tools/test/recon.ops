@@ -16,8 +16,6 @@ win_name = hanning
 
 #[InverseFFT3D]
 
-[ViewImage]
+[ComputeFieldMap]
 
-[WriteImage]
-filename=./test-output/asems_recon
-format=nifti single
+[ViewImage]
