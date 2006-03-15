@@ -153,10 +153,10 @@ class ProcParImageMixin (object):
         lambda self: self.pulse_sequence.find("epi") != -1, "")
 
     flash_converted = CachedReadOnlyProperty(
-        lambda self: self._procpar.get("flash_converted", ("foo",))[0] != "foo", "")
+        lambda self: getattr(self._procpar, "flash_converted", (None,))[0], "")
 
     acq_cycles = CachedReadOnlyProperty(
-        lambda self: self._procpar.get("acqcycles", ("0",))[0], "")
+        lambda self: getattr(self._procpar, "acqcycles", (None,))[0], "")
 
     def _get_pulse_sequence(self):
         pslabel = self._procpar.pslabel[0]
@@ -294,6 +294,9 @@ class ProcParImageMixin (object):
         lambda self: asarray(
           [self.echo_time + pe*self.echo_spacing\
            for pe in range(self.pe_per_seg)]), "")
+
+    dwell_time = CachedReadOnlyProperty(
+	lambda self: getattr(self._procpar, "at_calc", (None,))[0], "")
 
     # this quiet_interval may need to be added to tr in some way...
     quiet_interval = CachedReadOnlyProperty(
