@@ -198,6 +198,51 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
         print "Aborting procedure\n\n"
         if exit_on_error: sys.exit(1)
 
+#-----------------------------------------------------------------------------
+def resample_phase_axis(input_image,pixel_pos):
+#********************************************
+
+# Purpose: Resample along phase encode axis of epi images. It is assumed that the phase encode axis is the last (fastest varying) axis in the input image.
+
+# Inputs: input_image: Epi image to be resampled.
+#         pixel_pos: Image of resampled pixel positions.
+
+    shp = input_image.shape
+    ndim = len(shp)
+    xdim = shp[1]
+    if ndim == 2:
+        ydim = shp[0]
+        output_image = zeros((ydim,xdim)).astype(input_image.typecode())
+    elif ndim == 1:
+        ydim = 1
+        output_image = zeros((xdim)).astype(input_image.typecode())
+    else:
+        print 'Resample phase axis can only handle 1D or 2D input arrays.'
+        sys.exit(1)
+
+    delta = zeros((xdim)).astype(Float)
+    for y in range(ydim):
+        if ndim == 1:
+            vals = input_image[:]
+            x = pixel_pos[:]
+        elif ndim == 2:
+            vals = input_image[:,y]
+            x = pixel_pos[:,y]
+        ix = clip(floor(x).astype(Int),0,xdim-2)
+        delta = x - ix
+        if ndim == 1:
+            output_image[:] = ((1.-delta)*take(vals,ix) + delta*take(vals,ix+1)).astype(Float32)
+        elif ndim == 2:
+            output_image[:,y] = ((1.-delta)*take(vals,ix) + delta*take(vals,ix+1)).astype(Float32)
+        x1 = take(vals,ix)
+        x2 = take(vals,ix+1)
+#        if y == 27 and z==0:
+#            for i in range(xdim):
+#                print "%d x: %7.3f, ix: %d, delta: %5.3f, epi: %8.0f, out: %8.0f, x1: %8.0f, x2: %8.0f" % (i,x[i],ix[i],delta[i],abs(input_image[y,i]),abs(output_image[y,i]),abs(x1[i]),abs(x2[i]))
+
+    return output_image
+
+
 
 #-----------------------------------------------------------------------------
 if __name__ == "__main__":
