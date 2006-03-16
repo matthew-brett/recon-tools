@@ -1,7 +1,0 @@
-#!/bin/sh
-
-# epydoc generated api docs
-rm -rf api
-
-# command-line tool usage
-rm -f tool-usage.txt
