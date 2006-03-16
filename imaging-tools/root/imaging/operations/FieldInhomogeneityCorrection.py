@@ -25,7 +25,7 @@ class FieldInhomogeneityCorrection (Operation):
 ## 	    return
 	
 	shift = (image.xdim * image.dwell_time / (2*pi))
-	pixel_pos = shift*fMap.data.real + arange(fMap.xdim)
+	pixel_pos = shift*fMap.data + arange(fMap.xdim)
         pic = squeeze(image.data)
         #for slice, pix_pos in (pic, pixel_pos):
         for z in range(fMap.zdim):

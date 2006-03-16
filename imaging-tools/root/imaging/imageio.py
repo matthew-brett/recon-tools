@@ -94,8 +94,8 @@ class BaseImage (object):
               "cannot concatenate images with different pixel sizes: %s != %s"%\
               (self_sizes, image_sizes))
 
-        newdata = newdim and asarray((self.data, image.data) or\
-                    pylab.concatenate((self.data, image.data), axis))
+        newdata = newdim and asarray((self.data, image.data)) or\
+                    pylab.concatenate((self.data, image.data), axis)
         return self._subimage(newdata)
 
     #-------------------------------------------------------------------------

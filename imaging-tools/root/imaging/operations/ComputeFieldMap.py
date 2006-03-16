@@ -39,12 +39,12 @@ class ComputeFieldMap (Operation):
         phase_pairs = []
         unwrapped_vols = list(unwrapped.subImages())
         for index, phasevol in enumerate(unwrapped_vols[1:]):
-            phase_pairs.append(
-              unwrapped_vols[index].concatenate(phasevol, newdim=True))
+##             phase_pairs.append(
+##               unwrapped_vols[index].concatenate(phasevol, newdim=True))
             fmap = phasevol.data - unwrapped_vols[index].data
             # does this need to be corrected for?
             #offset = phase_offset(fmap)
-            fmap = (fmap/asym_time).astype(Complex32)
+            fmap = (fmap/asym_time).astype(Float32)
             fmap_image = phasevol._subimage(fmap)
             writeImage(fmap_image, "fieldmap-%d"%(index))
             
