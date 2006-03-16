@@ -11,6 +11,12 @@ from imaging.varian import tablib
 from imaging.varian.ProcPar import ProcPar, ProcParImageMixin
 from imaging.varian.FidFile import FidFile
 
+
+#-----------------------------------------------------------------------------
+def getPulseSeq(datadir):
+    pp = ProcParImageMixin(datadir)
+    return pp.pulse_sequence
+
 #-----------------------------------------------------------------------------
 def complex_fromstring(data, numtype):
     return fromstring(
@@ -389,7 +395,8 @@ class FidImage (BaseImage, ProcParImageMixin):
                 scale = 2*nline*n_fe_true
                 for slice in ksp_image:
                     slice[:] = (slice - (sum(slice[:nline,:].flat) + \
-                                 sum(slice[-nline:,:].flat))/scale).astype(Complex32)            
+			   sum(slice[-nline:,:].flat))/scale).astype(Complex32) 
+
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:
                 self.ref_data[vol] = ksp_image
