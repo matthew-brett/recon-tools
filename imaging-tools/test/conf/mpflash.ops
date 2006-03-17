@@ -1,0 +1,10 @@
+[FermiFilter]
+trans_width=0.3
+cutoff=0.95
+
+#[ReorderSlices]
+#flip_slices=False
+
+[InverseFFT]
+
+[ViewImage]

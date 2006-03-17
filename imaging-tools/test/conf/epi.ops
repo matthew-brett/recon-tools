@@ -1,0 +1,21 @@
+[UnbalPhaseCorrection]
+#[PhaseCorrection]
+
+[SegmentationCorrection]
+
+[FermiFilter]
+trans_width=0.3
+cutoff=0.95
+
+[ReorderSlices]
+flip_slices=False
+
+[Window]
+win_name = hanning
+
+[InverseFFT]
+
+#[FieldInhomogeneityCorrection]
+#fmap_file=fieldmap-0
+
+[ViewImage]
