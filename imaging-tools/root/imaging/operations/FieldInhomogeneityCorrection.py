@@ -26,10 +26,11 @@ class FieldInhomogeneityCorrection (Operation):
 	
 	shift = (image.xdim * image.dwell_time / (2*pi))
 	pixel_pos = shift*fMap.data + arange(fMap.xdim)
-        pic = squeeze(image.data)
+
         #for slice, pix_pos in (pic, pixel_pos):
-        for z in range(fMap.zdim):
-            pic[z] = resample_phase_axis(abs(pic[z]), pixel_pos[z])
+        for slice in image.data:
+            for z in range(fMap.zdim):
+                slice[z,:] = resample_phase_axis(abs(slice[z]), pixel_pos[z])
 	
         # Read the inhomogeneity field-map data from disk (Calculated using compute_fmap).
        

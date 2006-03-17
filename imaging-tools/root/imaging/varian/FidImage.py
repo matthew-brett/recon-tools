@@ -15,7 +15,16 @@ from imaging.varian.FidFile import FidFile
 #-----------------------------------------------------------------------------
 def getPulseSeq(datadir):
     pp = ProcParImageMixin(datadir)
-    return pp.pulse_sequence
+    ps = pp.pulse_sequence
+
+    # Some sequences might require different treatment if conditions are true.
+    # if mpflash has the flash_converted flag, then use 2DFFT instead of 3D
+    if ps == "mp_flash3d":
+        flag = (pp.flash_converted and 1 or 0, )
+    # ... add more flags as necessary
+    else:
+        flag = None
+    return (ps, flag)
 
 #-----------------------------------------------------------------------------
 def complex_fromstring(data, numtype):
@@ -390,12 +399,12 @@ class FidImage (BaseImage, ProcParImageMixin):
                           take(navigators[slice,pe], time_rev)
 
             # Make a correction for mpflash data
-            if pulse_sequence == "mp_flash3d" and not self.flash_converted:
-                nline = int(n_fe_true/20)
-                scale = 2*nline*n_fe_true
-                for slice in ksp_image:
-                    slice[:] = (slice - (sum(slice[:nline,:].flat) + \
-			   sum(slice[-nline:,:].flat))/scale).astype(Complex32) 
+##             if pulse_sequence == "mp_flash3d" and not self.flash_converted:
+##                 nline = int(n_fe_true/20)
+##                 scale = 2*nline*n_fe_true
+##                 for slice in ksp_image:
+##                     slice[:] = (slice - (sum(slice[:nline,:].flat) + \
+## 			   sum(slice[-nline:,:].flat))/scale).astype(Complex32) 
 
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:

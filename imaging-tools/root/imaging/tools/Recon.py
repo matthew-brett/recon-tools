@@ -5,7 +5,7 @@ from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
 from imaging.tools import OrderedConfigParser
 from imaging.operations import OperationManager, RunLogger, WriteImage
-
+from imaging.varian.FidImage import getPulseSeq
 
 ##############################################################################
 class Recon (OptionParser):
@@ -23,6 +23,11 @@ class Recon (OptionParser):
     default_logfile = "recon.log"
 
     options = (
+
+      Option("-c", "--config", dest="config", type="string",
+        default=None, action="store",
+        help="Name of the config file describing operations and operations" \
+        " parameters."),
 
       Option("-r", "--vol-range", dest="vol_range", type="string",
         default=":", action="store",
@@ -100,6 +105,24 @@ class Recon (OptionParser):
         return vol_start, vol_end
 
     #-------------------------------------------------------------------------
+    def findConfig(self, datadir):
+        # unfortunately this is hard-wired to the imaging-tools/test directory
+        
+        oplistBySeq = {
+            "epidw": "conf/epi.ops",
+            "epi":   "conf/epi.ops",
+            "gems":  "conf/gems.ops",
+            "mp_flash3d0": "conf/mpflash3D.ops",
+            "mp_flash3d1": "conf/mpflash.ops",
+            "asems": "conf/asems.ops"
+        }
+        
+        # find out which pulse sequence by peeking at the procpar
+        pseq, flag = getPulseSeq(datadir)
+        lookup = not flag and pseq or  pseq + reduce(lambda s1,s2: s1+s2, map(str, flag))
+        return oplistBySeq[lookup]
+        
+    #-------------------------------------------------------------------------
     def getOptions(self):
         """
         Bundle command-line arguments and options into a single options
@@ -112,11 +135,16 @@ class Recon (OptionParser):
         """
     
         options, args = self.parse_args()
-        if len(args) != 3:
-            self.error("Expecting 3 arguments: config datadir ouput")
+        if len(args) != 2:
+            self.error("Expecting 2 arguments: datadir ouput")
 
         # treat the raw args as named options
-        options.config, options.datadir, options.outfile = args
+        options.datadir, options.outfile = args
+
+        # guess appropriate oplist if necessary
+        if not options.config:
+            options.config = self.findConfig(options.datadir)
+            print "Using oplist %s by default"%(options.config.split('/')[-1])
 
         # parse vol-range
         options.vol_start, options.vol_end = \

@@ -152,8 +152,10 @@ class ProcParImageMixin (object):
     isepi = CachedReadOnlyProperty(
         lambda self: self.pulse_sequence.find("epi") != -1, "")
 
+    # seems that this should count as true if field simply exists
     flash_converted = CachedReadOnlyProperty(
-        lambda self: getattr(self._procpar, "flash_converted", (None,))[0], "")
+        lambda self: 
+        getattr(self._procpar, "flash_converted", ("foo",))[0] != "foo", "")
 
     acq_cycles = CachedReadOnlyProperty(
         lambda self: getattr(self._procpar, "acqcycles", (None,))[0], "")
