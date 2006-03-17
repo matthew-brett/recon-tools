@@ -1,6 +1,7 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
  
+import imaging.conf
 from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
 from imaging.tools import OrderedConfigParser
@@ -26,7 +27,7 @@ class Recon (OptionParser):
 
       Option("-c", "--config", dest="config", type="string",
         default=None, action="store",
-        help="Name of the config file describing operations and operations" \
+        help="Name of the config file describing operations and operation" \
         " parameters."),
 
       Option("-r", "--vol-range", dest="vol_range", type="string",
@@ -106,21 +107,25 @@ class Recon (OptionParser):
 
     #-------------------------------------------------------------------------
     def findConfig(self, datadir):
-        # unfortunately this is hard-wired to the imaging-tools/test directory
+        "Determine which stock oplist to use based on pulse sequence."
         
         oplistBySeq = {
-            "epidw": "conf/epi.ops",
-            "epi":   "conf/epi.ops",
-            "gems":  "conf/gems.ops",
-            "mp_flash3d0": "conf/mpflash3D.ops",
-            "mp_flash3d1": "conf/mpflash.ops",
-            "asems": "conf/asems.ops"
-        }
+          "epidw": "epi.ops",
+          "epi":   "epi.ops",
+          "gems":  "gems.ops",
+          "mp_flash3d0": "mpflash3D.ops",
+          "mp_flash3d1": "mpflash.ops",
+          "asems": "asems.ops" }
         
         # find out which pulse sequence by peeking at the procpar
         pseq, flag = getPulseSeq(datadir)
-        lookup = not flag and pseq or  pseq + reduce(lambda s1,s2: s1+s2, map(str, flag))
-        return oplistBySeq[lookup]
+        key = not flag and pseq or  pseq + reduce(lambda s1,s2: s1+s2, map(str, flag))
+        if not oplistBySeq.has_key(key):
+            raise RuntimeError(
+              "No default operations found for pulse sequence '%s'"%key)
+        opfilename = oplistBySeq[key]
+        print "Using default oplist %s."%opfilename
+        return imaging.conf.getConfigFileName(opfilename)
         
     #-------------------------------------------------------------------------
     def getOptions(self):
@@ -141,10 +146,8 @@ class Recon (OptionParser):
         # treat the raw args as named options
         options.datadir, options.outfile = args
 
-        # guess appropriate oplist if necessary
-        if not options.config:
-            options.config = self.findConfig(options.datadir)
-            print "Using oplist %s by default"%(options.config.split('/')[-1])
+        # use stock oplist if none specified
+        if not options.config: options.config = self.findConfig(options.datadir)
 
         # parse vol-range
         options.vol_start, options.vol_end = \
