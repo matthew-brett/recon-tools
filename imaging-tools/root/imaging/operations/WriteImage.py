@@ -31,7 +31,6 @@ class WriteImage (Operation):
           COMPLEX_TYPE: analyze.COMPLEX
         }[self.datatype]
         analyze.writeImage(image, self.filename, data_type, 3)
-
     #-------------------------------------------------------------------------
     def writeNifti(self, image):
         from imaging import nifti
@@ -42,7 +41,6 @@ class WriteImage (Operation):
           COMPLEX_TYPE: nifti.COMPLEX
         }[self.datatype]
         nifti.writeImage(image, self.filename, data_type, 3, self.format[6:])
-
     #-------------------------------------------------------------------------
     def run(self, image):
         writer = {
