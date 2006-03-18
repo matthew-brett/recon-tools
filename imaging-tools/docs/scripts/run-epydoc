@@ -1,3 +1,12 @@
 #!/bin/sh
-export PYTHON_PATH=../../root
-epydoc -qqqq --output ../api --name imaging-tools $PYTHON_PATH/*.py $PYTHON_PATH/imaging
+PYTHON_PATH=../../root
+output_dir=../api
+mkdir -p ${output_dir}
+epydoc -qqqq \
+  --output ${output_dir} \
+  --name imaging-tools \
+  --css grayscale \
+  --no-private \
+  --inheritance=listed \
+  --ignore-param-mismatch \
+  $PYTHON_PATH/*.py $PYTHON_PATH/imaging
