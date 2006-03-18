@@ -7,10 +7,9 @@ rm -rf dist build MANIFEST
 # svn droppings
 rm -rf $(find . -name "svn-commit*.tmp")
 
-# vim droppings
+# editor leftovers
 rm -rf $(find . -name "*~")
 rm -rf $(find . -name ".*.sw")
 
 # python bytecode
 rm -rf $(find . -name "*.pyc")
-
