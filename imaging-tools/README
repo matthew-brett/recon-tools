@@ -9,7 +9,9 @@ developed at the University of California Berkeley's Helen Wills Neuroscience
 Institute Brain Imaging Center.
 For documentation, see https://cirl.berkeley.edu/view/BIC/ImagingTools
 
-##############################################################################
+#-----------------------------------------------------------------------------
+LICENSE:
+
 This program is free software; you can redistribute it and/or modify it
 under the terms of the GNU General Public License as published by the Free
 Software Foundation; either version 2 of the License, or (at your option)
@@ -31,7 +33,9 @@ A copy of the GPL version 2 can be found in the file named LICENSE that is
 included with this source code distribution.  You can also learn more from:
 http://www.gnu.org
 
-##############################################################################
+#-----------------------------------------------------------------------------
+SUMMARY:
+
 The imaging-tools package provides a number of command-line tools for
 manipulating image data, as well as a code library of reusable components.
 The central types of objects in the imaging-tools system are data readers,
@@ -41,6 +45,19 @@ beginning with a reader, followed by a sequence of transformers (called
 Operations), and ending with a writer.  Image data in the pipeline is
 represented by an Image object conforming to a conventional Image interface.
 
-##############################################################################
-Testing:  A crude test framework is provided in the test directory.  Please
-read the README there for more details.
+#-----------------------------------------------------------------------------
+USING MAKE:
+
+make install:       installs tools, library, and documentation
+make tools-rpm:     build an RPM for installing the tools and library
+make docs:          generate some documentation from code
+make install-docs:  install documentation (/usr/share/doc/imaging-tools)
+make docs-rpm:      build an RPM for install the documentation
+make test:          run test suite
+make clean:         remove all generated files
+
+#-----------------------------------------------------------------------------
+TESTING:
+
+A crude test framework is provided in the test directory.  Please read the
+README there for more details.
