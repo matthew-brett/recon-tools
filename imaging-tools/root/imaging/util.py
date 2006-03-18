@@ -163,7 +163,7 @@ def unwrap_phase(image):
     wrapped_fname = "wrapped_cmplx" 
     unwrapped_fname = "unwrapped"
     writeImage(image, wrapped_fname, "analyze")
-    exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
+    exec_cmd("prelude -c %s -o %s -s"%(wrapped_fname, unwrapped_fname))
     unwrapped_image = readImage(unwrapped_fname, "analyze")
     exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
     return unwrapped_image
@@ -202,23 +202,23 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
 def resample_phase_axis(input_image,pixel_pos):
 #********************************************
 
-# Purpose: Resample along phase encode axis of epi images. It is assumed that the phase encode axis is the last (fastest varying) axis in the input image.
+# Purpose: Resample along phase encode axis of epi images.
 
-# Inputs: input_image: Epi image to be resampled.
-#         pixel_pos: Image of resampled pixel positions.
+# Inputs: input_image: Epi -/volume/slice to be resampled,
+#         in orientation (-/nslice//, npe, nfe)
+#
+#         pixel_pos: Image of resampled pixel positions,
+#         in orientation (-/nslice//, npe, nfe)
+#
+# To be generalized into better vector operations later
+
+
 
     shp = input_image.shape
     ndim = len(shp)
-    xdim = shp[1]
-    if ndim == 2:
-        ydim = shp[0]
-        output_image = zeros((ydim,xdim)).astype(input_image.typecode())
-    elif ndim == 1:
-        ydim = 1
-        output_image = zeros((xdim)).astype(input_image.typecode())
-    else:
-        print 'Resample phase axis can only handle 1D or 2D input arrays.'
-        sys.exit(1)
+    xdim = shp[0]
+    ydim = shp[1]
+    output_image = zeros((ydim,xdim)).astype(input_image.typecode())
 
     delta = zeros((xdim)).astype(Float)
     for y in range(ydim):
@@ -236,9 +236,6 @@ def resample_phase_axis(input_image,pixel_pos):
             output_image[:,y] = ((1.-delta)*take(vals,ix) + delta*take(vals,ix+1)).astype(Float32)
         x1 = take(vals,ix)
         x2 = take(vals,ix+1)
-#        if y == 27 and z==0:
-#            for i in range(xdim):
-#                print "%d x: %7.3f, ix: %d, delta: %5.3f, epi: %8.0f, out: %8.0f, x1: %8.0f, x2: %8.0f" % (i,x[i],ix[i],delta[i],abs(input_image[y,i]),abs(output_image[y,i]),abs(x1[i]),abs(x2[i]))
 
     return output_image
 
