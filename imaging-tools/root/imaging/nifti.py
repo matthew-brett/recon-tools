@@ -10,12 +10,6 @@ from imaging.util import struct_unpack, struct_pack, NATIVE, \
 from imaging.imageio import BaseImage
 from imaging.analyze import _concatenate
 
-# maximum numeric range for some smaller data types
-maxranges = {
-  Int8:  255.,
-  Int16: 32767.,
-  Int32: 2147483648.}
-
 # datatype is a bit flag into the datatype identification byte of the Analyze
 # header. 
 BYTE = 2
@@ -131,7 +125,6 @@ field_formats = struct_fields.values()
 #define a 4 blank bytes for a null extension
 default_extension = struct.pack('l', 0)
 
-
 ##############################################################################
 class NiftiImage (BaseImage):
     """
@@ -193,7 +186,8 @@ class NiftiWriter (object):
     #[STATIC]
     _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
     #[STATIC]
-    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': '', 'B': 0}
+    _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
+                                'c': '\0', 's': '', 'B': 0}
 
     def __init__(self, image, datatype=None, filetype="single"):
         self.image = image
@@ -215,11 +209,11 @@ class NiftiWriter (object):
             file(fname,'w').write(self.make_hdr())
             #write extension? 
             file(fname,'a').write(default_extension)
-            file(fname,'a').write(self.format_img())
+            file(fname,'a').write(self.image.data.tostring())
         else:
             headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
             file(headername,'w').write(self.make_hdr())
-            file(imagename, 'w').write(self.format_img())
+            file(imagename, 'w').write(self.image.data.tostring())
            
 
     #-------------------------------------------------------------------------
@@ -253,34 +247,6 @@ class NiftiWriter (object):
 
         fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
         return struct_pack(NATIVE, field_formats, fieldvalues)
-
-    #-------------------------------------------------------------------------
-    def format_img(self):
-        "Format image data to write to a NIFTI file."
-        imagedata = self.image.data
-
-        if self.datatype != COMPLEX: imagedata = abs(imagedata)
-
-        # if requested datatype does not correspond to image datatype, cast
-        if self.datatype != typecode2datatype[imagedata.typecode()]:
-            typecode = datatype2typecode[self.datatype]
-
-            # Make sure image values are within the range of the desired
-            # data type
-            if self.datatype in (BYTE, SHORT, INTEGER):
-                maxval = amax(abs(imagedata).flat)
-                if maxval == 0.: maxval = 1.e20
-                maxrange = maxranges[typecode]
-
-                # if out of desired bounds, perform scaling
-                if maxval > maxrange: imagedata *= (maxrange/maxval)
-
-            # cast image values to the desired datatype
-            imagedata = imagedata.astype( typecode )
-            print "CASTING"
-
-        return imagedata.tostring()
-
 
 #-----------------------------------------------------------------------------
 def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"):

@@ -6,8 +6,14 @@ import struct
 from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones
+  meshgrid, sqrt, exp, ones, amax
 
+
+# maximum numeric range for some smaller data types
+maxranges = {
+  Int8:  255.,
+  Int16: 32767.,
+  Int32: 2147483648.}
 
 # struct byte order constants
 NATIVE = "="
@@ -31,6 +37,18 @@ def import_from(modulename, objectname):
     module = __import__(modulename, globals(), locals(), (objectname,))
     return getattr(module, objectname)
 
+#-----------------------------------------------------------------------------
+def castData(data, data_code):
+    "casts numbers in data to desired typecode in data_code"
+    # if casting to an integer type, check the data range
+    if data_code in (Int8, Int16, Int32):
+        maxval = amax(abs(data).flat)
+        if maxval == 0.: maxval = 1.e20
+        maxrange = maxranges[data_code]
+        if maxval > maxrange: data *= (maxrange/maxval)
+    # make the cast
+    data = data.astype(data_code)
+    
 #-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
     """
@@ -200,8 +218,6 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
 
 #-----------------------------------------------------------------------------
 def resample_phase_axis(vol_data, pixel_pos):
-#********************************************
-
     """Purpose: Resample along phase encode axis of epi images.
 
     @param vol_data: Epi volume to be resampled, in orientation

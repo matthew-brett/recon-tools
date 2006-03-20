@@ -8,12 +8,6 @@ from imaging.util import struct_unpack, struct_pack, NATIVE, \
                             LITTLE_ENDIAN, BIG_ENDIAN
 from imaging.imageio import BaseImage
 
-# maximum numeric range for some smaller data types
-maxranges = {
-  Int8:  255.,
-  Int16: 32767.,
-  Int32: 2147483648.}
-
 # datatype is a bit flag into the datatype identification byte of the Analyze
 # header. 
 BYTE = 2
@@ -244,30 +238,9 @@ class AnalyzeWriter (object):
     #-------------------------------------------------------------------------
     def write_img(self, filename):
         "Write ANALYZE format image (.img) file."
-        imagedata = self.image.data
-
-        if self.datatype != COMPLEX: imagedata = abs(imagedata)
-
-        # if requested datatype does not correspond to image datatype, cast
-        if self.datatype != typecode2datatype[imagedata.typecode()]:
-            typecode = datatype2typecode[self.datatype]
-
-            # Make sure image values are within the range of the desired
-            # data type
-            if self.datatype in (BYTE, SHORT, INTEGER):
-                maxval = amax(abs(imagedata).flat)
-                if maxval == 0.: maxval = 1.e20
-                maxrange = maxranges[typecode]
-
-                # if out of desired bounds, perform scaling
-                if maxval > maxrange: imagedata *= (maxrange/maxval)
-
-            # cast image values to the desired datatype
-            imagedata = imagedata.astype( typecode )
-
         # Write the image file.
         f = file( filename, "w" )
-        f.write( imagedata.tostring() )
+        f.write( self.image.data.tostring() )
         f.close()
 
 #-----------------------------------------------------------------------------

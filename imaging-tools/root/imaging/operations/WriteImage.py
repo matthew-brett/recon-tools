@@ -1,4 +1,5 @@
 from imaging.imageio import writeImage
+from imaging.util import castData
 from imaging.operations import Operation, Parameter
 
 ANALYZE_FORMAT = "analyze"
@@ -24,23 +25,45 @@ class WriteImage (Operation):
     #-------------------------------------------------------------------------
     def writeAnalyze(self, image):
         from imaging import analyze
-
         # convert to format-specific datatype constant
-        data_type = {
-          MAGNITUDE_TYPE: analyze.FLOAT,
-          COMPLEX_TYPE: analyze.COMPLEX
-        }[self.datatype]
-        analyze.writeImage(image, self.filename, data_type, 3)
+        if self.datatype == COMPLEX_TYPE:
+            # misunderstanding, default to
+            # magnitude type handled in next case
+            if not hasattr(image.data, "imag"):
+                self.datatype = MAGNITUDE_TYPE
+            data_code = analyze.COMPLEX        
+        if self.datatype == MAGNITUDE_TYPE:
+            if hasattr(image.data, "imag"):
+                image.data = abs(image.data)
+            data_code = analyze.FLOAT
+
+        # if the image data isn't of the desired type (analyze.FLOAT, or
+        # analyze.COMPLEX), then cast it there.
+        if data_code != analyze.typecode2datatype[image.data.typecode()]:
+            castData(image.data, data_code)
+        
+        analyze.writeImage(image, self.filename, data_code, 3)
     #-------------------------------------------------------------------------
     def writeNifti(self, image):
         from imaging import nifti
+         # convert to format-specific datatype constant
+        if self.datatype == COMPLEX_TYPE:
+            # misunderstanding, default to
+            # magnitude type handled in next case
+            if not hasattr(image.data, "imag"):
+                self.datatype = MAGNITUDE_TYPE
+            data_code = nifti.COMPLEX        
+        if self.datatype == MAGNITUDE_TYPE:
+            if hasattr(image.data, "imag"):
+                image.data = abs(image.data)
+            data_code = nifti.FLOAT
 
-        # convert to format-specific datatype constant
-        data_type = {
-          MAGNITUDE_TYPE: nifti.FLOAT,
-          COMPLEX_TYPE: nifti.COMPLEX
-        }[self.datatype]
-        nifti.writeImage(image, self.filename, data_type, 3, self.format[6:])
+        # if the image data isn't of the desired type (nifti.FLOAT, or
+        # nifti.COMPLEX), then cast it there.
+        if data_code != nifti.typecode2datatype[image.data.typecode()]:
+            castData(image.data, nifti.datatype2typecode[data_code])      
+        
+        nifti.writeImage(image, self.filename, data_code, 3, self.format[6:])
     #-------------------------------------------------------------------------
     def run(self, image):
         writer = {
