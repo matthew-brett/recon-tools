@@ -5,7 +5,7 @@ from pylab import pi, Float32, Complex32, arange, outerproduct, ones
 
 
 ##############################################################################
-class FieldInhomogeneityCorrection (Operation):
+class GeometricUndistortion (Operation):
 
     params = (
 	Parameter(name="fmap_file", type="str", default="",
@@ -32,10 +32,8 @@ class FieldInhomogeneityCorrection (Operation):
 	shift = (image.xdim * image.dwell_time / (2*pi))
         pixel_pos = shift*fMap.data.real + \
                     outerproduct(arange(fMap.xdim), ones(fMap.xdim))
-        # will redo this loop after revisiting resample_phase_axis
-        
-        for vol in image.data:
-            for z in range(fMap.zdim):
-                vol[z,:] = resample_phase_axis(abs(vol[z]), pixel_pos[z]).astype(Complex32)
+
+        image.data.real = resample_phase_axis(abs(image.data), pixel_pos)
+        image.data.imag = 0.
 	
         

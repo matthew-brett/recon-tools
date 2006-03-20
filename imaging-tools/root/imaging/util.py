@@ -199,46 +199,46 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
         if exit_on_error: sys.exit(1)
 
 #-----------------------------------------------------------------------------
-def resample_phase_axis(input_image,pixel_pos):
+def resample_phase_axis(vol_data, pixel_pos):
 #********************************************
 
-# Purpose: Resample along phase encode axis of epi images.
+    """Purpose: Resample along phase encode axis of epi images.
 
-# Inputs: input_image: Epi -/volume/slice to be resampled,
-#         in orientation (-/nslice//, npe, nfe)
-#
-#         pixel_pos: Image of resampled pixel positions,
-#         in orientation (-/nslice//, npe, nfe)
-#
-# To be generalized into better vector operations later
+    @param vol_data: Epi volume to be resampled, in orientation
+    (nvol, nslice, npe, nfe)
 
+    @param pixel_pos: Image of resampled pixel positions,
+    in orientation (nslice, npe, nfe)
 
+    @return: volume resampled along phase axis
+    
+    Warning: beware of any rotations which would switch expected axes!"""
 
-    shp = input_image.shape
-    ndim = len(shp)
-    xdim = shp[0]
-    ydim = shp[1]
-    output_image = zeros((ydim,xdim)).astype(input_image.typecode())
+    vdshape, ppshape = vol_data.shape, pixel_pos.shape
+    vdlen, pplen = len(vdshape), len(ppshape)
 
-    delta = zeros((xdim)).astype(Float)
-    for y in range(ydim):
-        if ndim == 1:
-            vals = input_image[:]
-            x = pixel_pos[:]
-        elif ndim == 2:
-            vals = input_image[:,y]
-            x = pixel_pos[:,y]
-        ix = clip(floor(x).astype(Int),0,xdim-2)
-        delta = x - ix
-        if ndim == 1:
-            output_image[:] = ((1.-delta)*take(vals,ix) + delta*take(vals,ix+1)).astype(Float32)
-        elif ndim == 2:
-            output_image[:,y] = ((1.-delta)*take(vals,ix) + delta*take(vals,ix+1)).astype(Float32)
-        x1 = take(vals,ix)
-        x2 = take(vals,ix+1)
+    if vdlen < 3 or pplen < 3:
+        print "needs at least 3 dimensions for both args, returning"
+        return
+       
+    if vdshape[-3:] != ppshape[-3:]:
+        print "phase map dimensions don't match volume dimensions, returning"
+        return
 
-    return output_image
+    nvol = (vdlen < 4) and 1 or vdshape[0]  # vdlen should always be 4?)
+    nslice, n_pe, n_fe =  vdshape[1:]
 
+    for vol in range(nvol):
+        for slice in range(nslice):
+            s = vol_data[vol, slice]
+            x = pplen==4 and pixel_pos[vol, slice] or pixel_pos[slice]
+            ix = clip(floor(x).astype(Int), 0, n_fe-2)
+            delta = x - ix
+            for m in range(n_pe):
+                s[:,m]=((1.-delta[:,m])*take(s[:,m],ix[:,m]) \
+                        + delta[:,m]*take(s[:,m],ix[:,m]+1)).astype(Float32)
+
+    return vol_data
 
 
 #-----------------------------------------------------------------------------
