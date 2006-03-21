@@ -147,8 +147,8 @@ class UnbalPhaseCorrection (Operation):
         # apply the odd/even correction at odd/even lines
         for t in range(image.tdim):
             for z in range(image.zdim):
-                plot(phs_even[z])
-                plot(phs_odd[z])
+#                plot(phs_even[z])
+#                plot(phs_odd[z])
 #                plot(fk_even[z])
 #                plot(fk_odd[z])
                 for m in range(0, n_pe, 2):
