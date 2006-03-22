@@ -31,7 +31,7 @@ class GeometricUndistortion (Operation):
 	
 	shift = (image.xdim * image.dwell_time / (2*pi))
         pixel_pos = shift*fMap.data.real + \
-                    outerproduct(arange(fMap.xdim), ones(fMap.xdim))
+                    outerproduct(arange(fMap.ydim), ones(fMap.ydim))
 
         image.data.real = resample_phase_axis(abs(image.data), pixel_pos)
         image.data.imag = 0.
