@@ -161,24 +161,24 @@ class ControlPanel (gtk.Frame):
         return self.contrast_slider.get_adjustment().value
 
     #-------------------------------------------------------------------------
-    def getDimIndex(self, dnum):
+    def getDimPosition(self, dnum):
         return int(self.sliders[dnum].get_adjustment().value)
 
     #-------------------------------------------------------------------------
-    def setDimIndex(self, dnum, index):
+    def setDimPosition(self, dnum, index):
         return self.sliders[dnum].get_adjustment().set_value(int(index))
 
     #-------------------------------------------------------------------------
-    def getRowIndex(self): return self.getDimIndex(self.slice_dims[0])
+    def getRowIndex(self): return self.getDimPosition(self.slice_dims[0])
 
     #-------------------------------------------------------------------------
-    def getColIndex(self): return self.getDimIndex(self.slice_dims[1])
+    def getColIndex(self): return self.getDimPosition(self.slice_dims[1])
 
     #------------------------------------------------------------------------- 
-    def setRowIndex(self, index): self.setDimIndex(self.slice_dims[0], index)
+    def setRowIndex(self, index): self.setDimPosition(self.slice_dims[0],index)
 
     #------------------------------------------------------------------------- 
-    def setColIndex(self, index): self.setDimIndex(self.slice_dims[1], index)
+    def setColIndex(self, index): self.setDimPosition(self.slice_dims[1],index)
 
     #------------------------------------------------------------------------- 
     def getRowDim(self): return self.dimensions[self.slice_dims[0]]
@@ -191,7 +191,7 @@ class ControlPanel (gtk.Frame):
         return tuple([
           dim.index in self.slice_dims and\
             slice(0, dim.size) or\
-            self.getDimIndex(dim.index)
+            self.getDimPosition(dim.index)
           for dim in self.dimensions])
 
     #-------------------------------------------------------------------------
@@ -586,10 +586,14 @@ class sliceview (gtk.Window):
           squeeze(self.data[self.control_panel.getIndexSlices()]))
 
     #-------------------------------------------------------------------------
-    def updateRow(self): self.rowplot.setData(self.getRow())
+    def updateRow(self):
+        self.updateCrosshairs()
+        self.rowplot.setData(self.getRow())
 
     #-------------------------------------------------------------------------
-    def updateCol(self): self.colplot.setData(self.getCol())
+    def updateCol(self):
+        self.updateCrosshairs()
+        self.colplot.setData(self.getCol())
 
     #-------------------------------------------------------------------------
     def updateSlice(self):
@@ -627,8 +631,8 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def sliderHandler(self, adj):
         row_dim, col_dim= self.control_panel.slice_dims
-        if adj.dim == row_dim: self.updateRow()
-        elif adj.dim == col_dim: self.updateCol()
+        if adj.dim.index == row_dim: self.updateRow()
+        elif adj.dim.index == col_dim: self.updateCol()
         else: self.updateSlice()
 
     #-------------------------------------------------------------------------
