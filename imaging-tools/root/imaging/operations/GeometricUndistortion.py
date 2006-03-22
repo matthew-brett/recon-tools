@@ -12,7 +12,6 @@ class GeometricUndistortion (Operation):
 		  description="The name of the field map file."),
 	)
 
-
     def run(self, image):
         "Correct for Nyquist ghosting due to field inhomogeneity."
 	
@@ -30,9 +29,10 @@ class GeometricUndistortion (Operation):
 	    return
 	
 	shift = (image.xdim * image.dwell_time / (2*pi))
-        pixel_pos = shift*fMap.data.real + \
+        #watch the sign
+        pixel_pos = -shift*fMap.data + \
                     outerproduct(arange(fMap.ydim), ones(fMap.ydim))
-
+        
         image.data.real = resample_phase_axis(abs(image.data), pixel_pos)
         image.data.imag = 0.
 	
