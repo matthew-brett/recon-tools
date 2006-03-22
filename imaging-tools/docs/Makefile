@@ -3,7 +3,7 @@
 # there
 docs_scripts := $(docs_dir)/scripts
 docs_dest := /usr/share/doc/$(package_name)-$(version)
-docs_rpm_name := $(package_name)-docs-$(version)
+docs_rpm_name := $(package_name)-docs
 api_dir := $(docs_dir)/api
 tool_usage := $(docs_dir)/tool-usage.txt
 python_source_files := $(shell find root/ -name "*.py")
@@ -13,7 +13,7 @@ docs: $(api_dir) $(tool_usage)
 # make a documentation rpm (requires checkinstall# make a documentation rpm (requires checkinstall)
 docs-rpm: docs
 	$(checkinstall) -R \
-      --pkgname=$(package_name)-docs \
+      --pkgname=$(docs_rpm_name) \
       --pkgversion=$(version)\
       --showinstall=no --nodoc \
 	  $(docs_scripts)/install-docs $(docs_dir) $(docs_dest)

@@ -1,6 +1,6 @@
 python := /bin/env python
 version := 0.3a
-package_name := imaging-tools
+package_name := python-imaging-tools
 rpm_name := $(package_name)-$(version)
 checkinstall := /usr/sbin/checkinstall
 docs_dir := $(shell pwd)/docs
