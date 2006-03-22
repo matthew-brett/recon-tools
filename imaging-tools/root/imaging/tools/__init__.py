@@ -1,13 +1,27 @@
 from ConfigParser import SafeConfigParser
+from optparse import OptionParser
 from odict import odict
+from imaging.util import import_from
 
 tool_map = odict((
-  ("dumpheader", "imaging.tools.DumpHeader"),
-  ("fdf2img", "imaging.tools.Fdf2Img"),
-  ("getparam", "imaging.tools.GetParam"),
-  ("imaging-doc", "imaging.tools.ImagingDoc"),
-  ("recon", "imaging.tools.Recon"),
-  ("viewimage", "imaging.tools.ViewImage")))
+  ("dumpheader", "DumpHeader"),
+  ("fdf2img", "Fdf2Img"),
+  ("getparam", "GetParam"),
+  ("imaging-doc", "ImagingDoc"),
+  ("recon", "Recon"),
+  ("viewimage", "ViewImage")))
+tool_names = tool_map.keys()
+
+#-----------------------------------------------------------------------------
+def getToolByName(toolname):
+    if not tool_map.has_key(toolname):
+        raise ValueError("No tool called '%s'."%toolname)
+    classname = tool_map[toolname]
+    modulename = "imaging.tools.%s"%toolname
+    try:
+        return import_from(modulename, toolname)
+    except ImportError:
+        raise RuntimeError("Tool class %s.%s not found."%(modulename.toolname))
 
 
 ##############################################################################
@@ -27,3 +41,7 @@ class OrderedConfigParser (SafeConfigParser):
         self._sections = odict()
 
 
+##############################################################################
+class ConsoleTool (OptionParser):
+    command_name = ""
+    description = ""
