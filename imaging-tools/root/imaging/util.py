@@ -181,7 +181,7 @@ def unwrap_phase(image):
     wrapped_fname = "wrapped_cmplx" 
     unwrapped_fname = "unwrapped"
     writeImage(image, wrapped_fname, "analyze")
-    exec_cmd("prelude -c %s -o %s -s"%(wrapped_fname, unwrapped_fname))
+    exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
     unwrapped_image = readImage(unwrapped_fname, "analyze")
     exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
     return unwrapped_image
@@ -219,7 +219,13 @@ def exec_cmd(cmd, verbose=False, exit_on_error=False):
 #-----------------------------------------------------------------------------
 def resample_phase_axis(vol_data, pixel_pos):
     """Purpose: Resample along phase encode axis of epi images.
-
+    Performs a trilinear interpolation along the y (pe) axis. This
+    reduces to:
+    V[x,y,z] = interp(V, x, y+phasemap, z) = (1-dy)*v000 + dy*v010
+    where dy = y+phasemap - floor(y+phasemap) = (y' - iy')
+    v000 = V[x,iy',z]
+    v010 = V[z,iy'+1,z]
+    
     @param vol_data: Epi volume to be resampled, in orientation
     (nvol, nslice, npe, nfe)
 
@@ -247,12 +253,12 @@ def resample_phase_axis(vol_data, pixel_pos):
     for vol in range(nvol):
         for slice in range(nslice):
             s = vol_data[vol, slice]
-            x = pplen==4 and pixel_pos[vol, slice] or pixel_pos[slice]
-            ix = clip(floor(x).astype(Int), 0, n_fe-2)
-            delta = x - ix
+            y = pplen==4 and pixel_pos[vol, slice] or pixel_pos[slice]
+            iy = clip(floor(y).astype(Int), 0, n_pe-2)
+            dy = y - iy
             for m in range(n_pe):
-                s[:,m]=((1.-delta[:,m])*take(s[:,m],ix[:,m]) \
-                        + delta[:,m]*take(s[:,m],ix[:,m]+1)).astype(Float32)
+                s[:,m]=((1.-dy[:,m])*take(s[:,m],iy[:,m]) \
+                        + dy[:,m]*take(s[:,m],iy[:,m]+1)).astype(Float32)
 
     return vol_data
 
