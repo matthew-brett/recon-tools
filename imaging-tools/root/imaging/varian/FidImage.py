@@ -65,8 +65,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         print "Raw precision (bytes): ", self.datasize
         print "Number of reference volumes: %d" % len(self.ref_vols)
         print "Orientation: %s" % self.orient
-        print "Pixel size (phase-encode direction): %7.2f" % self.xsize 
-        print "Pixel size (frequency-encode direction): %7.2f" % self.ysize
+        print "Pixel size (phase-encode direction): %7.2f" % self.ysize 
+        print "Pixel size (frequency-encode direction): %7.2f" % self.xsize
         print "Slice thickness: %7.2f" % self.zsize
 
     #-------------------------------------------------------------------------

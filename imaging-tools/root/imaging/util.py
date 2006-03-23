@@ -146,7 +146,7 @@ def fermi_filter(rows, cols, cutoff, trans_width):
     row_end = (rows-1)/2.0; col_end = (cols-1)/2.0
     row_vals = frange(-row_end, row_end)**2
     col_vals = frange(-col_end, col_end)**2
-    X, Y = meshgrid(row_vals, col_vals)
+    X, Y = meshgrid(col_vals, row_vals)
     return 1/(1 + exp((sqrt(X + Y) - cutoff*cols/2.0)/trans_width))
 
 #-----------------------------------------------------------------------------
