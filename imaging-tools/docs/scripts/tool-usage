@@ -28,3 +28,15 @@ echo "#######################################################################" >
 $scripts/dumpheader --help >> $outfile
 echo >> $outfile
 
+echo "#######################################################################" >> $outfile
+echo "#  viewimage tool usage:">> $outfile
+echo "#######################################################################" >> $outfile
+$scripts/viewimage --help >> $outfile
+echo >> $outfile
+
+echo "#######################################################################" >> $outfile
+echo "#  imaging-doc tool usage:">> $outfile
+echo "#######################################################################" >> $outfile
+$scripts/imaging-doc --help >> $outfile
+echo >> $outfile
+
