@@ -24,10 +24,10 @@ class Recon (ConsoleTool):
     default_logfile = "recon.log"
 
     options = (
-
-      Option("-c", "--config", dest="config", type="string",
+        # reserving obvious -o for --outfile or something
+      Option("-p", "--oplist", dest="oplist", type="string",
         default=None, action="store",
-        help="Name of the config file describing operations and operation" \
+        help="Name of the oplist file describing operations and operation" \
         " parameters."),
 
       Option("-r", "--vol-range", dest="vol_range", type="string",
@@ -65,11 +65,11 @@ class Recon (ConsoleTool):
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
         OptionParser.__init__(self, *args, **kwargs)
-        self.set_usage("usage: %prog [options] oplist datadir")
+        self.set_usage("usage: %prog [options] datadir outfile")
         self.add_options(self.options)
 
     #-------------------------------------------------------------------------
-    def configureOperations(self, configfile):
+    def configureOperations(self, opfile):
         """
         Creates an OrderedConfigParser object to parse the config file.
      
@@ -81,7 +81,7 @@ class Recon (ConsoleTool):
         @return: a list of operation pairs (operation, args).
         """
         config = OrderedConfigParser()
-        config.read(configfile)
+        config.read(opfile)
         return [
           (self._opmanager.getOperation(opname), dict(config.items(opname)))
           for opname in config.sections()]
@@ -106,7 +106,7 @@ class Recon (ConsoleTool):
         return vol_start, vol_end
 
     #-------------------------------------------------------------------------
-    def findConfig(self, datadir):
+    def findOplist(self, datadir):
         "Determine which stock oplist to use based on pulse sequence."
         
         oplistBySeq = {
@@ -125,7 +125,7 @@ class Recon (ConsoleTool):
               "No default operations found for pulse sequence '%s'"%key)
         opfilename = oplistBySeq[key]
         print "Using default oplist %s."%opfilename
-        return imaging.conf.getConfigFileName(opfilename)
+        return imaging.conf.getOplistFileName(opfilename)
         
     #-------------------------------------------------------------------------
     def getOptions(self):
@@ -147,14 +147,14 @@ class Recon (ConsoleTool):
         options.datadir, options.outfile = args
 
         # use stock oplist if none specified
-        if not options.config: options.config = self.findConfig(options.datadir)
+        if not options.oplist: options.oplist = self.findOplist(options.datadir)
 
         # parse vol-range
         options.vol_start, options.vol_end = \
           self.parseVolRange(options.vol_range)
 
         # configure operations
-        options.operations = self.configureOperations(options.config)
+        options.operations = self.configureOperations(options.oplist)
 
         return options
 
@@ -188,7 +188,7 @@ class Recon (ConsoleTool):
         # Log some parameter info to the console.
         image.logParams()
 
-        # Instantiate the operations declared in config file.
+        # Instantiate the operations declared in oplist file.
         operations = [opclass(**args) for opclass,args in options.operations]
 
         # Add an operation for saving data.

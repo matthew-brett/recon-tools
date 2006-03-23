@@ -6,7 +6,7 @@ can retrieve these config files by name.
 from os.path import dirname, join, exists
 
 #-----------------------------------------------------------------------------
-def getConfigFileName(name):
+def getOplistFileName(name):
     "Resolves the given config name into a full file path to that config file"
     confdir = dirname(__file__)
     filename = join(confdir, name)
