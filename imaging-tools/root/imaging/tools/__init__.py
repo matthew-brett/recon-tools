@@ -9,7 +9,7 @@ tool_map = odict((
   ("getparam", "GetParam"),
   ("imaging-doc", "ImagingDoc"),
   ("recon", "Recon"),
-  ("viewimage", "ViewImage")))
+  ("viewimage", "ViewImageTool")))
 tool_names = tool_map.keys()
 
 #-----------------------------------------------------------------------------
@@ -17,11 +17,11 @@ def getToolByName(toolname):
     if not tool_map.has_key(toolname):
         raise ValueError("No tool called '%s'."%toolname)
     classname = tool_map[toolname]
-    modulename = "imaging.tools.%s"%toolname
+    modulename = "imaging.tools.%s"%classname
     try:
-        return import_from(modulename, toolname)
+        return import_from(modulename, classname)
     except ImportError:
-        raise RuntimeError("Tool class %s.%s not found."%(modulename.toolname))
+        raise RuntimeError("Tool class %s.%s not found."%(modulename,classname))
 
 
 ##############################################################################
