@@ -1,28 +1,28 @@
 import os
 import sys
-from optparse import OptionParser
 
+from imaging.tools import ConsoleTool
 from imaging.varian.FDFImage import FDFImage
 from imaging.operations.ReorderSlices import ReorderSlices
 from imaging.operations.FlipSlices import FlipSlices
 
 ##############################################################################
-class Fdf2Img (object):
+class Fdf2Img (ConsoleTool):
 
-    # command line option parser
-    parser = OptionParser(usage=\
+    # command line usage
+    usage=\
       "  usage: %prog [options] fdf_directory\n"\
       "  Convert the the Varian FDF image in the given fdf_directory\n"\
       "  (.dat) into an Analyze image.  The Analyze dataset will be\n"\
       "  placed in a new directory with the same name but a .img extension\n"\
-      "  instead of .dat.")
+      "  instead of .dat."
 
     #-------------------------------------------------------------------------
     def run(self):
-        _, args = self.parser.parse_args()
+        _, args = self.parse_args()
 
         if not args:
-            self.parser.print_help()
+            self.print_help()
             sys.exit(0)
         else: datadir = args[0]
         outputdir = datadir.rsplit(".",1)[0]+".img"

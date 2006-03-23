@@ -1,23 +1,21 @@
 import sys
 from os.path import join, basename, dirname
-from optparse import OptionParser
 
+from imaging.tools import ConsoleTool
 from imaging.imageio import readImage
 from imaging.operations.ViewImage import ViewImage
 
 ##############################################################################
-class ViewImageTool (object):
+class ViewImageTool (ConsoleTool):
+    "View the specified Analyze7.5 formatted image."
 
-    # command line option parser
-    parser = OptionParser(usage=\
-      "  usage: %prog [options] image\n"\
-      "  View the specified Analyze7.5 formatted image.")
+    usage= "usage: %prog [options] image\n ", __doc__
 
     #-------------------------------------------------------------------------
     def run(self):
-        _, args = self.parser.parse_args()
+        _, args = self.parse_args()
         if not args:
-            self.parser.print_help()
+            self.print_help()
             sys.exit(0)
 
         # remove extension if present

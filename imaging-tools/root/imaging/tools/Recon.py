@@ -4,12 +4,12 @@ from optparse import OptionParser, Option
 import imaging.conf
 from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
-from imaging.tools import OrderedConfigParser
+from imaging.tools import OrderedConfigParser, ConsoleTool
 from imaging.operations import OperationManager, RunLogger, WriteImage
 from imaging.varian.FidImage import getPulseSeq
 
 ##############################################################################
-class Recon (OptionParser):
+class Recon (ConsoleTool):
     """
     Handle command-line aspects of the recon tool.
     @cvar options: tuple of Option objs, filled in by OptionParser
