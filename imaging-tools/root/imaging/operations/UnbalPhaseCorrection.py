@@ -1,52 +1,7 @@
-#from FFT import inverse_fft
-from pylab import angle, conjugate, sin, cos, Complex32, Float, Float32, product, arange, reshape, take, ones, pi, zeros, \
-     diff, find, cumsum, mean, asarray, putmask, floor, array, plot, show
+from pylab import angle, conjugate, Float, product, arange, take, zeros, \
+     diff, cumsum, mean, asarray, putmask, floor, array, pi 
 from imaging.operations import Operation
-from imaging.util import shift, fft, ifft, apply_phase_correction
-
-
-
-## def unwrap_phase(phase):
-## #***********************************
-
-## # Purpose: Unwrap phase in a single line of data.
-
-## #   Unwrap phase values
-##     len = phase.shape[-1]
-##     if len < 2:
-##         return 0.
-##     phase_unwrapped = zeros(len).astype(Float32)
-##     pm1 = phase[0]
-##     wraps = 0.
-##     phase_unwrapped[0] = phase[0]
-##     sum = 0.
-##     for i in range(1,len):
-##         slope = phase[i] - phase[i-1]
-##         if abs(slope) > pi:
-## #           Must be a wrap.
-##             if slope < 0:
-##                 wraps = wraps + 2*pi
-##             else:
-##                 wraps = wraps - 2*pi
-##         phase_unwrapped[i] = phase[i] + wraps
-##         slopem1 = slope
-##     return(phase_unwrapped.astype(Float32))
-
-
-## #Matlab's unwrap, row-wise instead of column-wise
-## def unwrap(phase, cutoff=170.*pi/180.):
-##     #M,N = len(phase.shape) > 1 and phase.shape[-2:] or (1, phase.shape[-1])
-##     dp = diff(phase)
-##     dps = (dp+pi)%(2*pi) - pi
-##     #for m in range(M):
-##     for n in find((dps==-pi) & (dp>0)):
-##         dps[n] = pi
-##     dp_corr = dps - dp
-##     #for m in range(M):
-##     for n in find(abs(dp) < cutoff):
-##         dp_corr[n] = 0
-##     phase[1:] = phase[1:] + cumsum(dp_corr)
-##     return phase
+from imaging.util import ifft, apply_phase_correction
 
 
 def mod(x,y):
@@ -119,7 +74,8 @@ class UnbalPhaseCorrection (Operation):
         inv_ref = ifft(refVol)
         ref_phs = zeros(refShape, Float)
         for slice in range(n_slice):
-            ref_phs[slice] = angle(inv_ref[slice]*conjugate(take(inv_ref[slice], take_order)))
+            ref_phs[slice] = angle(inv_ref[slice] * \
+                                   conjugate(take(inv_ref[slice], take_order)))
 
         # calculate mean phases on even and odd lines
         # also find best line through good region
@@ -128,36 +84,23 @@ class UnbalPhaseCorrection (Operation):
         fk_even = zeros((n_slice, n_fe), Float)
         fk_odd = zeros((n_slice, n_fe), Float)
         for z in range(n_slice):    
-            phs_even[z] = unwrap(mean(take(ref_phs[z], arange(0, n_pe, 2))), discont=pi)/2
-            phs_odd[z] = unwrap(mean(take(ref_phs[z], arange(1, n_pe, 2))), discont=pi)/2
-##             phs_even[z] = mean(take(ref_phs[z], arange(0, n_pe, 2)))/2
-##             phs_odd[z] = mean(take(ref_phs[z], arange(1, n_pe, 2)))/2
+            phs_even[z] = unwrap(mean(take(ref_phs[z], \
+                                           arange(0, n_pe, 2))), discont=pi)/2
+            phs_odd[z] = unwrap(mean(take(ref_phs[z], \
+                                          arange(1, n_pe, 2))), discont=pi)/2
 	    
 	    # let's say the 15 pts [20,35) are good
             b_even, m_even = linReg(arange(15)+20, phs_even[z,20:35])
             b_odd, m_odd = linReg(arange(15)+20, phs_odd[z,20:35])
 	    # replace phs arrays with fake lines
-            fk_even[z] = (arange(n_fe)*m_even + b_even)
-            fk_odd[z] = (arange(n_fe)*m_odd + b_odd)
-##             phs_even[z,30:] = fk_even[z,30:] 
-##             phs_odd[z,30:] = fk_odd[z,30:]
-            phs_even[z,:] = fk_even[z]
-            phs_odd[z,:] = fk_odd[z]
+            phs_even[z,:] = (arange(n_fe)*m_even + b_even)
+            phs_odd[z,:] = (arange(n_fe)*m_odd + b_odd)
 
         # apply the odd/even correction at odd/even lines
         for t in range(image.tdim):
             for z in range(image.zdim):
-#                plot(phs_even[z])
-#                plot(phs_odd[z])
-#                plot(fk_even[z])
-#                plot(fk_odd[z])
                 for m in range(0, n_pe, 2):
                     image.data[t,z,m,:] = apply_phase_correction(image.data[t,z,m], -phs_even[z])
                 for m in range(1, n_pe, 2):
                     image.data[t,z,m,:] = apply_phase_correction(image.data[t,z,m], -phs_odd[z])
-
-
-        #correction = reshape(cos(ref_phs) - 1.0j*sin(ref_phs), origShape)
-        #apply corrections
-        #image.data[:] = fft(ifft(image.data)*correction).astype(Complex32)
 
