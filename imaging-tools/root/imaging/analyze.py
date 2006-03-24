@@ -4,8 +4,8 @@ from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
 import struct
 
 from odict import odict
-from imaging.util import struct_unpack, struct_pack, NATIVE, \
-                            LITTLE_ENDIAN, BIG_ENDIAN
+from imaging.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
+  BIG_ENDIAN
 from imaging.imageio import BaseImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
@@ -108,17 +108,6 @@ field_formats = struct_fields.values()
 NATIVE = "="
 LITTLE_ENDIAN = "<"
 BIG_ENDIAN = ">"
-
-def struct_format(byte_order, elements):
-    return byte_order+" ".join(elements)
-    
-def struct_unpack(infile, byte_order, elements):
-    format = struct_format(byte_order, elements)
-    return struct.unpack(format, infile.read(struct.calcsize(format)))
-
-def struct_pack(byte_order, elements, values):
-    format = struct_format(byte_order, elements)
-    return struct.pack(format, *values)
 
 
 ##############################################################################
