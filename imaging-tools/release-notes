@@ -1,0 +1,27 @@
+------------------------------------------------------------------------------
+imaging-tools-0.2     (alpha)                                         2/1/2006
+------------------------------------------------------------------------------
+- Added the recon tool.
+- Added API documentation plus the beginnings of some user docs.
+- Added LR flip to fdf2img tool.
+- Fixed dimension size bug in fdf2img tool.
+
+------------------------------------------------------------------------------
+imaging-tools-0.1    (alpha)                                        11/18/2005
+------------------------------------------------------------------------------
+The initial release of imaging-tools.  
+
+Includes the following tools:
+- getparam
+- dumpheader
+- fdf2img
+
+Known Bugs:
+- fdf2img results in a flipped image and may mangle the physical dimension
+sizes.
+
+------------------------------------------------------------------------------
+Note that alpha is the lowest quality rating, meaning code that is only fit to
+be used by testers and is not guaranteed to be stable.  Beta is code that is
+stable enough to be used and tested by a larger group of early adopters, but
+still not considered polished enough to constitute a stable public release.
