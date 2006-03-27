@@ -1,5 +1,5 @@
 python := /bin/env python
-version := 0.3a
+version := $(PYTHONPATH=./root && scripts/imaging-doc --version)
 package_name := python-imaging-tools
 rpm_name := $(package_name)-$(version)
 checkinstall := /usr/sbin/checkinstall

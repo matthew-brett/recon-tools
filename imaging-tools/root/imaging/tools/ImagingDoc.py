@@ -47,7 +47,7 @@ class ImagingDoc (ConsoleTool):
     #-------------------------------------------------------------------------
     def showVersion(self):
         "Print which version of imaging-tools is in use."
-        print "imaging-tools-%s"%imaging.__version__
+        print imaging.__version__
 
     #-------------------------------------------------------------------------
     def showTools(self):

@@ -1,10 +1,13 @@
 #!/usr/bin/env python
+import sys
+sys.path = ["./root"]+sys.path
+import imaging
 from distutils.core import setup
 
 setup(
 
   name='python-imaging-tools',
-  version='0.2',
+  version=imaging.__version__,
   description=\
    'Tools for manipulating MRI data, specializing in k-space reconstruction.',
   author='Brian Hawthorne',
