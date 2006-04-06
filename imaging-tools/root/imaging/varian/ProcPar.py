@@ -297,7 +297,8 @@ class ProcParImageMixin (object):
           [self.echo_time + pe*self.echo_spacing\
            for pe in range(self.pe_per_seg)]), "")
 
-    dwell_time = CachedReadOnlyProperty(
+    # time between beginning of one PE scan and the next (was dwell_time)
+    T_pe = CachedReadOnlyProperty(
 	lambda self: getattr(self._procpar, "at_calc", (None,))[0], "")
 
     # this quiet_interval may need to be added to tr in some way...

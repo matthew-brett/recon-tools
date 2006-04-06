@@ -28,7 +28,8 @@ class GeometricUndistortion (Operation):
                      " the image shape, quitting")
 	    return
 	
-	shift = (image.xdim * image.dwell_time / (2*pi))
+	shift = (image.xdim * image.T_pe/2/pi)
+        
         #watch the sign
         pixel_pos = -shift*fMap.data + \
                     outerproduct(arange(fMap.ydim), ones(fMap.ydim))
