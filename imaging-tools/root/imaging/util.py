@@ -6,7 +6,7 @@ import struct
 from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones, amax
+  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff
 
 
 # maximum numeric range for some smaller data types
@@ -175,6 +175,65 @@ def median_filter(image, N):
                 img[tz, y+center+1, x+center+1] = s[median_pt]
     return reshape(img, (tdim, zdim, ydim, xdim))
 
+#-----------------------------------------------------------------------------
+def linReg(X, Y, yvar=None): 
+    # find best linear line through data:
+    # solve for (b,m) = (crossing, slope)
+    # let sigma = 1, may use yvar for variance in the future
+    N = len(X)
+    Sx = Sy = Sxx = Sxy = 0.
+    for k in range(N):
+	Sx += X[k]
+	Sy += Y[k]
+	Sxx += X[k]**2
+	Sxy += X[k]*Y[k]
+    
+    delta = N*Sxx - Sx**2
+    b = (Sxx*Sy - Sx*Sxy)/delta
+    m = (N*Sxy - Sx*Sy)/delta
+    res = sum((Y-(m*X+b))**2)
+    return (b, m, res)
+
+#-----------------------------------------------------------------------------
+### some routines from scipy ###
+def mod(x,y):
+    """ x - y*floor(x/y)
+        For numeric arrays, x % y has the same sign as x while
+        mod(x,y) has the same sign as y.
+    """
+    return x - y*floor(x*1.0/y)
+
+
+#scipy's unwrap (pythonication of Matlab's routine)
+def unwrap1D(p,discont=pi,axis=-1):
+    """unwraps radian phase p by changing absolute jumps greater than
+       discont to their 2*pi complement along the given axis.
+    """
+    p = asarray(p)
+    nd = len(p.shape)
+    dd = diff(p,axis=axis)
+    slice1 = [slice(None,None)]*nd     # full slices
+    slice1[axis] = slice(1,None)
+    ddmod = mod(dd+pi,2*pi)-pi
+    putmask(ddmod,(ddmod==-pi) & (dd > 0),pi)
+    ph_correct = ddmod - dd;
+    putmask(ph_correct,abs(dd)<discont,0)
+    up = array(p,copy=1,typecode='d')
+    up[slice1] = p[slice1] + cumsum(ph_correct,axis)
+    return up
+
+#-----------------------------------------------------------------------------
+### alternate definition of unwrap1D
+## def unwrap1D(p):
+##     if len(p.shape) < 2:
+##         p = reshape(p, (1, p.shape[0]))
+##     dd = diff(p)
+##     dd_wr = arctan2(sin(dd), cos(dd))
+##     uph = zeros(p.shape, Float)
+##     uph[:,0] = p[:,0]
+##     for col in range(dd.shape[-1]):
+##         uph[:,col+1] = uph[:,col] + dd_wr[:,col]
+##     return uph
 #-----------------------------------------------------------------------------
 def unwrap_phase(image):
     from imaging.imageio import readImage, writeImage
