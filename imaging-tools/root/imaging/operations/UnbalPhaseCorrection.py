@@ -119,7 +119,7 @@ class UnbalPhaseCorrection (Operation):
         beta = (b - a)/4.
         beta_pr = (b + a)/2.
 
-        B = empty((2,n_pe), Float)
+        B = empty((2,n_fe), Float)
         B[0], B[1] = beta_pr, beta
         T = empty((n_pe, 2))
         T[:,0] = arange(n_pe)-32
@@ -128,8 +128,7 @@ class UnbalPhaseCorrection (Operation):
 
         # this is the "small array" version
         for vol in image.data:
-            for slice in vol:
-                slice[:] = apply_phase_correction(slice, Correction)
+            vol[:] = apply_phase_correction(vol, Correction)
 
 ##         # this is the "large array" version        
 ##         image.data[:] = apply_phase_correction(image.data, Correction)
