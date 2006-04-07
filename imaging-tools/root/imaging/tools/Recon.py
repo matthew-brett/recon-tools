@@ -82,9 +82,10 @@ class Recon (ConsoleTool):
         """
         config = OrderedConfigParser()
         config.read(opfile)
+        opname = lambda k: k.rsplit(".",1)[0]
         return [
-          (self._opmanager.getOperation(opname), dict(config.items(opname)))
-          for opname in config.sections()]
+          (self._opmanager.getOperation(opname(opkey)), dict(config.items(opkey)))
+          for opkey in config.sections()]
 
     #-------------------------------------------------------------------------
     def parseVolRange(self, vol_range):

@@ -25,6 +25,15 @@ def getToolByName(toolname):
 
 
 ##############################################################################
+class MultiKeyDict (odict):
+    def _add_id(self, key):
+        samekeys = [k for k in self.keys() if k.rsplit(".",1)[0] == key]
+        return key+".%s"%len(samekeys)
+    def __setitem__(self, key, item):
+        odict.__setitem__(self, self._add_id(key), item)
+
+
+##############################################################################
 class OrderedConfigParser (SafeConfigParser):
     """
     Config parser which keeps track of the order in which sections appear.
@@ -38,7 +47,7 @@ class OrderedConfigParser (SafeConfigParser):
     #-------------------------------------------------------------------------
     def __init__(self, defaults=None):
         SafeConfigParser.__init__(self, defaults=defaults)
-        self._sections = odict()
+        self._sections = MultiKeyDict()
 
 
 ##############################################################################
