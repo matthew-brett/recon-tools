@@ -19,6 +19,6 @@ class InverseFFT (Operation):
     def run(self, image):
 
         # 2D checkerboard the shape of one image slice
-        mask = checkerboard(*(data.shape[-2:]))
+        mask = checkerboard(*(image.data.shape[-2:]))
         for vol in image.data:
             vol[:] = (mask * inverse_fft2d(mask * vol)).astype(Complex32)
