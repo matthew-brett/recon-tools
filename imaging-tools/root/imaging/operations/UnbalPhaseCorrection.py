@@ -92,7 +92,6 @@ class UnbalPhaseCorrection (Operation):
         inv_ref = ifft(refVol)
         best = (0, 0, 0, 0, 1e6, 0)
         for z in range(n_slice):    
-            print "analyzing slice %d"%(z)
             p = inv_ref[z]*conjugate(take(inv_ref[z], take_order))
            
             phs_even, mask_e, res_e = \
