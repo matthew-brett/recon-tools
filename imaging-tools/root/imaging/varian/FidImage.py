@@ -229,7 +229,10 @@ class FidImage (BaseImage, ProcParImageMixin):
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_typecode)
-                volume[slice,pe] = (trace - bias).astype(Complex32)
+                if self.pulse_sequence == "gems" and self.n_transients==1:
+                    volume[slice,pe] = (trace - bias).astype(Complex32)
+                else: volume[slice,pe] = trace
+
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
@@ -363,7 +366,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
 
             # reverse ENTIRE negative-gradient read
-            if vol in self.ref_vols and vol==1:
+            if vol in self.ref_vols and vol==1 and time_reverse:
                 volume[:] = take(volume, time_rev, axis=(len(volume.shape)-1))
 
             # time-reverse the data

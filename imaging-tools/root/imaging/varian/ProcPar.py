@@ -160,6 +160,9 @@ class ProcParImageMixin (object):
     acq_cycles = CachedReadOnlyProperty(
         lambda self: getattr(self._procpar, "acqcycles", (None,))[0], "")
 
+    n_transients = CachedReadOnlyProperty(
+        lambda self: getattr(self._procpar, "ct", (-1,))[0], "")
+
     def _get_pulse_sequence(self):
         pslabel = self._procpar.pslabel[0]
         if pslabel == "Vsparse": pslabel = "epidw"
