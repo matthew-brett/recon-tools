@@ -346,7 +346,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
         # determine if time reversal needs to be performed
         time_reverse = \
-          pulse_sequence not in ("gems", "mp_flash3d") and \
+          pulse_sequence not in ("gems", "mp_flash3d", "box3d_v2") and \
           (fidformat=="compressed" and not(pulse_sequence == "epi"\
            and self.spinecho) or \
           (fidformat=="uncompressed" and pulse_sequence != "epidw"))
@@ -354,7 +354,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         if time_reverse: print "time reversing"
 
         # determine if phase encodes need reordering
-        needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn")
+        needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn") \
+                              and pulse_sequence not in ("box3d_v2")
 
         # load phase encode table
         if needs_pe_reordering: self._load_petable()
@@ -401,7 +402,7 @@ class FidImage (BaseImage, ProcParImageMixin):
                         navigators[slice,pe] = \
                           take(navigators[slice,pe], time_rev)
 
-            # Make a correction for mpflash data
+##             # Make a correction for mpflash data
 ##             if pulse_sequence == "mp_flash3d" and not self.flash_converted:
 ##                 nline = int(n_fe_true/20)
 ##                 scale = 2*nline*n_fe_true

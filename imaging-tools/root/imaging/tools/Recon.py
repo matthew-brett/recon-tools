@@ -116,7 +116,8 @@ class Recon (ConsoleTool):
           "gems":  "gems.ops",
           "mp_flash3d0": "mpflash3D.ops",
           "mp_flash3d1": "mpflash.ops",
-          "asems": "asems.ops" }
+          "asems": "asems.ops",
+          "box3d_v2": "mpflash3D.ops" }
         
         # find out which pulse sequence by peeking at the procpar
         pseq, flag = getPulseSeq(datadir)
