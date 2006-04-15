@@ -14,6 +14,7 @@ class ReorderSlices (Operation):
     def run(self, image):
         nslice = image.nslice
         imgdata = image.data
+        refdata = image.ref_data
         # this needs testing on odd number of slices
         midpoint = nslice/2 + (nslice%2 and 1 or 0)
         tmp = empty(imgdata.shape, imgdata.typecode())
@@ -21,3 +22,8 @@ class ReorderSlices (Operation):
         tmp[:,::2] = take(imgdata, indices[:midpoint], axis=1)
         tmp[:,1::2] = take(imgdata, indices[midpoint:], axis=1)
         imgdata[:] = self.flip_slices and take(tmp, indices, axis=1) or tmp
+        tmp = empty(refdata.shape, refdata.typecode())
+        tmp[:,::2] = take(refdata, indices[:midpoint], axis=1)
+        tmp[:,1::2] = take(refdata, indices[midpoint:], axis=1)
+        refdata[:] = self.flip_slices and take(tmp, indices, axis=1) or tmp
+        
