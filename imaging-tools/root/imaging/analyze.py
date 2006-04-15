@@ -104,11 +104,6 @@ struct_fields = odict((
 
 field_formats = struct_fields.values()
 
-# struct byte order constants
-NATIVE = "="
-LITTLE_ENDIAN = "<"
-BIG_ENDIAN = ">"
-
 
 ##############################################################################
 class AnalyzeImage (BaseImage):
