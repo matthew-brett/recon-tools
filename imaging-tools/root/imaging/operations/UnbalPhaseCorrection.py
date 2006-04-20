@@ -1,9 +1,13 @@
-from Numeric import empty
+from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
-     pi, sqrt, ones, sum, find, Int, median, NewAxis, resize, matrixmultiply, bar, show, svd, sign, transpose, diag, putmask, plot, show
+     pi, sqrt, ones, sum, find, Int, median, NewAxis, resize, matrixmultiply,\
+     svd, sign, transpose, diag, putmask
 from imaging.operations import Operation
 from imaging.util import ifft, apply_phase_correction, mod, unwrap1D, linReg, \
      shift
+
+## THIS VERSION WILL BE THE LAST TO USE 1D UNWRAPPING
+## NEEDS SOME CLEAN-UP!
 
 # some index names
 EV = 0
@@ -12,7 +16,7 @@ MSK_E = 2
 MSK_O = 3
 RES = 4
 
-def maskedAvg(S, pixSize):
+def maskedAvg(S, pixSize, ref, sn):
     """Takes a slice of angles
     The phase lines are unwrapped in the read-out direction, and then an
     attempt is made to correct for false offsets of n2pi brought about by
@@ -45,27 +49,21 @@ def maskedAvg(S, pixSize):
     m = empty((nr,),Float)
     res = empty((nr,),Float)
     ax = arange(len(S0[0]))+np/2-lin_pix
-
-    # find the best linear fit for all lines, use this to:
-    # a) get a sense (from sum(res)) of how good the data is
-    # b) get all the y-intercepts in order to correct false n2pi jumps
+    midpt = len(ax)/2
+    # find the best linear fit for all lines, use this to
+    # get a sense (from sum(res)) of how good the data is.
+    # Also get all the mid-points in order to correct false n2pi jumps
     for r in range(nr):
-        b[r] = S0[r,len(ax)/2]
-        #(b[r], _, _) = linReg(arange(10), S0[r,np/2-5-ax[0]:np/2+5-ax[0]])
+        b[r] = S0[r,midpt]
         (b2[r], m[r], res[r]) = linReg(arange(len(S0[0])), S0[r])
 
-#### old method
-##     # find which 2pi bracket the line falls into based on intercept
-##     #c = floor((b-median(b))/2/pi + 0.5)
-##     # find offset from supposed "normal" intercept (where most happen to be)
-##     # this is failing in some sets where c is evenly distributed between two points:
-##     # need to fix, perhaps by keeping track of the running distribution over slice or volume
-##     #c = c - median(c)
-####
-    # shift the entire line by the appropriate number of 2*pi
-    c = ((b+sign(b)*pi)/2/pi).astype(Int)
+        
+    # shift the entire line by the appropriate n*2*pi, where
+    # n is chosen to bring the midpoint of the line as close
+    # as possible to the midpoint of the previous average
+    c = (((b-ref)+sign(b-ref)*pi)/2/pi).astype(Int)
     S0 = S0 - 2*pi*c[:,NewAxis]
-    color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+#    color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
     E = mean(S0)
     std = sqrt(sum((S0 - E)**2)/nr)
 
@@ -76,8 +74,6 @@ def maskedAvg(S, pixSize):
 #    from pylab import subplot, twinx
     putmask(mask, std>1, 0)
 
-## #    plot(std)
-## #    show()
     if len(mask) > len(E):
         M[np/2-lin_pix:np/2+lin_pix] = E
     else:
@@ -86,6 +82,8 @@ def maskedAvg(S, pixSize):
 ##     for r in range(nr):
 ##         plot(ax, S0[r], color[r%7])
 ##         plot(ax, (arange(len(ax)))*m[r] + b2[r], color[r%7]+'--')
+##     plot(ax,ones(len(ax))*ref, 'bo')
+##     title("slice %d"%(sn))
 ##     plot(ax, E, 'go')
 ##     #ax2 = twinx()
 ##     #plot(ax, ones(len(ax))*sum(res), 'bo')
@@ -112,6 +110,7 @@ def solve_phase(ev, odd, q_mask, z_mask):
     V = empty((sum(rows_in_chunk)*2, 1), Float)
     row_start, row_end = 0, 0
     for c in range(n_chunks):
+        # alternate for even and odd rows
         for s in [0, 1]:
             row_start = row_end
             row_end = row_start + rows_in_chunk[c]
@@ -124,10 +123,6 @@ def solve_phase(ev, odd, q_mask, z_mask):
             A[row_start:row_end,EPR] = 1
             A[row_start:row_end,E] = s and 2 or -2
 
-##     f = open('matrix.txt', 'w')
-##     for r in range(A.shape[0]):
-##         f.write(str(A[r])+'\t'+str(V[r])+'\n')
-##     f.close()
     [u,s,vt] = svd(A)
     P = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
                                       matrixmultiply(transpose(u), V)))
@@ -157,55 +152,62 @@ class UnbalPhaseCorrection (Operation):
         z_mask, q_mask = zeros(n_slice), zeros((n_slice,n_fe))
         phs_even = empty((n_slice, n_fe), Float)
         phs_odd = empty((n_slice, n_fe), Float)
-        for z in range(n_slice):    
+        # create an interleaved slice ordering which grows from the mid-slice
+        # ex 10-slices: [5, 4, 6, 3, 7, 2, 8, 1, 9, 0]
+        slice_order = empty(n_slice)
+        slice_order[0] = n_slice/2
+        slice_order[1::2] = arange(n_slice/2 - 1, -1, -1)
+        slice_order[2::2] = arange(n_slice/2 + 1, n_slice)
+        #for z in range(n_slice):
+        for i,z in enumerate(slice_order):
             p = inv_ref[z]*conjugate(take(inv_ref[z], take_order))
-           
+            ev_ref, od_ref = i<2 and (0,0) or \
+                             (phs_even[slice_order[i-2],n_fe/2],\
+                              phs_odd[slice_order[i-2],n_fe/2])
+##             phs_even[z] = angle(p[32])
+##             phs_odd[z] = angle(p[31])
             phs_even[z], mask_e, res_e = \
-                   maskedAvg(angle(take(p, arange(2, n_pe, 2))), image.xsize)
+                   maskedAvg(angle(take(p, arange(2, n_pe, 2))), image.xsize, ev_ref, z)
             phs_odd[z], mask_o, res_o = \
-                   maskedAvg(angle(take(p, arange(1, n_pe-1, 2))), image.xsize)
+                   maskedAvg(angle(take(p, arange(1, n_pe-1, 2))), image.xsize, od_ref, z)
             
-            #z_mask[z] = res_e+res_o < 2500.
-            z_mask[z] = res_e+res_o < 2000
             res[z] = res_e+res_o
             q_mask[z] = mask_e*mask_o
 
-            
-        bar(arange(n_slice), res)
-        show()
-        
-        print "solving for %d slices"%(sum(z_mask))
-        #(beta_pr, beta, alpha_pr, alpha, e) = \
-        #(beta_pr, beta, e_pr, e) = \
+        sres = sort(res)
+        selected = [find(res==c)[0] for c in sres[:4]]
+        for c in selected: z_mask[c] = 1
         (beta_pr, beta, alpha_pr, alpha, e_pr, e) = \
                   solve_phase(phs_even, phs_odd, q_mask, z_mask)
 
         print "computed coefficients:"
-        print "\tBpr: %f, B: %f, Apr: %f, A: %f, e_pr: %f, e: %f"%(beta_pr, beta, alpha_pr, alpha, e_pr, e)
-        from pylab import title
-        for z in range(n_slice):
-            plot(find(q_mask[z]), take(phs_even[z], find(q_mask[z])))
-            plot(find(q_mask[z]), take(phs_odd[z], find(q_mask[z])))
-            plot((arange(n_fe))*(beta_pr - 2*beta) + z*(alpha_pr - 2*alpha) + e_pr - 2*e, 'b--')
-            plot((arange(n_fe))*(beta_pr + 2*beta) + z*(alpha_pr + 2*alpha) + e_pr + 2*e, 'g--')
-            tstr = "slice %d"%(z)
-            if z_mask[z]: tstr += " (selected)"
-            title(tstr)
-            show()
+        print "\tBpr: %f, B: %f, Apr: %f, A: %f, e_pr: %f, e: %f"\
+              %(beta_pr, beta, alpha_pr, alpha, e_pr, e)
+
+## Uncomment this section to plot the fitted phase lines from the svd
+##         from pylab import title, plot, show
+##         for z in range(n_slice):
+##             plot(find(q_mask[z]), take(phs_even[z], find(q_mask[z])))
+##             plot(find(q_mask[z]), take(phs_odd[z], find(q_mask[z])))
+##             plot((arange(n_fe))*(beta_pr - 2*beta) + z*(alpha_pr - 2*alpha) + e_pr - 2*e, 'b--')
+##             plot((arange(n_fe))*(beta_pr + 2*beta) + z*(alpha_pr + 2*alpha) + e_pr + 2*e, 'g--')
+##             tstr = "slice %d"%(z)
+##             if z_mask[z]: tstr += " (selected)"
+##             title(tstr)
+##             show()
+
+        ## correction based on:
+        ## even: phi(q,r,s) = r*(beta_pr*q + alpha_pr*s + e_pr) + (beta*q + alpha*s + e)
+        ## odd: phi(q,r,s) = r*(beta_pr*q + alpha*s + e_pr) - (beta*q + alpha*s + e)
+        
+        
         for t in range(image.data.shape[0]):
             for z in range(n_slice):
                 for r in range(0, n_pe, 2):
-                    #ev_correction = (r)*(arange(n_fe)*beta_pr-z*alpha_pr) - (arange(n_fe)*beta + z*alpha) - (e_pr - e)
-
                     #ev_correction = (r-32)*(arange(n_fe)*beta_pr + e_pr) + (arange(n_fe)*beta + e) #good, no zdep
-                    #ev_correction = (r)*(arange(n_fe)*beta_pr) + (arange(n_fe)*beta + e)
                     ev_correction = (r-32)*(arange(n_fe)*beta_pr + z*alpha_pr + e_pr) + (arange(n_fe)*beta + z*alpha + e)
-                    #plot(ev_correction)
                     image.data[t,z,r,:] = apply_phase_correction(image.data[t,z,r], ev_correction)
                 for r in range(1, n_pe, 2):
-                    #odd_correction = (r)*(arange(n_fe)*beta_pr-z*alpha_pr) + (arange(n_fe)*beta + z*alpha) - (e_pr + e)
                     #odd_correction = (r-32)*(arange(n_fe)*beta_pr + e_pr) - (arange(n_fe)*beta + e) #good, no zdep
-                    #odd_correction = (r)*(arange(n_fe)*beta_pr) - (arange(n_fe)*beta + e)
-                    odd_correction = (r-32)*(arange(n_fe)*beta_pr + z*alpha_pr + e_pr) - (arange(n_fe)*beta + z*alpha + e) #good
-                    #plot(odd_correction)
+                    odd_correction = (r-32)*(arange(n_fe)*beta_pr + z*alpha_pr + e_pr) - (arange(n_fe)*beta + z*alpha + e)
                     image.data[t,z,r,:] = apply_phase_correction(image.data[t,z,r], odd_correction)
