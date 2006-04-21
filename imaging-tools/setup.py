@@ -2,7 +2,8 @@
 import sys
 sys.path = ["./root"]+sys.path
 import imaging
-from distutils.core import setup
+import os, glob
+from distutils.core import setup, Extension
 
 setup(
 
@@ -19,7 +20,9 @@ setup(
   packages=[
     '',
     'imaging',
+    'imaging.conf',
     'imaging.operations',
+    'imaging.punwrap',
     'imaging.tools',
     'imaging.varian'],
 
@@ -28,5 +31,15 @@ setup(
     'scripts/getparam',
     'scripts/fdf2img',
     'scripts/viewimage',
-    'scripts/recon']
+    'scripts/recon'],
+
+  ext_modules=[Extension('imaging.punwrap._punwrap',
+               glob.glob(os.path.join('src/punwrap','*.c')))]
+  
+##   ext_modules=[Extension('imaging.punwrap._punwrap',
+##                          ['unwrap_phase.c', 'congruen.c', 'dct.c', \
+##                           'dxdygrad.c', 'grad.c', 'laplace.c', 'lpnorm.c', \
+##                           'pcg.c', 'raster.c', 'residues.c', 'solncos.c', \
+##                           'util.c'])]
+  
 )
