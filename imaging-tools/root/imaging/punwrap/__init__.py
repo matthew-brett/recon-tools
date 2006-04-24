@@ -5,7 +5,7 @@ except ImportError:
 
 import Numeric
 
-def unwrap2D(matrix):
+def unwrap2D(matrix, mask=None):
     """The method for this module unwraps a 2D grid of wrapped phases
     using the lp-norm method.
     @param matrix, if ndim > 2, explode; if ndim < 2, a 1xN matrix
@@ -20,5 +20,6 @@ def unwrap2D(matrix):
     
     in_phase = len(dims) < 2 and reshape(matrix,(1,dims[0])) or matrix
     in_phase = ( (in_phase/2/Numeric.pi + 1)%1 ).astype(Numeric.Float32)
+    if mask is not None: in_phase = (in_phase*mask).astype(Numeric.Float32)
     ret = (lpUnwrap(in_phase)*2*Numeric.pi).astype(dtype)
     return ret

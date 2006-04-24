@@ -1,13 +1,30 @@
 from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
      angle, conjugate, putmask
-from Numeric import empty, sum
+from Numeric import empty, sum, sort
 from LinearAlgebra import *
 import math
 from imaging.imageio import writeImage
-from imaging.util import unwrap_phase, compute_fieldmap
+from imaging.punwrap import unwrap2D
 from imaging.analyze import writeImage
 from imaging.operations import Operation
 
+def build_3Dmask(vol):
+    mask = ones(vol.shape)
+    p = sort(abs(vol.flat))
+    t2 = p[int(round(.02*len(p)))]
+    t98 = p[int(round(.98*len(p)))]
+    thresh = 0.1*(t98 - t2) + t2
+    putmask(mask, abs(vol)<thresh, 0)
+    return mask
+
+def unwrap_phase(vols):
+    shape = vols.shape
+    uw_phase = empty(shape, Float32)
+    for t in range(shape[0]):
+        mask = build_3Dmask(vols[t])
+        for z in range(shape[1]):
+            uw_phase[t,z] = unwrap2D(angle(vols[t,z]), mask=mask[z])
+    return uw_phase
 
 #-----------------------------------------------------------------------------
 def phase_offset(phase):
@@ -38,9 +55,9 @@ class ComputeFieldMap (Operation):
                           Complex32)
         for vol in range(image.tdim-1):
             diff_vols[vol] = conjugate(image.data[vol])*(image.data[vol+1])
-        fmap_image = image._subimage(diff_vols)    
-        fmap_phase = unwrap_phase(fmap_image)
-        fmap_phase.data = (fmap_phase.data/asym_time).astype(Float32)
+        phase_map = unwrap_phase(diff_vols)
+        phase_map = (phase_map/asym_time).astype(Float32)
+        fmap_phase = image._subimage(phase_map)
         for index, subIm in enumerate(fmap_phase.subImages()):
             writeImage(subIm, "fieldmap-%d"%(index))
 
