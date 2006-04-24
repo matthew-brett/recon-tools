@@ -101,7 +101,7 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
 */  
   ret = (PyArrayObject *)PyArray_FromDims(nd, dimensions, typenum);
   
-  pullSubGrid(ret->data, dct_soln, DCT_xsize, DCT_ysize, dimensions[1], dimensions[0]);
+  pullSubGrid((float *) ret->data, dct_soln, DCT_xsize, DCT_ysize, dimensions[1], dimensions[0]);
   
   //memmove(ret->data, (char *) dct_soln, xsize*ysize*sizeof(float));
   
