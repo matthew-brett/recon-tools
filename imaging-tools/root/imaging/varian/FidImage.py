@@ -229,10 +229,11 @@ class FidImage (BaseImage, ProcParImageMixin):
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_typecode)
-                if self.pulse_sequence == "gems" and self.n_transients==1:
-                    volume[slice,pe] = (trace - bias).astype(Complex32)
-                else: volume[slice,pe] = trace
+                if self.pulse_sequence == "gems" and self.n_transients>1:
+                    volume[slice,pe] = trace
+                else: volume[slice,pe] = (trace - bias).astype(Complex32)
 
+                #volume[slice,pe] = trace.astype(Complex32)
         return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
