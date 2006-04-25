@@ -181,13 +181,10 @@ def linReg(X, Y, yvar=None):
     # solve for (b,m) = (crossing, slope)
     # let sigma = 1, may use yvar for variance in the future
     N = len(X)
-    Sx = Sy = Sxx = Sxy = 0.
-    for k in range(N):
-	Sx += X[k]
-	Sy += Y[k]
-	Sxx += X[k]**2
-	Sxy += X[k]*Y[k]
-    
+    Sx = sum(X)
+    Sy = sum(Y)
+    Sxx = sum(X**2)
+    Sxy = sum(X*Y)
     delta = N*Sxx - Sx**2
     b = (Sxx*Sy - Sx*Sxy)/delta
     m = (N*Sxy - Sx*Sy)/delta
@@ -235,15 +232,16 @@ def unwrap1D(p,discont=pi,axis=-1):
 ##         uph[:,col+1] = uph[:,col] + dd_wr[:,col]
 ##     return uph
 #-----------------------------------------------------------------------------
-def unwrap_phase(image):
-    from imaging.imageio import readImage, writeImage
-    wrapped_fname = "wrapped_cmplx" 
-    unwrapped_fname = "unwrapped"
-    writeImage(image, wrapped_fname, "analyze")
-    exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
-    unwrapped_image = readImage(unwrapped_fname, "analyze")
-    exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
-    return unwrapped_image
+## "Depricated" 4/24/06
+## def unwrap_phase(image):
+##     from imaging.imageio import readImage, writeImage
+##     wrapped_fname = "wrapped_cmplx" 
+##     unwrapped_fname = "unwrapped"
+##     writeImage(image, wrapped_fname, "analyze")
+##     exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
+##     unwrapped_image = readImage(unwrapped_fname, "analyze")
+##     exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
+##     return unwrapped_image
 
 #-----------------------------------------------------------------------------
 def compute_fieldmap(phase_pair, asym_time, dwell_time):
