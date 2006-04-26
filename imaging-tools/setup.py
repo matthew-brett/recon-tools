@@ -33,13 +33,10 @@ setup(
     'scripts/viewimage',
     'scripts/recon'],
 
+  package_data = {'imaging.conf':['*.ops'],
+                  'imaging.varian': ['tablib/*']},
+  
   ext_modules=[Extension('imaging.punwrap._punwrap',
-               glob.glob(os.path.join('src/punwrap','*.c')))]
-  
-##   ext_modules=[Extension('imaging.punwrap._punwrap',
-##                          ['unwrap_phase.c', 'congruen.c', 'dct.c', \
-##                           'dxdygrad.c', 'grad.c', 'laplace.c', 'lpnorm.c', \
-##                           'pcg.c', 'raster.c', 'residues.c', 'solncos.c', \
-##                           'util.c'])]
-  
+               glob.glob(os.path.join('src/punwrap','*.c')))],
+    
 )
