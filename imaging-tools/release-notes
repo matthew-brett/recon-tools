@@ -5,6 +5,18 @@ imaging-tools-0.3     (beta)                                          4/28/2006
 - Support for multiple pulse sequences (gems, epi, mpflash3d, ssfp, asems)
 - Internal support for 2D phase unwrapping (ComputeFieldMap without FSL)
 - Painless reconstruction using default oplists
+
+NOTE: Fedora users will need to "yum install atlas" and then install a fixed
+version of the python-numeric RPM found on the BIC network here:
+http://kicker.bic.berkeley.edu/mirrors/cirl/fedora/4/i386/python-numeric-23.7-2bic.i386.rpm
+
+BLAS (Basic Linear Algebra Subprograms) support is not automatically included
+in Numeric. Other users of a packaged Numeric should make sure that their build 
+links to some BLAS library (such as ATLAS-BLAS).
+
+Otherwise Unbalanced Phase Correction, which uses singular value decomposition,
+will run SLOW!
+
 ------------------------------------------------------------------------------
 imaging-tools-0.3a    (alpha)                                         3/26/2006
 ------------------------------------------------------------------------------
