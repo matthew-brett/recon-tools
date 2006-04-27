@@ -1,4 +1,11 @@
 ------------------------------------------------------------------------------
+imaging-tools-0.3     (beta)                                          4/28/2006
+- Added Unbalanced Phase Correction operation
+- Added basic NIFTI file reading/writing
+- Support for multiple pulse sequences (gems, epi, mpflash3d, ssfp, asems)
+- Internal support for 2D phase unwrapping (ComputeFieldMap without FSL)
+- Painless reconstruction using default oplists
+------------------------------------------------------------------------------
 imaging-tools-0.3a    (alpha)                                         3/26/2006
 ------------------------------------------------------------------------------
 - Added viewimage tool.
