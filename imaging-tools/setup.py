@@ -5,6 +5,11 @@ import imaging
 import os, glob
 from distutils.core import setup, Extension
 
+# a little help to make setup go smoothly
+psfiles = glob.glob('root/imaging/varian/tablib/*')
+psfiles.remove('root/imaging/varian/tablib/TODOs')
+psfiles = ['%s'%(file[20:]) for file in psfiles]
+
 setup(
 
   name='python-imaging-tools',
@@ -34,7 +39,7 @@ setup(
     'scripts/recon'],
 
   package_data = {'imaging.conf':['*.ops'],
-                  'imaging.varian': ['tablib/*']},
+                  'imaging.varian': psfiles},
   
   ext_modules=[Extension('imaging.punwrap._punwrap',
                glob.glob(os.path.join('src/punwrap','*.c')))],
