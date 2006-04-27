@@ -7,8 +7,8 @@ imaging-tools-0.3     (beta)                                          4/28/2006
 - Painless reconstruction using default oplists
 
 NOTE: Fedora users will need to "yum install atlas" and then install a fixed
-version of the python-numeric RPM found on the BIC network here:
-http://kicker.bic.berkeley.edu/mirrors/cirl/fedora/4/i386/python-numeric-23.7-2bic.i386.rpm
+version of the python-numeric RPM found here:
+https://cirl.berkeley.edu/view/BIC/ImagingTools/python-numeric-23.7-2bic.i386.rpm
 
 BLAS (Basic Linear Algebra Subprograms) support is not automatically included
 in Numeric. Other users of a packaged Numeric should make sure that their build 
