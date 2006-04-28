@@ -188,7 +188,8 @@ def linReg(X, Y, yvar=None):
     delta = N*Sxx - Sx**2
     b = (Sxx*Sy - Sx*Sxy)/delta
     m = (N*Sxy - Sx*Sy)/delta
-    res = sum((Y-(m*X+b))**2)
+    #res = sum((Y-(m*X+b))**2)
+    res = sum(abs(Y-(m*X+b)))
     return (b, m, res)
 
 #-----------------------------------------------------------------------------
