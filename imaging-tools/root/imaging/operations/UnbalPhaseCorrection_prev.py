@@ -129,7 +129,7 @@ def solve_phase(ev, odd, q_mask, z_mask):
 
     return tuple(P)    
 
-class UnbalPhaseCorrection (Operation):
+class UnbalPhaseCorrection_prev (Operation):
     """This operation corrects Nyquist ghosting by finding "the best"
     pair of linear lines fitted to even and odd phase lines across all
     slices of a single reference scan. These two fitted lines are then
