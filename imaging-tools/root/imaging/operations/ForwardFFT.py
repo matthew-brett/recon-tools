@@ -17,6 +17,5 @@ class ForwardFFT (Operation):
     def run(self, image):
         ydim, xdim = image.data.shape[-2:]
         mask = checkerboard(ydim, xdim)
-        for volume in image.data:
-            for slice in volume:
-                slice[:] = (mask * ft2d(mask * slice)).astype(Complex32)
+        for vol in image.data:
+            vol[:] = (mask * fft2d(mask * vol)).astype(Complex32)
