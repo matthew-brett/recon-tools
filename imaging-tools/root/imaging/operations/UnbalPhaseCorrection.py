@@ -6,7 +6,7 @@ from imaging.operations import Operation, Parameter
 from imaging.util import ifft, apply_phase_correction, mod, linReg, checkerline
 from imaging.punwrap import unwrap2D
     
-class UnbalPhaseCorrection2 (Operation):
+class UnbalPhaseCorrection (Operation):
 
     def unwrap_volume(self, phases):
         """
@@ -41,16 +41,16 @@ class UnbalPhaseCorrection2 (Operation):
         for r in range(vol_shape[1]):
             uphases[:,r,:] = uphases[:,r,:] - offset_corrections[r]
 
-##         from pylab import imshow, plot, show, title
-##         for z in range(vol_shape[0]):
-##             for r in range(0,vol_shape[1],2):
-##                 plot(uphases[z,r])
-##             title("slice %d, even"%(z,))
-##             show()
-##             for r in range(1,vol_shape[1],2):
-##                 plot(uphases[z,r])
-##             title("slice %d, odd"%(z,))
-##             show()
+        from pylab import imshow, plot, show, title
+        for z in range(vol_shape[0]):
+            for r in range(0,vol_shape[1],2):
+                plot(uphases[z,r])
+            title("slice %d, even"%(z,))
+            show()
+            for r in range(1,vol_shape[1],2):
+                plot(uphases[z,r])
+            title("slice %d, odd"%(z,))
+            show()
 ##             imshow(take(uphases[z], arange(2,vol_shape[1],2), axis=0))
 ##             title("slice %d even"%(z,))
 ##             colorbar()
