@@ -87,6 +87,22 @@ def half_shift(matrix, dim=0):
     return tmp
     
 #-----------------------------------------------------------------------------
+def embedIm(subIm, Im, yOff, xOff):
+    """
+    places subImage into the middle of Image, which is known to have
+    dimensions twice as large as subImage (4X area)
+    @param subIm: the sub-image
+    @param Im: the larger image
+    """
+    (nSubY, nSubX) = subIm.shape
+    (nY, nX) = Im.shape
+    if yOff + nSubY > nY or xOff + nSubX > nX:
+        print "cannot place sub-image cornered at that location"
+        return
+    Im[:] = zeros((nY,nX), Complex32).copy()
+    Im[yOff:yOff+nSubY,xOff:xOff+nSubX] = subIm[:,:]
+
+#-----------------------------------------------------------------------------
 # from image-space to k-space in FE direction (per PE line)
 # in image-space: shift from (-t/2,t/2-1) to (0,t-1)
 # in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
