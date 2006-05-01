@@ -63,7 +63,7 @@ def maskedAvg(S, pixSize, ref, sn):
     # as possible to the midpoint of the previous average
     c = (((b-ref)+sign(b-ref)*pi)/2/pi).astype(Int)
     S0 = S0 - 2*pi*c[:,NewAxis]
-#    color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
+    color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
     E = mean(S0)
     std = sqrt(sum((S0 - E)**2)/nr)
 
@@ -71,7 +71,7 @@ def maskedAvg(S, pixSize, ref, sn):
         std = resize(std, (len(mask),))
         shift(std, 0, np/2-lin_pix)
         std = mask*std
-#    from pylab import subplot, twinx
+#    from pylab import subplot, twinx, plot, show, title
     putmask(mask, std>1, 0)
 
     if len(mask) > len(E):
@@ -79,7 +79,7 @@ def maskedAvg(S, pixSize, ref, sn):
     else:
         M = E
     #ax1 = subplot(111)
-##     for r in range(nr):
+ ##    for r in range(nr):
 ##         plot(ax, S0[r], color[r%7])
 ##         plot(ax, (arange(len(ax)))*m[r] + b2[r], color[r%7]+'--')
 ##     plot(ax,ones(len(ax))*ref, 'bo')
