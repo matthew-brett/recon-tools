@@ -5,9 +5,6 @@ from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
 from imaging.operations import Operation, Parameter
 from imaging.util import ifft, apply_phase_correction, mod, linReg, checkerline
 from imaging.punwrap import unwrap2D
-
-
-
     
 class UnbalPhaseCorrection2 (Operation):
 
@@ -34,17 +31,17 @@ class UnbalPhaseCorrection2 (Operation):
         height_at_midpt = floor(uphases[midsl,midln,midpt]/pi)
         # the point at uphases[0,midln,0] is from the same surface
         # as the middle point in the volume; this will be the reference
-        correct_height = uphases[0,midln,0] - 2*pi*height_at_midpt
+        correct_height = uphases[0,midln,self.refShape[2]-1] - 2*pi*height_at_midpt
         # take a sample from the corner of every unwrapped surface (across mu)
         # Due to the mask, these values will have unwrapped to be 0 + k2pi,
         # and can be used to move every surface back to the same offset
         # as the middle slice
-        offsets = uphases[0,:,0]
+        offsets = uphases[0,:,self.refShape[2]-1]
         offset_corrections = offsets - correct_height
-        from Numeric import NewAxis
         for r in range(vol_shape[1]):
             uphases[:,r,:] = uphases[:,r,:] - offset_corrections[r]
-        
+
+##         from pylab import imshow, plot, show, title
 ##         for z in range(vol_shape[0]):
 ##             for r in range(0,vol_shape[1],2):
 ##                 plot(uphases[z,r])
@@ -95,7 +92,7 @@ class UnbalPhaseCorrection2 (Operation):
 ##             plot(arange(len(S[0]))*m[r]+b[r], color[r%7]+'--')
 ##         plot(std, 'bo')
 ##     #    plot(E, 'go')
-##         title("slice = %d"%(snum,))
+##         #title("slice = %d"%(snum,))
 ##         #print res
 ##         show()
 
@@ -145,11 +142,11 @@ class UnbalPhaseCorrection2 (Operation):
         build the volume of phase correction lines with
         theta(s,r,q) = r*(Bpr*q + Apr*s + Epr) +/- (B*q + A*s + E)
         """
-        (S, R, Q) = self.refShape
+        (S, R, Q) = self.volShape
         (bpr, b, apr, a, epr, e) = self.coefs
         A = empty((R, len(self.coefs)), Float)
         B = empty((len(self.coefs), Q), Float)
-        theta = empty(self.refShape, Float)
+        theta = empty(self.volShape, Float)
         # build B matrix, always stays the same
         B[0] = arange(Q)
         B[1] = arange(Q)
@@ -174,6 +171,7 @@ class UnbalPhaseCorrection2 (Operation):
         if len(image.ref_vols) > 1:
             self.log("Could be performing Balanced Phase Correction!")
 
+        self.volShape = image.data.shape[1:]
         #1st copy in memory
         refVol = image.ref_data[0]
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
@@ -201,9 +199,9 @@ class UnbalPhaseCorrection2 (Operation):
         res = zeros((n_slice,), Float)
         for z in range(n_slice):
             phs_even[z], mask_e, res_e = \
-                         self.masked_avg(take(phs_vol[z], arange(2,n_pe,2)), image.xsize, z)
+                         self.masked_avg(take(phs_vol[z], arange(2,n_pe,2)))
             phs_odd[z], mask_o, res_o = \
-                        self.masked_avg(take(phs_vol[z], arange(1,n_pe-1,2)), image.xsize, z)
+                        self.masked_avg(take(phs_vol[z], arange(1,n_pe-1,2)))
             res[z] = res_e + res_o
 
             q_mask[z] = mask_e*mask_o
