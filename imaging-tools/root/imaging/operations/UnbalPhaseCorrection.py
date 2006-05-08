@@ -8,6 +8,12 @@ from imaging.punwrap import unwrap2D
     
 class UnbalPhaseCorrection (Operation):
 
+    params = (
+        Parameter(name="lin_radius", type="float", default=70.0,
+                  description="Radius of the region of greatest linearity "\
+                  "within the magnetic field, in mm (normally 70-80mm)"),
+        )
+
     def unwrap_volume(self, phases):
         """
         unwrap phases one "slice" at a time, where the volume
@@ -16,9 +22,11 @@ class UnbalPhaseCorrection (Operation):
         @param phases is a volume of wrapped phases
         @return: uphases an unwrapped volume, shrunk to masked region
         """
-        mask = zeros((self.refShape[0],self.refShape[2]))
+        #mask = zeros((self.refShape[0],self.refShape[2]))
+        zdim,ydim,xdim = vol_shape = phases.shape
+        mask = zeros((zdim,xdim))
         mask[:,self.lin1:self.lin2] = 1
-        vol_shape = phases.shape
+        #vol_shape = phases.shape
         uphases = empty(vol_shape, Float)
         from pylab import show, plot, imshow, title, colorbar
         for r in range(vol_shape[1]):
@@ -31,12 +39,14 @@ class UnbalPhaseCorrection (Operation):
         height_at_midpt = floor(uphases[midsl,midln,midpt]/pi)
         # the point at uphases[0,midln,0] is from the same surface
         # as the middle point in the volume; this will be the reference
-        correct_height = uphases[0,midln,self.refShape[2]-1] - 2*pi*height_at_midpt
+        #correct_height = uphases[0,midln,self.refShape[2]-1] - 2*pi*height_at_midpt
+        correct_height = uphases[0,midln,xdim-1] - 2*pi*height_at_midpt
         # take a sample from the corner of every unwrapped surface (across mu)
         # Due to the mask, these values will have unwrapped to be 0 + k2pi,
         # and can be used to move every surface back to the same offset
         # as the middle slice
-        offsets = uphases[0,:,self.refShape[2]-1]
+        #offsets = uphases[0,:,self.refShape[2]-1]
+        offsets = uphases[0,:,xdim-1]
         offset_corrections = offsets - correct_height
         for r in range(vol_shape[1]):
             uphases[:,r,:] = uphases[:,r,:] - offset_corrections[r]
@@ -89,9 +99,9 @@ class UnbalPhaseCorrection (Operation):
 ##         color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
 ##         for r in range(nr):
 ##             plot(S[r], color[r%7])
-##             plot(arange(len(S[0]))*m[r]+b[r], color[r%7]+'--')
+##             #plot(arange(len(S[0]))*m[r]+b[r], color[r%7]+'--')
 ##         plot(std, 'bo')
-##     #    plot(E, 'go')
+##         plot(E, 'go')
 ##         #title("slice = %d"%(snum,))
 ##         #print res
 ##         show()
@@ -105,9 +115,11 @@ class UnbalPhaseCorrection (Operation):
         phi(q,s,0) = q*(beta_pr + 2*beta) + s*(alpha_pr + 2*alpha) + e_pr + 2*e
         phi(q,s,1) = q*(beta_pr - 2*beta) + s*(alpha_pr - 2*alpha) + e_pr - 2*e
         with our overdetermined data.
-        so P = [ev[0] odd[0] ev[1] odd[1] ... ev[S] odd[S]]^T
+        so P = [ev[0]; odd[0]; ev[1]; odd[1]; ...; ev[S]; odd[S]]^T
         for all selected slices
-        A = [ ... ]
+        A = [q0 2q0 s0 2s0 1 2; q1 -2q1 s1 -2s1 1 -2; q2 2q2 s2 2s2 1 2;
+             q3 -2q3 s3 -2s3 1 -2; ...]
+
         and with AV = P, solve V = inv(A)P
         """
         BPR, B, ALPR, AL, EPR, E = (0,1,2,3,4,5)
@@ -175,11 +187,10 @@ class UnbalPhaseCorrection (Operation):
         #1st copy in memory
         refVol = image.ref_data[0]
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
-        lin_radius = 50.0
-        lin_pix = int(round(lin_radius/image.xsize))
+        lin_pix = int(round(self.lin_radius/image.xsize))
         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
-        self.lin_fe = lin_pix*2
+        self.lin_fe = self.lin2-self.lin1
         take_order = arange(n_pe)+1
         take_order[-1] = 0
        
@@ -208,7 +219,14 @@ class UnbalPhaseCorrection (Operation):
             
         sres = sort(res)
         selected = [find(res==c)[0] for c in sres[:4]]
-        for c in selected: z_mask[c] = 1
+        for c in selected:
+            z_mask[c] = 1
+            if(sum(q_mask[c]) == 0):
+                self.log("Could not find enough slices with sufficiently uniform\n"\
+                "phase profiles. Try shortening the lin_radius parameter to\n"\
+                "unwrap a less noisy region of the image phase.\n"\
+                "Current FOV: %fmm, Current lin_radius: %fmm\n"%(n_fe*image.xsize,self.lin_radius))
+                return
         self.coefs = (beta_pr, beta, alpha_pr, alpha, e_pr, e) = \
                   self.solve_phase(phs_even, phs_odd, q_mask, z_mask)
 
@@ -230,6 +248,17 @@ class UnbalPhaseCorrection (Operation):
 
 
         theta_vol = self.correction_volume()
+        
+
+##         from pylab import show, plot, log, sign
+##         for z in range(n_slice):
+##             for r in range(n_pe):
+##                 theta_vol[z,r,:12] = 
+##                 theta_vol[z,r,49:] = 
+##                 plot(theta_vol[z,r])
+##             show()
+            
 
         for dvol in image.data:
             dvol[:] = apply_phase_correction(dvol, theta_vol)
+
