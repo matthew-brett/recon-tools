@@ -6,9 +6,9 @@ class FlipSlices (Operation):
     "Flip image slices up-down and left-right"
 
     params=(
-      Parameter(name="flipud", type="bool", default=True,
+      Parameter(name="flipud", type="bool", default=False,
         description="flip each slice up-down"),
-      Parameter(name="fliplr", type="bool", default=True,
+      Parameter(name="fliplr", type="bool", default=False,
         description="flip each slice left-right"))
 
     #-------------------------------------------------------------------------
