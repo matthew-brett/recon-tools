@@ -3,7 +3,8 @@ from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
      pi, sqrt, ones, sum, find, Int, resize, matrixmultiply, svd, transpose, \
      diag, putmask
 from imaging.operations import Operation, Parameter
-from imaging.util import ifft, apply_phase_correction, mod, linReg, checkerline
+from imaging.util import ifft, apply_phase_correction, mod, linReg, checkerline,\
+     shift
 from imaging.punwrap import unwrap2D
     
 class UnbalPhaseCorrection (Operation):
@@ -120,9 +121,14 @@ class UnbalPhaseCorrection (Operation):
         A = [q0 2q0 s0 2s0 1 2; q1 -2q1 s1 -2s1 1 -2; q2 2q2 s2 2s2 1 2;
              q3 -2q3 s3 -2s3 1 -2; ...]
 
+
+        phi(s,u,r) =  2[rA1 + sA3 + A5] - [rA2 + sA4 + A6] u-pos
+        phi(s,u,r) = -2[rA1 + sA3 + A5] - [rA2 + sA4 + A6] u-neg
+
         and with AV = P, solve V = inv(A)P
         """
-        BPR, B, ALPR, AL, EPR, E = (0,1,2,3,4,5)
+#        BPR, B, ALPR, AL, EPR, E = (0,1,2,3,4,5)
+        A1, A2, A3, A4, A5, A6 = (0,1,2,3,4,5)
         n_chunks = sum(z_mask)
         rows_in_chunk = sum(take(q_mask, find(z_mask)), axis=1)
         z_ind = find(z_mask)
@@ -136,12 +142,18 @@ class UnbalPhaseCorrection (Operation):
                 row_end = row_start + rows_in_chunk[c]
                 q_ind = find(q_mask[z_ind[c]])
                 V[row_start:row_end,0] = s and take(odd[z_ind[c]], q_ind) or take(ev[z_ind[c]], q_ind)
-                A[row_start:row_end,BPR] = q_ind + self.lin1 #need to put back the truncated pixels
-                A[row_start:row_end,B] = s and 2*(q_ind+self.lin1) or -2*(q_ind+self.lin1)
-                A[row_start:row_end,ALPR] = z_ind[c]
-                A[row_start:row_end,AL] = s and 2*z_ind[c] or - 2*z_ind[c]
-                A[row_start:row_end,EPR] = 1
-                A[row_start:row_end,E] = s and 2 or -2
+                A[row_start:row_end,A1] = s and -2*(q_ind+self.lin1) or 2*(q_ind+self.lin1)
+                A[row_start:row_end,A2] = -(q_ind + self.lin1)
+                A[row_start:row_end,A3] = s and -2*z_ind[c] or 2*z_ind[c]
+                A[row_start:row_end,A4] = -z_ind[c]
+                A[row_start:row_end,A5] = s and -2 or 2
+                A[row_start:row_end,A6] = -1
+##                 A[row_start:row_end,BPR] = q_ind + self.lin1 #need to put back the truncated pixels
+##                 A[row_start:row_end,B] = s and 2*(q_ind+self.lin1) or -2*(q_ind+self.lin1)
+##                 A[row_start:row_end,ALPR] = z_ind[c]
+##                 A[row_start:row_end,AL] = s and 2*z_ind[c] or - 2*z_ind[c]
+##                 A[row_start:row_end,EPR] = 1
+##                 A[row_start:row_end,E] = s and 2 or -2
 
         [u,s,vt] = svd(A)
         P = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
@@ -149,30 +161,39 @@ class UnbalPhaseCorrection (Operation):
 
         return tuple(P) 
 
-    def correction_volume(self):
+    def correction_volume(self, u_pos, u_neg):
         """
         build the volume of phase correction lines with
         theta(s,r,q) = r*(Bpr*q + Apr*s + Epr) +/- (B*q + A*s + E)
+        theta(s,u,r) = u*[r*A2 + s*A4 + A6] + (-1)^u*[r*A1 + s*A3 + A5]
+
+        A is (n_pe x 6) = 
+        B is (6 x n_fe) = [0:N; 0:N; 1; 1; 1; 1]
         """
-        (S, R, Q) = self.volShape
-        (bpr, b, apr, a, epr, e) = self.coefs
-        A = empty((R, len(self.coefs)), Float)
-        B = empty((len(self.coefs), Q), Float)
+        (S, U, R) = self.volShape
+        #(bpr, b, apr, a, epr, e) = self.coefs
+        (a1, a2, a3, a4, a5, a6) = self.coefs
+        A = empty((U, len(self.coefs)), Float)
+        B = empty((len(self.coefs), R), Float)
         theta = empty(self.volShape, Float)
         # build B matrix, always stays the same
-        B[0] = arange(Q)
-        B[1] = arange(Q)
+        B[0] = arange(R)
+        B[1] = arange(R)
         B[2] = B[3] = B[4] = B[5] = 1
         # build A matrix, changes slightly as s varies
-        zigzag = checkerline(R)
-        r_line = arange(R) - R/2
-        A[:,0] = bpr*r_line
-        A[:,1] = b*zigzag
-        A[:,4] = epr*r_line
-        A[:,5] = e*zigzag
+        zigzag = empty(U)
+        for r in range(U/2):
+            zigzag[u_pos[r]] = 1
+            zigzag[u_neg[r]] = -1
+        u_line = arange(U) - U/2
+        #u_line[1:U:2] = u_line[0:U:2]
+        A[:,0] = a2*u_line
+        A[:,1] = a1*zigzag
+        A[:,4] = a6*u_line
+        A[:,5] = a5*zigzag
         for s in range(S):
-            A[:,2] = s*apr*r_line
-            A[:,3] = s*a*zigzag
+            A[:,2] = s*a4*u_line
+            A[:,3] = s*a3*zigzag
             theta[s] = matrixmultiply(A,B)
         return theta
 
@@ -184,18 +205,26 @@ class UnbalPhaseCorrection (Operation):
             self.log("Could be performing Balanced Phase Correction!")
 
         self.volShape = image.data.shape[1:]
-        #1st copy in memory
+        nseg = image.nseg
+        
         refVol = image.ref_data[0]
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
         lin_pix = int(round(self.lin_radius/image.xsize))
         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
         self.lin_fe = self.lin2-self.lin1
-        take_order = arange(n_pe)+1
-        take_order[-1] = 0
+        conj_order = arange(n_pe)
+        shift(conj_order, 0, -nseg)
        
         inv_ref = ifft(refVol)
-        inv_ref = conjugate(take(inv_ref, take_order, axis=1)) * inv_ref
+        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
+
+        pos_order = zeros(n_pe/2)
+        neg_order = zeros(n_pe/2)
+        for n in range(nseg):
+            pos_order[n:n_pe/2:nseg] = arange(n,n_pe,2*nseg)
+            neg_order[n:n_pe/2:nseg] = arange(nseg+n,n_pe,2*nseg)
+            
        
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
@@ -203,6 +232,7 @@ class UnbalPhaseCorrection (Operation):
         #phs_vol = self.unwrap_volume(angle(inv_ref[:,:,self.lin1:self.lin2]))
         phs_vol = self.unwrap_volume(angle(inv_ref))
         #set up some arrays
+        from pylab import plot, show
         phs_even = empty((n_slice, self.lin_fe), Float)
         phs_odd = empty((n_slice, self.lin_fe), Float)
         z_mask = zeros(n_slice)
@@ -210,15 +240,15 @@ class UnbalPhaseCorrection (Operation):
         res = zeros((n_slice,), Float)
         for z in range(n_slice):
             phs_even[z], mask_e, res_e = \
-                         self.masked_avg(take(phs_vol[z], arange(2,n_pe,2)))
+                         self.masked_avg(take(phs_vol[z], pos_order[nseg:]))
             phs_odd[z], mask_o, res_o = \
-                        self.masked_avg(take(phs_vol[z], arange(1,n_pe-1,2)))
+                        self.masked_avg(take(phs_vol[z], neg_order[:n_pe/2-nseg]))
             res[z] = res_e + res_o
 
             q_mask[z] = mask_e*mask_o
             
         sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:4]]
+        selected = [find(res==c)[0] for c in sres[:6]]
         for c in selected:
             z_mask[c] = 1
             if(sum(q_mask[c]) == 0):
@@ -227,27 +257,27 @@ class UnbalPhaseCorrection (Operation):
                 "unwrap a less noisy region of the image phase.\n"\
                 "Current FOV: %fmm, Current lin_radius: %fmm\n"%(n_fe*image.xsize,self.lin_radius))
                 return
-        self.coefs = (beta_pr, beta, alpha_pr, alpha, e_pr, e) = \
+        self.coefs = (a1,a2,a3,a4,a5,a6) = \
                   self.solve_phase(phs_even, phs_odd, q_mask, z_mask)
 
 ##         print "computed coefficients:"
-##         print "\tBpr: %f, B: %f, Apr: %f, A: %f, e_pr: %f, e: %f"\
-##               %(beta_pr, beta, alpha_pr, alpha, e_pr, e)
+##         print "\ta1: %f, a2: %f, a3: %f, a4: %f, a5: %f, a6: %f"\
+##               %self.coefs
 
-## ##Uncomment this section to see how the computed lines fit the real lines
+##Uncomment this section to see how the computed lines fit the real lines
 ##         from pylab import title, plot, show
 ##         for z in range(n_slice):
 ##             plot(find(q_mask[z]), take(phs_even[z], find(q_mask[z])))
 ##             plot(find(q_mask[z]), take(phs_odd[z], find(q_mask[z])))
-##             plot((arange(self.lin_fe)+self.lin1)*(beta_pr - 2*beta) + z*(alpha_pr - 2*alpha) + e_pr - 2*e, 'b--')
-##             plot((arange(self.lin_fe)+self.lin1)*(beta_pr + 2*beta) + z*(alpha_pr + 2*alpha) + e_pr + 2*e, 'g--')
+##             plot((arange(self.lin_fe)+self.lin1)*(-a2 - 2*a1) + z*(-a4 - 2*a3) - a6 - 2*a5, 'g--')
+##             plot((arange(self.lin_fe)+self.lin1)*(-a2 + 2*a1) + z*(-a4 + 2*a3) - a6 + 2*a5, 'b--')
 ##             tstr = "slice %d"%(z)
 ##             if z_mask[z]: tstr += " (selected)"
 ##             title(tstr)
 ##             show()
 
 
-        theta_vol = self.correction_volume()
+        theta_vol = self.correction_volume(pos_order, neg_order)
         
 
 ##         from pylab import show, plot, log, sign
@@ -260,5 +290,5 @@ class UnbalPhaseCorrection (Operation):
             
 
         for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, theta_vol)
+            dvol[:] = apply_phase_correction(dvol, -theta_vol)
 
