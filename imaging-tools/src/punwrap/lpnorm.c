@@ -52,12 +52,14 @@ void LpNormUnwrap(float *soln, float *phase, float *dxwts,
     /* Unwrap residual and add to solution */
     /* (This could be improved by unwrapping only the nonmasked */
     /* pixels, and removing the nonmasked residue test above)   */
-    RasterUnwrap(residual, zarray, xsize, ysize); /* borrow zarray */
-    for (k=0; k<xsize*ysize; k++)  soln[k] += zarray[k];  
+      //printf("reached nRes = 0 after %d iterations\n", k); 
+      RasterUnwrap(residual, zarray, xsize, ysize); /* borrow zarray */
+      for (k=0; k<xsize*ysize; k++)  soln[k] += zarray[k];  
   }
   else {
     /* Make solution congruent to wrapped input phase */
-    CongruentSoln(soln, phase, NULL, xsize, ysize);
+      //printf("did not reach nRes=0 after %d itereations\n", k);
+      CongruentSoln(soln, phase, NULL, xsize, ysize);
   }
 }
  

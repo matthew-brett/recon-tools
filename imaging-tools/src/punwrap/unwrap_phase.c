@@ -11,10 +11,10 @@ static char doc_lpUnwrap[] = "Performs 2D phase unwrapping on a 2D Numeric array
 
 PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
 
-  PyObject *op1;
-  PyArrayObject *ap1, *ret;
+  PyObject *op1, *op2;              // input arrays (phase, mask)
+  PyArrayObject *ap1, *ap2, *ret;   // phase array, mask array, return array
   int xsize, ysize, DCT_xsize, DCT_ysize;
-  int typenum = 34;
+  int typenum_phs, typenum_msk;
   int nd, dimensions[2];
   int i,j;
   float *dct_phase, *dct_soln, *soln, *rarray, *zarray, *parray, *dxwts, *dywts;
@@ -22,7 +22,7 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   float *qual_map;          // will be zeros
   unsigned char *bitflags;	// will be zeros
   
-  if(!PyArg_ParseTuple(args, "O", &op1)) {
+  if(!PyArg_ParseTuple(args, "OO", &op1, &op2)) {
     printf("couldn't parse any args\n");
     return NULL;
   }
@@ -31,20 +31,22 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
     return NULL;
   }
 //  printf("parsed 1 object: op1 is at memaddr %x\n",op1);
-  typenum = PyArray_ObjectType(op1, 0);
+  typenum_phs = PyArray_ObjectType(op1, 0);
+  typenum_msk = PyArray_ObjectType(op2, 0);
 //  printf("typecode is %d\n",typenum);
 //  printf("data type is 32bit Floating point: %d\n", typenum==PyArray_FLOAT);
-  if(typenum != PyArray_FLOAT) {
+  if(typenum_phs != PyArray_FLOAT) {
       PyErr_SetString(PyExc_TypeError, "Currently I can only handle single-precision floating point numbers");
 //      Py_XDECREF(ap1);
       return NULL;
   }
-  ap1 = (PyArrayObject *)PyArray_ContiguousFromObject(op1, typenum, 0, 0);
-  
+  ap1 = (PyArrayObject *)PyArray_ContiguousFromObject(op1, typenum_phs, 0, 0);
+  ap2 = (PyArrayObject *)PyArray_ContiguousFromObject(op2, typenum_msk, 0, 0);
 //  printf("number of dims: %d\n", ap1->nd);
   if(ap1->nd != 2) {
     PyErr_SetString(PyExc_ValueError, "I can only unwrap 2D arrays");
     Py_XDECREF(ap1);
+    Py_XDECREF(ap2);
     return NULL;
   }
 
@@ -71,24 +73,36 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   bitflags = (unsigned char *) calloc(DCT_ysize*DCT_xsize, sizeof(char));
   
   memmove(dct_phase, ap1->data, ysize*xsize*sizeof(float));
-  
+  memmove(bitflags, ap2->data, ysize*xsize*sizeof(char));
+      
    /* embed arrays in possibly larger FFT/DCT arrays */
-
+  
   for (j=DCT_ysize-1; j>=0; j--) {
     for (i=DCT_xsize-1; i>=0; i--) {
         if (i<xsize && j<ysize) {
             dct_phase[j*DCT_xsize + i] = dct_phase[j*xsize + i];
-            qual_map[j*DCT_xsize + i] = 1.0;
+            // embed and convert bitmask (0 or 1) to (BORDER or 0)
+            bitflags[j*DCT_xsize + i] = (!bitflags[j*xsize + i]) ? BORDER : 0;
+            qual_map[j*DCT_xsize + i] = (bitflags[j*DCT_xsize + i] & BORDER) ? 0.0 : 1.0;
         }
         else {
+            // everything outside of embedded region is BORDER (aka 0 valued)
             dct_phase[j*DCT_xsize + i] = 0.0;
             bitflags[j*DCT_xsize + i] = BORDER;
-        }
+            qual_map[j*DCT_xsize + i] = 0.0;        }
     }
+/*      printf("bitmask and qualmap for row %d:\n",j);
+      for (i=0; i<DCT_xsize; i++) 
+          printf("0x%x ", bitflags[j*DCT_xsize + i]);
+      printf("\n");
+      for (i=0; i<DCT_xsize; i++)
+          printf("%d ", (int) qual_map[j*DCT_xsize + i]);
+      printf("\n");
+*/
   }
 //  printf("ysize for DCT: %d, xsize for DCT: %d\n", DCT_ysize, DCT_xsize);
 
-  int num_iter = 10; int pcg_iter = 20; double e0 = 0.001;
+  int num_iter = 15; int pcg_iter = 20; double e0 = 0.001;
   //printf("ysize,xsize=(%d,%d)\n", ysize, xsize);
 
   LpNormUnwrap(dct_soln, dct_phase, dxwts, dywts, bitflags, qual_map,
@@ -99,7 +113,7 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   for(i=0; i<xsize; i++) printf("%f, ",dct_soln[DCT_xsize+i]);
   printf("]\n");
 */  
-  ret = (PyArrayObject *)PyArray_FromDims(nd, dimensions, typenum);
+  ret = (PyArrayObject *)PyArray_FromDims(nd, dimensions, typenum_phs);
   
   pullSubGrid((float *) ret->data, dct_soln, DCT_xsize, DCT_ysize, dimensions[1], dimensions[0]);
   
@@ -116,6 +130,7 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   free(bitflags);
    
   Py_DECREF(ap1);
+  Py_DECREF(ap2);
   return PyArray_Return(ret);
   
 }
