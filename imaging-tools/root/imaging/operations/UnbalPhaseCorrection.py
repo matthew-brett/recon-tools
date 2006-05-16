@@ -1,13 +1,10 @@
 from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
      pi, sqrt, ones, sum, find, Int, resize, matrixmultiply, svd, transpose, \
-     diag, putmask, sign
+     diag, putmask, sign, asarray
 from imaging.operations import Operation, Parameter
 from imaging.util import ifft, apply_phase_correction, mod, linReg, shift
 from imaging.punwrap import unwrap2D
-
-# TODO:
-# FIX unwrapping problems!! (FIXED?)
 
 class UnbalPhaseCorrection (Operation):
     """Unbalanced Phase Correction tries to determine six parameters which
@@ -19,8 +16,6 @@ class UnbalPhaseCorrection (Operation):
     of multishot-centric acquisition, where there are symmetric phase lines
     about the center row of k-space.
     """
-
-
     params = (
         Parameter(name="lin_radius", type="float", default=70.0,
                   description="Radius of the region of greatest linearity "\
@@ -110,6 +105,7 @@ class UnbalPhaseCorrection (Operation):
              ...]
         Then with AV = P, solve V = inv(A)P
         """
+
         A1, A2, A3, A4, A5, A6 = (0,1,2,3,4,5)
         n_chunks = sum(z_mask)
         rows_in_chunk = sum(take(q_mask, find(z_mask)), axis=1)
@@ -164,9 +160,10 @@ class UnbalPhaseCorrection (Operation):
         u_line = empty(U)
         for r in range(self.xleave):
             u_line[r:U:self.xleave] = arange(U/self.xleave)-U/(2*self.xleave)
-        # if data is multishot centric, must count mu=0 twice
+        # if data is multishot centric, must count mu=0 twice, ie u_line is:
+        # [-U/2 + 1 ... 0] U [0 ... U/2 - 1], zigzag = [-1,1,...,1,1,...,1,-1]
         if self.iscentric:
-            u_line[0:U/2] = u_line[0:U/2] + 1
+            u_line[0:U/2] = -1*(u_line[0:U/2] + 1)
             zigzag[0:U/2] *= -1
         # build A matrix, changes slightly as s varies
         A[:,0] = a2*u_line
@@ -192,7 +189,8 @@ class UnbalPhaseCorrection (Operation):
         # iscentric says whether kspace is multishot centric;
         # xleave is the factor to which kspace data has been interleaved
         # (in the case of multishot interleave)
-        self.iscentric = image.petable_name.find('cen') > 0
+        self.iscentric = image.petable_name.find('cen') > 0 or \
+                         image.petable_name.find('alt') > 0
         self.xleave = self.iscentric and 1 or image.nseg
         
         refVol = image.ref_data[0]
@@ -204,19 +202,23 @@ class UnbalPhaseCorrection (Operation):
         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
         self.lin_fe = self.lin2-self.lin1
+
+##         #reverse centric neg rows
+##         trev = -1 - arange(n_pe)
+##         #image.data[:,:,:n_pe/2,:]=take(image.data[:,:,:n_pe/2:], trev, axis=-1)
+##         refVol[:,:n_pe/2,:] = take(refVol[:,:n_pe/2,:], trev, axis=-1)
         
         conj_order = arange(n_pe)
         shift(conj_order, 0, -self.xleave)
         inv_ref = ifft(refVol)
         inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
 
-        # pos_order, neg_order define which rows in a slice
+        # pos_order, neg_order define which rows in a slice are grouped
         pos_order = zeros(n_pe/2)
         neg_order = zeros(n_pe/2)
         for n in range(self.xleave):
             pos_order[n:n_pe/2:self.xleave] = arange(n,n_pe,2*self.xleave)
             neg_order[n:n_pe/2:self.xleave] = arange(self.xleave+n,n_pe,2*self.xleave)
-            
        
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
@@ -249,10 +251,10 @@ class UnbalPhaseCorrection (Operation):
                                             neg_order[n_pe/4:n_pe/2-1]))
                 
                 phs_pos_lower[z], mask_pl, res_pl = \
-                       self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
+                       self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
                 
                 phs_neg_lower[z], mask_nl, res_nl = \
-                       self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
+                       self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
                 
                 res[z] = res_pu + res_nu + res_pl + res_nl
                 q_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
@@ -283,13 +285,29 @@ class UnbalPhaseCorrection (Operation):
                 return
         
         if self.iscentric:
-            self.coefs = (a1,a2,a3,a4,a5,a6) = \
-                         self.solve_phase((phs_pos_upper-phs_pos_lower)/2., \
-                                          (phs_neg_upper-phs_neg_lower)/2., \
-                                          q_mask, z_mask)
+            self.coefs = self.solve_phase(phs_pos_upper, phs_neg_upper, q_mask, z_mask)
+            print self.coefs
+            theta_upper = self.correction_volume(pos_order, neg_order)
+            # can use same inverse matrix to solve for lower half,
+            # but transform with diag([1, -1, 1, -1, 1, -1])
+            v = self.solve_phase(phs_pos_lower, phs_neg_lower, q_mask, z_mask)
+            self.coefs = tuple(matrixmultiply(diag([1, -1, 1, -1, 1, -1]), \
+                                              asarray(v)))
+            print self.coefs        
+            theta_lower = self.correction_volume(pos_order, neg_order)
+
+            theta_vol = empty(theta_lower.shape, theta_lower.typecode())
+            theta_vol[:,:n_pe/2,:] = theta_lower[:,:n_pe/2,:]
+            theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
+            
         else:
             self.coefs = (a1,a2,a3,a4,a5,a6) = \
                          self.solve_phase(phs_pos, phs_neg, q_mask, z_mask)
+            print self.coefs
+            theta_vol = self.correction_volume(pos_order, neg_order)            
+
+        for dvol in image.data:
+            dvol[:] = apply_phase_correction(dvol, -theta_vol)
 
 ##         print "computed coefficients:"
 ##         print "\ta1: %f, a2: %f, a3: %f, a4: %f, a5: %f, a6: %f"\
@@ -307,9 +325,5 @@ class UnbalPhaseCorrection (Operation):
 ##             title(tstr)
 ##             show()
 
-
-        theta_vol = self.correction_volume(pos_order, neg_order)            
-
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -theta_vol)
+            
 
