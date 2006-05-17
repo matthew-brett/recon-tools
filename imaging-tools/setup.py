@@ -8,7 +8,8 @@ from distutils.core import setup, Extension
 # a little help to make setup go smoothly
 psfiles = glob.glob('root/imaging/varian/tablib/*')
 psfiles.remove('root/imaging/varian/tablib/TODOs')
-psfiles = ['%s'%(file[20:]) for file in psfiles]
+# grab extra file names to include in varian.tablib package
+psfiles = [os.path.split(file)[-1] for file in psfiles]
 
 setup(
 
