@@ -16,9 +16,21 @@ setup(
   version=imaging.__version__,
   description=\
    'Tools for manipulating MRI data, specializing in k-space reconstruction.',
-  author='Brian Hawthorne',
-  author_email='brian.lee.hawthorne@gmail.com',
+  author='Mike Trumpis',
+  author_email='mtrumpis@gmail.com',
   url='http://cirl.berkeley.edu/view/BIC/ImagingTools',
+
+  long_description = """
+  An all-in-one tool for reconstructing MR images from sampled k-space data.
+  imaging-tools can reconstruct EPI, GEMS, and MPFLASH3D data, perform a
+  series of artifact reduction operations, and write the image data to
+  Analyze or NIFTI file formats.
+
+  Originally developed by Brian Hawthorne <brian.lee.hawthorne@gmail.com>
+
+  Currently developed and maintained by Mike Trumpis <mtrumpis@gmail.com>
+  """
+
 
   package_dir = {'':'root'},
 

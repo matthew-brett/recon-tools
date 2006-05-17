@@ -1,4 +1,4 @@
 recursive-include docs *
 recursive-include src *.h *.c
 include root/imaging/conf/*.ops
-include root/imaging/varian/tablib/*
+recursive-include root/imaging/varian/tablib *
