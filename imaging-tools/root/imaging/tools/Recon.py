@@ -1,6 +1,7 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
- 
+import os
+
 import imaging.conf
 from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
@@ -143,9 +144,14 @@ class Recon (ConsoleTool):
     
         options, args = self.parse_args()
         if len(args) != 2:
-            self.error("Expecting 2 arguments: datadir ouput")
+            # let's see if anything's in the current directory:
+            if os.path.isfile("fid") and os.path.isfile("procpar"):
+                pwd = os.path.abspath(".")
+                name = os.path.split(pwd[:pwd.rfind(".fid")])[-1]
+                args = (pwd, name+"_recon")
+            else: self.error("Expecting 2 arguments: datadir outfile")
 
-        # treat the raw args as named options
+        # treat the raw (or cooked) args as named options
         options.datadir, options.outfile = args
 
         # use stock oplist if none specified
