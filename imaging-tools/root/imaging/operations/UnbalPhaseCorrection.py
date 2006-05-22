@@ -3,8 +3,8 @@ from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
      pi, sqrt, ones, sum, find, Int, resize, matrixmultiply, svd, transpose, \
      diag, putmask, sign, asarray
 from imaging.operations import Operation, Parameter
-from imaging.util import ifft, apply_phase_correction, mod, linReg, shift
-from imaging.punwrap import unwrap2D
+from imaging.util import ifft, apply_phase_correction, mod, linReg, shift, \
+     unwrap_ref_volume
 
 class UnbalPhaseCorrection (Operation):
     """Unbalanced Phase Correction tries to determine six parameters which
@@ -21,33 +21,7 @@ class UnbalPhaseCorrection (Operation):
                   description="Radius of the region of greatest linearity "\
                   "within the magnetic field, in mm (normally 70-80mm)"),
         )
-
-    def unwrap_volume(self, phases):
-        """
-        unwrap phases one "slice" at a time, where the volume
-        is sliced along a single pe line (dimensions = nslice X n_fe)
-        take care to move all the surfaces to roughly the same height
-        @param phases is a volume of wrapped phases
-        @return: uphases an unwrapped volume, shrunk to masked region
-        """
-        zdim,ydim,xdim = vol_shape = phases.shape
-        #mask = ones((zdim,xdim))
-        #mask = zeros((zdim,xdim))
-        #mask[:,self.lin1:self.lin2] = 1
-        uphases = empty(vol_shape, Float)
-        midsl, midpt = (vol_shape[0]/2, vol_shape[2]/2)
-        #from pylab import show, plot, imshow, title, colorbar, figure
-        # unwrap the volume sliced along each PE line
-        # the middle of each surface should be between -pi and pi,
-        # if not, put it there!
-        for r in range(0,vol_shape[1],1):
-            uphases[:,r,:] = unwrap2D(phases[:,r,:])
-            height = uphases[midsl,r,midpt]
-            height = int((height+sign(height)*pi)/2/pi)
-            uphases[:,r,:] = uphases[:,r,:] - 2*pi*height
-                    
-        return uphases[:,:,self.lin1:self.lin2]
-
+    
     def masked_avg(self, S):
         """
         Take all pos or neg lines in a slice, return the mean of these lines
@@ -148,11 +122,10 @@ class UnbalPhaseCorrection (Operation):
         A = empty((U, len(self.coefs)), Float)
         B = empty((len(self.coefs), R), Float)
         theta = empty(self.volShape, Float)
-        # build B matrix, always stays the same
-        B[0] = arange(R)
-        B[1] = arange(R)
-        B[2] = B[3] = B[4] = B[5] = 1
         # u_line & zigzag define how the correction changes per PE line
+        # u_line is usually {-32,-31,...,30, 31}, but changes in multishot
+        # zigzag[m] defines which rows goes negative or positive (is [-1,1])
+        # this sets up for linear sampling:
         zigzag = empty(U)
         for r in range(U/2):
             zigzag[u_pos[r]] = 1
@@ -160,11 +133,28 @@ class UnbalPhaseCorrection (Operation):
         u_line = empty(U)
         for r in range(self.xleave):
             u_line[r:U:self.xleave] = arange(U/self.xleave)-U/(2*self.xleave)
-        # if data is multishot centric, must count mu=0 twice, ie u_line is:
-        # [-U/2 + 1 ... 0] U [0 ... U/2 - 1], zigzag = [-1,1,...,1,1,...,1,-1]
+
+        # if data is 2-shot centric, must count mu=0 twice AND mu-negative is
+        # made positive. ie u_line is:
+        # [-U/2 + 1 ... 0] U [0 ... U/2 - 1],
+        #
+        # zigzag still depends on even-/odd-ness, [-1,1,...,1,1,...,1,-1]
+        # this fixes for centric sampling
         if self.iscentric:
             u_line[0:U/2] = -1*(u_line[0:U/2] + 1)
             zigzag[0:U/2] *= -1
+            
+        # build B matrix, always stays the same
+        from pylab import power
+        g = arange(R)-32
+        g = g/(1 + power(g/(R*.45), 6))
+        g += (R/2 - g[R/2])
+        B[0] = g
+        B[1] = g
+##         B[0] = arange(R)
+##         B[1] = arange(R)
+        B[2] = B[3] = B[4] = B[5] = 1
+
         # build A matrix, changes slightly as s varies
         A[:,0] = a2*u_line
         A[:,1] = a1*zigzag
@@ -174,7 +164,24 @@ class UnbalPhaseCorrection (Operation):
             # these are the slice-dependent columns
             A[:,2] = s*a4*u_line
             A[:,3] = s*a3*zigzag
+            # for current s,
+            # theta[r,m]=zigzag[m]*(ra1 + sa3 + a5) + u_line[m]*(ra2 + sa4 + a6)
             theta[s] = matrixmultiply(A,B)
+
+        #from pylab import plot, show
+        #for m in range(U):
+            #theta[12,m,:] = zigzag[m]*(arange(64)*a2*2 + 12*a3 + a5) + \
+                             #u_line[m]*(arange(64)*a2*2 + 12*a4 + a6)
+        #theta[12,:,1:3] *= 2.2
+        #theta[12,:,2] += .15
+##         for m in range(U):
+##             theta[12,m,1] *= 2.2
+##             theta[12,m,2] *= 2.2
+##             #theta[12.m.1] -= (theta
+##             #theta[12,m,:11] -= (theta[12,m,10] - theta[12,m,11])
+##             #plot(theta[12,m])
+##         #show()
+        
         return theta
 
     def run(self, image):
@@ -203,11 +210,6 @@ class UnbalPhaseCorrection (Operation):
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
         self.lin_fe = self.lin2-self.lin1
 
-##         #reverse centric neg rows
-##         trev = -1 - arange(n_pe)
-##         #image.data[:,:,:n_pe/2,:]=take(image.data[:,:,:n_pe/2:], trev, axis=-1)
-##         refVol[:,:n_pe/2,:] = take(refVol[:,:n_pe/2,:], trev, axis=-1)
-        
         conj_order = arange(n_pe)
         shift(conj_order, 0, -self.xleave)
         inv_ref = ifft(refVol)
@@ -223,7 +225,7 @@ class UnbalPhaseCorrection (Operation):
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape, self.lin1, etc)
-        phs_vol = self.unwrap_volume(angle(inv_ref))
+        phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
         #set up some arrays
         if self.iscentric:
             # centric has 4 distinct profile (2 sets of symmetries)
@@ -242,6 +244,9 @@ class UnbalPhaseCorrection (Operation):
             for z in range(n_slice):
                 # seems that for upper, skip 1st pos and last neg; 
                 #            for lower, skip last pos and last neg
+                # pos_order, neg_order naming scheme breaks down here!
+                # for mu < 0 rows, ODD rows go "positive"
+                # try to fix this some time
                 phs_pos_upper[z], mask_pu, res_pu = \
                        self.masked_avg(take(phs_vol[z], \
                                             pos_order[n_pe/4+1:]))
@@ -285,9 +290,12 @@ class UnbalPhaseCorrection (Operation):
                 return
         
         if self.iscentric:
-            self.coefs = self.solve_phase(phs_pos_upper, phs_neg_upper, q_mask, z_mask)
+            # want to correct both segments "separately" (by splicing 2 thetas)
+            self.coefs = self.solve_phase(phs_pos_upper, phs_neg_upper, \
+                                          q_mask, z_mask)
             print self.coefs
             theta_upper = self.correction_volume(pos_order, neg_order)
+
             # can use same inverse matrix to solve for lower half,
             # but transform with diag([1, -1, 1, -1, 1, -1])
             v = self.solve_phase(phs_pos_lower, phs_neg_lower, q_mask, z_mask)
@@ -301,10 +309,16 @@ class UnbalPhaseCorrection (Operation):
             theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
             
         else:
-            self.coefs = (a1,a2,a3,a4,a5,a6) = \
-                         self.solve_phase(phs_pos, phs_neg, q_mask, z_mask)
+            self.coefs = self.solve_phase(phs_pos, phs_neg, q_mask, z_mask)
             print self.coefs
             theta_vol = self.correction_volume(pos_order, neg_order)            
+
+##         from pylab import plot, show
+##         #for slice in theta_vol:
+##         for row in theta_vol[12]:
+##             #for row in slice:
+##             plot(row)
+##         show()
 
         for dvol in image.data:
             dvol[:] = apply_phase_correction(dvol, -theta_vol)
@@ -314,6 +328,7 @@ class UnbalPhaseCorrection (Operation):
 ##               %self.coefs
 
 ## ## Uncomment this section to see how the computed lines fit the real lines
+##         (a1,a2,a3,a4,a5,a6) = self.coefs
 ##         from pylab import title, plot, show
 ##         for z in range(n_slice):
 ##             plot(find(q_mask[z]), take(phs_pos[z], find(q_mask[z])))
