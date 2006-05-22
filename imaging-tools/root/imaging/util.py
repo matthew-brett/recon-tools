@@ -7,6 +7,7 @@ from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
   meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff
+from punwrap import unwrap2D
 
 
 # maximum numeric range for some smaller data types
@@ -207,6 +208,30 @@ def linReg(X, Y, yvar=None):
     #res = sum((Y-(m*X+b))**2)
     res = sum(abs(Y-(m*X+b)))
     return (b, m, res)
+
+#-----------------------------------------------------------------------------
+def unwrap_ref_volume(phases, fe1, fe2):
+    """
+    unwrap phases one "slice" at a time, where the volume
+    is sliced along a single pe line (dimensions = nslice X n_fe)
+    take care to move all the surfaces to roughly the same height
+    @param phases is a volume of wrapped phases
+    @return: uphases an unwrapped volume, shrunk to masked region
+    """
+    zdim,ydim,xdim = vol_shape = phases.shape
+    uphases = empty(vol_shape, Float)
+    midsl, midpt = (vol_shape[0]/2, vol_shape[2]/2)
+
+    # unwrap the volume sliced along each PE line
+    # the middle of each surface should be between -pi and pi,
+    # if not, put it there!
+    for r in range(0,vol_shape[1],1):
+        uphases[:,r,:] = unwrap2D(phases[:,r,:])
+        height = uphases[midsl,r,midpt]
+        height = int((height+sign(height)*pi)/2/pi)
+        uphases[:,r,:] = uphases[:,r,:] - 2*pi*height
+
+    return uphases[:,:,fe1:fe2]
 
 #-----------------------------------------------------------------------------
 ### some routines from scipy ###
