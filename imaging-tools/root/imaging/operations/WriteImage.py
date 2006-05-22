@@ -3,8 +3,8 @@ from imaging.util import castData
 from imaging.operations import Operation, Parameter
 
 ANALYZE_FORMAT = "analyze"
-NIFTI_DUAL = "nifti dual"
-NIFTI_SINGLE = "nifti single"
+NIFTI_DUAL = "nifti-dual"
+NIFTI_SINGLE = "nifti-single"
 MAGNITUDE_TYPE = "magnitude"
 COMPLEX_TYPE = "complex"
 

@@ -47,8 +47,8 @@ class Recon (ConsoleTool):
         choices=output_format_choices,
         help="""{%s}
         analyze: Save individual image for each frame in analyze format.
-        nifti dual: save nifti file in (hdr, img) pair.
-        nifti single: save nifti file in single-file format."""%\
+        nifti-dual: save nifti file in (hdr, img) pair.
+        nifti-single: save nifti file in single-file format."""%\
           ("|".join(output_format_choices))),
 
       Option("-y", "--output-data-type", dest="output_datatype",
