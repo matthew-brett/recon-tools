@@ -30,7 +30,7 @@ setup(
   Originally developed by Brian Hawthorne <brian.lee.hawthorne@gmail.com>
 
   Currently developed and maintained by Mike Trumpis <mtrumpis@gmail.com>
-  """
+  """,
 
 
   package_dir = {'':'root'},
