@@ -22,7 +22,7 @@ class FillHalfSpace (Operation):
                   description="stop iteration when the summed absolute " \
                   "difference between sucessive reconstructed volumes equals "\
                   "this amount"),
-        Parameter(name="method", type="str", default="by volume",
+        Parameter(name="method", type="str", default="iterative",
                   description="possible values: iterative, zero filled")
         )
 
@@ -142,26 +142,26 @@ class FillHalfSpace (Operation):
                      "(no filling to be done)")
             return
 
-        if self.converge_crit > 0 and self.iterations > 0:
-            self.log("you cannot specify the convergence criterion OR the "\
-                     "number of iterations, NOT both: doing nothing")
-            return
-        elif self.converge_crit > 0:
-            self.criterion = (self.converge_crit,"converge")
-        elif self.iterations > 0:
-            self.criterion = (0,"iterateN")
-        else:
-            self.log("no iterative criterion given, default to 5 iterations")
-            self.criterion = (0,"iterateN")
-            self.iterations = 5
-        
+        if self.method != "zero filled":
+            if self.converge_crit > 0 and self.iterations > 0:
+                self.log("you cannot specify the convergence criterion OR the"\
+                         " number of iterations, NOT both: doing nothing")
+                return
+            elif self.converge_crit > 0:
+                self.criterion = (self.converge_crit,"converge")
+            elif self.iterations > 0:
+                self.criterion = (0,"iterateN")
+            else:
+                self.log("no iterative criterion given, default to 5 loops")
+                self.criterion = (0,"iterateN")
+                self.iterations = 5
+                
         old_data = image.data.copy()
         old_image = image._subimage(old_data)
         image.data.resize((nv,ns,self.fill_size,nx))
         image.setData(image.data)
 
         for t in range(nv):
-            #vol = old_image.subImage(t)
             
             if self.method == "iterative":
                 cooked = self.cookImage2D(old_image.data[t])                
