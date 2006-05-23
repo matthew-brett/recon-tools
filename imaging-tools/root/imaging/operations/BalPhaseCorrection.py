@@ -63,15 +63,15 @@ class BalPhaseCorrection (Operation):
                 row_start = row_end
                 row_end = row_start + len(r_ind)
                 # the data vector
-                P[row_start:row_end,0] = 0.5*take(pvol[s_ind[c], u_ind[p], :],\
+                P[row_start:row_end,0] = 0.5*take(pvol[s_ind[c], u_ind[p]+32, :],\
                                                   r_ind)
                 
                 # the phase-space vector
                 A[row_start:row_end,B1] = sign
-                A[row_start:row_end,B7] = sign*(r_ind+self.lin1) # un-truncated
+                A[row_start:row_end,B7] = sign*(r_ind+self.lin1-32) # un-truncated
                 A[row_start:row_end,B8] = sign*s_ind[c]
-                A[row_start:row_end,B5] = u_ind[p]*(r_ind+self.lin1) # ditto
-                A[row_start:row_end,B6] = u_ind[p]*s_ind[c]
+                A[row_start:row_end,B5] = (u_ind[p]+32)*(r_ind+self.lin1-32) # ditto
+                A[row_start:row_end,B6] = (u_ind[p]+32)*s_ind[c]
                 
         f = open("matrix", "w")
         for row in A:
@@ -82,6 +82,20 @@ class BalPhaseCorrection (Operation):
         V = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
                                           matrixmultiply(transpose(u), P)))
 
+        foo = reshape(matrixmultiply(A,V), (n_chunks, n_parts, len(r_ind)))
+        from pylab import figure
+        print s_ind
+        print u_ind
+        print r_ind
+        for s in range(n_chunks):
+            for u in range(n_parts):
+                plot(foo[s,u])
+            figure()
+            for u in range(n_parts):
+                plot(take(pvol[s_ind[s],u_ind[u]+32], r_ind)/2.)
+            show()
+    
+        
         return tuple(V) 
 
     def correction_volume(self):
@@ -100,13 +114,13 @@ class BalPhaseCorrection (Operation):
         theta = empty(self.volShape, Float)
 
         # build B matrix, always stays the same
-        B[0] = arange(R)*b7
-        B[1] = arange(R)*b5
+        B[0] = (arange(R)-32)*b7
+        B[1] = (arange(R)-32)*b5
         B[2,:] = b1[0]
         B[3,:] = b8[0]
         B[4,:] = b6[0]
         # u_line & zigzag define how the correction changes per PE line
-        u_line = arange(U)-U/2
+        u_line = arange(U)
         zigzag = checkerline(U)
         # build A matrix, changes slightly as s varies
         A[:,0] = zigzag
@@ -146,6 +160,7 @@ class BalPhaseCorrection (Operation):
         r_mask = ones((self.lin_fe)) #
         u_mask = ones((n_pe))  # this could be limited
         u_mask[0] = 0
+        u_mask[46:] = 0
         res = zeros((n_slice,), Float)
         for s in range(n_slice):
             for row in phs_vol[s]:
@@ -156,7 +171,7 @@ class BalPhaseCorrection (Operation):
 
         # find 4 slices with smallest residual
         sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:6]]
+        selected = [find(res==c)[0] for c in sres[:4]]
         for c in selected:
             s_mask[c] = 1
         
