@@ -189,9 +189,11 @@ class Recon (ConsoleTool):
 
         runlogger = RunLogger(file(options.log_file,'w'))
 
-        # Load k-space image from the fid file.
-        image = self._opmanager.getOperation("ReadImage")(
-          filename=options.datadir, format="fid").run()
+        # Load k-space image from the fid file and log it.
+        reader = self._opmanager.getOperation("ReadImage")(
+            filename=options.datadir, format="fid")
+        image = reader.run()
+        runlogger.logop(reader)
 
         # Log some parameter info to the console.
         image.logParams()
