@@ -50,28 +50,29 @@ class BalPhaseCorrection (Operation):
         """
         (B1,B7,B8,B5,B6) = (0,1,2,3,4)
         r_ind = find(r_mask) # this is w/ resp. to truncated row size
-        u_ind = find(u_mask) - 32 # full u ranges from -32,+31
+        u_ind = find(u_mask)
         s_ind = find(s_mask)
         n_chunks = len(s_ind) # 1 chunk per slice(?)
         n_parts = len(u_ind)  # 1 part per pe-line(?)
         A = empty((n_chunks*n_parts*len(r_ind), 5), Float)
         P = empty((n_chunks*n_parts*len(r_ind), 1), Float)
         row_start, row_end = 0, 0
-        for c in range(n_chunks):
-            for p in range(n_parts):
-                sign = 1 - 2*(u_ind[p]%2)
+        #for c in range(n_chunks):
+        #    for p in range(n_parts):
+        for s in s_ind:
+            for u in u_ind:
+                sign = 1 - 2*(u%2)
                 row_start = row_end
                 row_end = row_start + len(r_ind)
                 # the data vector
-                P[row_start:row_end,0] = 0.5*take(pvol[s_ind[c], u_ind[p]+32, :],\
-                                                  r_ind)
+                P[row_start:row_end,0] = 0.5*take(pvol[s, u, :], r_ind)
                 
                 # the phase-space vector
                 A[row_start:row_end,B1] = sign
                 A[row_start:row_end,B7] = sign*(r_ind+self.lin1-32) # un-truncated
-                A[row_start:row_end,B8] = sign*s_ind[c]
-                A[row_start:row_end,B5] = (u_ind[p]+32)*(r_ind+self.lin1-32) # ditto
-                A[row_start:row_end,B6] = (u_ind[p]+32)*s_ind[c]
+                A[row_start:row_end,B8] = sign*s
+                A[row_start:row_end,B5] = (u)*(r_ind+self.lin1-32) # ditto
+                A[row_start:row_end,B6] = (u)*s
                 
         f = open("matrix", "w")
         for row in A:
@@ -92,7 +93,7 @@ class BalPhaseCorrection (Operation):
                 plot(foo[s,u])
             figure()
             for u in range(n_parts):
-                plot(take(pvol[s_ind[s],u_ind[u]+32], r_ind)/2.)
+                plot(take(pvol[s_ind[s],u_ind[u]], r_ind)/2.)
             show()
     
         
@@ -114,8 +115,8 @@ class BalPhaseCorrection (Operation):
         theta = empty(self.volShape, Float)
 
         # build B matrix, always stays the same
-        B[0] = (arange(R)-32)*b7
-        B[1] = (arange(R)-32)*b5
+        B[0] = (arange(R)-R/2)*b7
+        B[1] = (arange(R)-R/2)*b5
         B[2,:] = b1[0]
         B[3,:] = b8[0]
         B[4,:] = b6[0]
@@ -180,10 +181,10 @@ class BalPhaseCorrection (Operation):
         print self.coefs
         
         theta_vol = self.correction_volume()            
-        for slice in theta_vol:
-            for row in slice:
-                plot(row)
-            show()
+##         for slice in theta_vol:
+##             for row in slice:
+##                 plot(row)
+##             show()
 
         for dvol in image.data:
             dvol[:] = apply_phase_correction(dvol, -theta_vol)
