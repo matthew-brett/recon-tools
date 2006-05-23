@@ -367,9 +367,9 @@ class FidImage (BaseImage, ProcParImageMixin):
             volume = volreader(fidfile, vol)
 
 
-            # reverse ENTIRE negative-gradient read
-            if vol in self.ref_vols and vol==1 and time_reverse:
-                volume[:] = take(volume, time_rev, axis=(len(volume.shape)-1))
+##             # reverse ENTIRE negative-gradient read (probably wrong)
+##             if vol in self.ref_vols and vol==1 and time_reverse:
+##                 volume[:] = take(volume, time_rev, axis=(len(volume.shape)-1))
 
             # time-reverse the data
             if time_reverse:

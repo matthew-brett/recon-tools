@@ -142,10 +142,12 @@ class ProcParImageMixin (object):
     isepi = CachedReadOnlyProperty(
         lambda self: self.pulse_sequence.find("epi") != -1, "")
 
-    # oops, nv is screwed up for half-space data!
-    n_pe = CachedReadOnlyProperty(lambda self: self.isepi and \
-                                  self._procpar.nf[0] or \
-                                  self._procpar.nv[0], "")
+##     # oops, nv is screwed up for half-space data! but nf not defined always!
+##     n_pe = CachedReadOnlyProperty(lambda self: self.isepi and \
+##                                   self._procpar.nf[0] or \
+##                                   self._procpar.nv[0], "")
+
+    n_pe = CachedReadOnlyProperty(lambda self: self._procpar.nv[0], "")
     
     n_pe_true = CachedReadOnlyProperty(
         lambda self: self.n_pe - self.nav_per_slice, "")
