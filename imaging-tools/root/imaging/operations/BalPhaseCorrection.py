@@ -75,6 +75,7 @@ class BalPhaseCorrection (Operation):
                 A[row_start:row_end,B6] = (u)*s
                 
         f = open("matrix", "w")
+        f.write("[b1 r*b7 s*b8 u*r*b5 u*s*b6]\n")
         for row in A:
             f.write("[%d %d %d %d %d]\n"%(tuple(row)))
         f.close()
@@ -83,53 +84,72 @@ class BalPhaseCorrection (Operation):
         V = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
                                           matrixmultiply(transpose(u), P)))
 
-        foo = reshape(matrixmultiply(A,V), (n_chunks, n_parts, len(r_ind)))
-        from pylab import figure
-        print s_ind
-        print u_ind
-        print r_ind
-        for s in range(n_chunks):
-            for u in range(n_parts):
-                plot(foo[s,u])
-            figure()
-            for u in range(n_parts):
-                plot(take(pvol[s_ind[s],u_ind[u]], r_ind)/2.)
-            show()
+##         foo = reshape(matrixmultiply(A,V), (n_chunks, n_parts, len(r_ind)))
+##         from pylab import figure
+##         print s_ind
+##         print u_ind
+##         print r_ind
+##         for s in range(n_chunks):
+##             for u in range(n_parts):
+##                 plot(foo[s,u])
+##             figure()
+##             for u in range(n_parts):
+##                 plot(take(pvol[s_ind[s],u_ind[u]], r_ind)/2.)
+##             show()
     
         
         return tuple(V) 
 
-    def correction_volume(self):
+    def correction_volume(self, Tl, delT):
         """
         build the volume of phase correction lines with
         theta(s,u,r) = u*[r*B5 + s*B6] + (-1)^u*[B1 + r*B7 + s*B8]
 
-        A is (n_pe x 5) = 
-        B is (6 x n_fe) = [0:N; 0:N; 1; 1; 1; 1]
+        A is (n_pe x 8) = 
+        B is (8 x n_fe) = [0:N; 0:N; 1; 1; 1; 1]
         """
         (S, U, R) = self.volShape
         (b1,b7,b8,b5,b6) = self.coefs
-
-        A = empty((U, len(self.coefs)), Float)
-        B = empty((len(self.coefs), R), Float)
+        b2 = (delT/Tl)*b5[0]
+        b3 = (delT/Tl)*b6[0]
+        b4 = (Tl/delT)*b1[0]
+        A = empty((U, 8), Float)
+        B = empty((8, R), Float)
         theta = empty(self.volShape, Float)
 
         # build B matrix, always stays the same
-        B[0] = (arange(R)-R/2)*b7
-        B[1] = (arange(R)-R/2)*b5
-        B[2,:] = b1[0]
-        B[3,:] = b8[0]
-        B[4,:] = b6[0]
+        B[0,:] = b1[0]
+        B[1,:] = (arange(R)-R/2)*b2
+        B[2,:] = (arange(R)-R/2)*b7[0]
+        B[3,:] = b3
+        B[4,:] = b8[0]
+        B[5,:] = b4
+        B[6,:] = (arange(R)-R/2)*b5[0]
+        B[7,:] = b6[0]
+        
+
+
+##         B[0] = (arange(R)-R/2)*b7
+##         B[1] = (arange(R)-R/2)*b5
+##         B[2,:] = b1[0]
+##         B[3,:] = b8[0]
+##         B[4,:] = b6[0]
         # u_line & zigzag define how the correction changes per PE line
         u_line = arange(U)
         zigzag = checkerline(U)
         # build A matrix, changes slightly as s varies
         A[:,0] = zigzag
-        A[:,1] = u_line
+        A[:,1] = zigzag
         A[:,2] = zigzag
+        A[:,5] = u_line
+        A[:,6] = u_line
+##         A[:,0] = zigzag
+##         A[:,1] = u_line
+##         A[:,2] = zigzag
         for s in range(S):
             A[:,3] = s*zigzag
-            A[:,4] = s*u_line
+            A[:,4] = s*zigzag
+            A[:,7] = s*u_line
             theta[s] = matrixmultiply(A,B)
         return theta
 
@@ -159,7 +179,7 @@ class BalPhaseCorrection (Operation):
         
         s_mask = zeros(n_slice) # this will be 4 most "linear" slices
         r_mask = ones((self.lin_fe)) #
-        u_mask = ones((n_pe))  # this could be limited
+        u_mask = ones((n_pe))  # 
         u_mask[0] = 0
         u_mask[46:] = 0
         res = zeros((n_slice,), Float)
@@ -179,12 +199,10 @@ class BalPhaseCorrection (Operation):
         self.coefs = (b1,b7,b8,b5,b6) = \
                          self.solve_phase(phs_vol, r_mask, u_mask, s_mask)
         print self.coefs
-        
-        theta_vol = self.correction_volume()            
-##         for slice in theta_vol:
-##             for row in slice:
-##                 plot(row)
-##             show()
+        Tl = image.T_pe
+        delT = 1./image._procpar.sw[0]
+        print "Tl = %f; delT = %f"%(Tl,delT,)
+        theta_vol = self.correction_volume(Tl, delT)
 
         for dvol in image.data:
             dvol[:] = apply_phase_correction(dvol, -theta_vol)
