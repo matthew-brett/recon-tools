@@ -6,3 +6,4 @@ if __name__=="__main__":
     os.system("python setup.py build --force")
     os.system("cp ./build/lib.%s-%s/imaging/punwrap/_punwrap.so root/imaging/punwrap/"\
               %(get_platform(),sys.version[:3]))
+    print "C-extension installed as root/imaging/punwrap/_punwrap.so"

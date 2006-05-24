@@ -1,4 +1,18 @@
 ------------------------------------------------------------------------------
+(coming soon)
+imaging-tools-0.4     (beta)                                          5/??/2006
+- Support for multishot linear, 2-shot centric acquisition in Unbalanced Phase
+  Correction operations
+- new FillHalfSpace operation for reconstructing asymmetrically sampled images
+- new Balanced Phase Correction operation for data with two "balanced" 
+  reference scans
+- SEE NOTES BELOW FROM PREVIOUS RELEASE REGARDING BLAS-ATLAS DEPENDENCE!
+
+For added security, RPMs are now signed with a CIRL GPG key. If you want to
+add our public key to your trusted keys, you can find it here:
+https://cirl.berkeley.edu/twiki/pub/BIC/ImagingTools/RPM-CIRL-GPG-KEY
+
+------------------------------------------------------------------------------
 imaging-tools-0.3     (beta)                                          4/28/2006
 - Added Unbalanced Phase Correction operation
 - Added basic NIFTI file reading/writing
@@ -8,7 +22,7 @@ imaging-tools-0.3     (beta)                                          4/28/2006
 
 NOTE: Fedora users will need to "yum install atlas" and then install a fixed
 version of the python-numeric RPM found here:
-https://cirl.berkeley.edu/view/BIC/ImagingTools/python-numeric-23.7-2bic.i386.rpm
+https://cirl.berkeley.edu/twiki/pub/BIC/ImagingTools/python-numeric-23.7-2bic.i386.rpm
 
 BLAS (Basic Linear Algebra Subprograms) support is not automatically included
 in Numeric. Other users of a packaged Numeric should make sure that their build 
