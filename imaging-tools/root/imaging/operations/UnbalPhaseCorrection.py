@@ -57,10 +57,10 @@ class UnbalPhaseCorrection (Operation):
 ##         #print res
 ##         show()
 
-        putmask(mask, std>1, 0)
+        putmask(mask, std>5, 0)
         return E, mask, sum(res)
 
-    def solve_phase(self, pos, neg, q_mask, z_mask):
+    def solve_phase(self, pos, neg, r_mask, s_mask):
         """let V = (a1 a2 a3 a4 a5 a6)^T,
         we want to solve:
         phi(s,u,r) =  2[rA1 + sA3 + A5] - [rA2 + sA4 + A6] u-pos
@@ -79,27 +79,27 @@ class UnbalPhaseCorrection (Operation):
              ...]
         Then with AV = P, solve V = inv(A)P
         """
-
+        R = self.refShape[-1]
         A1, A2, A3, A4, A5, A6 = (0,1,2,3,4,5)
-        n_chunks = sum(z_mask)
-        rows_in_chunk = sum(take(q_mask, find(z_mask)), axis=1)
-        z_ind = find(z_mask)
-        A = empty((sum(rows_in_chunk)*2, 6), Float)
-        P = empty((sum(rows_in_chunk)*2, 1), Float)
+        # need 2*(sum-of-unmasked-points) rows for each selected slice
+        n_rows = sum(r_mask, axis=1)
+        s_ind = find(s_mask)
+        A = empty((sum(take(n_rows, s_ind))*2, 6), Float)
+        P = empty((sum(take(n_rows, s_ind))*2, 1), Float)
         row_start, row_end = 0, 0
-        for c in range(n_chunks):
+        for s in s_ind:
             # alternate for pos and neg rows
             for b in [-1, 1]:
                 row_start = row_end
-                row_end = row_start + rows_in_chunk[c]
-                q_ind = find(q_mask[z_ind[c]])
-                P[row_start:row_end,0] = b==-1 and take(neg[z_ind[c]], q_ind) \
-                                               or  take(pos[z_ind[c]], q_ind)
-                # note these q_ind values are made relative to real fe points:
-                A[row_start:row_end,A1] = b*2*(q_ind + self.lin1)
-                A[row_start:row_end,A2] = -(q_ind + self.lin1)
-                A[row_start:row_end,A3] = b*2*z_ind[c]
-                A[row_start:row_end,A4] = -z_ind[c]
+                row_end = row_start + n_rows[s]
+                r_ind = find(r_mask[s])
+                P[row_start:row_end,0] = b==-1 and take(neg[s], r_ind) \
+                                               or  take(pos[s], r_ind)
+                # note these r_ind values are made relative to real fe points:
+                A[row_start:row_end,A1] = b*2*(r_ind + self.lin1-R/2)
+                A[row_start:row_end,A2] = -(r_ind + self.lin1-R/2)
+                A[row_start:row_end,A3] = b*2*s
+                A[row_start:row_end,A4] = -s
                 A[row_start:row_end,A5] = b*2
                 A[row_start:row_end,A6] = -1
                 
@@ -109,7 +109,7 @@ class UnbalPhaseCorrection (Operation):
 
         return tuple(V) 
 
-    def correction_volume(self, u_pos, u_neg):
+    def correction_volume(self, m_pos, m_neg):
         """
         build the volume of phase correction lines with
         theta(s,u,r) = u*[r*A2 + s*A4 + A6] + (-1)^u*[r*A1 + s*A3 + A5]
@@ -117,71 +117,60 @@ class UnbalPhaseCorrection (Operation):
         A is (n_pe x 6) = 
         B is (6 x n_fe) = [0:N; 0:N; 1; 1; 1; 1]
         """
-        (S, U, R) = self.volShape
+        (S, M, R) = self.volShape
         (a1, a2, a3, a4, a5, a6) = self.coefs
-        A = empty((U, len(self.coefs)), Float)
+        A = empty((M, len(self.coefs)), Float)
         B = empty((len(self.coefs), R), Float)
         theta = empty(self.volShape, Float)
-        # u_line & zigzag define how the correction changes per PE line
-        # u_line is usually {-32,-31,...,30, 31}, but changes in multishot
+        # m_line & zigzag define how the correction changes per PE line
+        # m_line is usually {-32,-31,...,30, 31}, but changes in multishot
         # zigzag[m] defines which rows goes negative or positive (is [-1,1])
         # this sets up for linear sampling:
-        zigzag = empty(U)
-        for r in range(U/2):
-            zigzag[u_pos[r]] = 1
-            zigzag[u_neg[r]] = -1
-        u_line = empty(U)
+        zigzag = empty(M)
+        for r in range(M/2):
+            zigzag[m_pos[r]] = 1
+            zigzag[m_neg[r]] = -1
+        m_line = empty(M)
         for r in range(self.xleave):
-            u_line[r:U:self.xleave] = arange(U/self.xleave)-U/(2*self.xleave)
+            m_line[r:M:self.xleave] = arange(M/self.xleave)-M/(2*self.xleave)
 
         # if data is 2-shot centric, must count mu=0 twice AND mu-negative is
-        # made positive. ie u_line is:
-        # [-U/2 + 1 ... 0] U [0 ... U/2 - 1],
+        # made positive. ie m_line is:
+        # [-M/2 + 1 ... 0] M [0 ... M/2 - 1],
         #
         # zigzag still depends on even-/odd-ness, [-1,1,...,1,1,...,1,-1]
         # this fixes for centric sampling
         if self.iscentric:
-            u_line[0:U/2] = -1*(u_line[0:U/2] + 1)
-            zigzag[0:U/2] *= -1
+            m_line[0:M/2] = -1*(m_line[0:M/2]+1)
+            zigzag[0:M/2] *= -1
             
         # build B matrix, always stays the same
-        from pylab import power
-        g = arange(R)-32
-        g = g/(1 + power(g/(R*.45), 6))
-        g += (R/2 - g[R/2])
-        B[0] = g
-        B[1] = g
-##         B[0] = arange(R)
-##         B[1] = arange(R)
-        B[2] = B[3] = B[4] = B[5] = 1
-
+##         from pylab import power
+##         g = arange(R)-R/2
+##         g = g/(1 + power(g/(R*.45), 6))
+##         g += (R/2 - g[R/2])
+##         B[0] = g
+##         B[1] = g
+        B[0,:] = (arange(R)-R/2)*a1[0]
+        B[1,:] = (arange(R)-R/2)*a2[0]
+        B[2,:] = a3[0]
+        B[3,:] = a4[0]
+        B[4,:] = a5[0]
+        B[5,:] = a6[0]
+        #B[2] = B[3] = B[4] = B[5] = 1
+        
+        
         # build A matrix, changes slightly as s varies
-        A[:,0] = a2*u_line
-        A[:,1] = a1*zigzag
-        A[:,4] = a6*u_line
-        A[:,5] = a5*zigzag
+        A[:,0] = zigzag
+        A[:,1] = m_line
+        A[:,4] = zigzag
+        A[:,5] = m_line
         for s in range(S):
             # these are the slice-dependent columns
-            A[:,2] = s*a4*u_line
-            A[:,3] = s*a3*zigzag
-            # for current s,
-            # theta[r,m]=zigzag[m]*(ra1 + sa3 + a5) + u_line[m]*(ra2 + sa4 + a6)
+            A[:,2] = s*zigzag
+            A[:,3] = s*m_line
             theta[s] = matrixmultiply(A,B)
-
-        #from pylab import plot, show
-        #for m in range(U):
-            #theta[12,m,:] = zigzag[m]*(arange(64)*a2*2 + 12*a3 + a5) + \
-                             #u_line[m]*(arange(64)*a2*2 + 12*a4 + a6)
-        #theta[12,:,1:3] *= 2.2
-        #theta[12,:,2] += .15
-##         for m in range(U):
-##             theta[12,m,1] *= 2.2
-##             theta[12,m,2] *= 2.2
-##             #theta[12.m.1] -= (theta
-##             #theta[12,m,:11] -= (theta[12,m,10] - theta[12,m,11])
-##             #plot(theta[12,m])
-##         #show()
-        
+            
         return theta
 
     def run(self, image):
@@ -199,7 +188,15 @@ class UnbalPhaseCorrection (Operation):
         self.iscentric = image.petable_name.find('cen') > 0 or \
                          image.petable_name.find('alt') > 0
         self.xleave = self.iscentric and 1 or image.nseg
-        
+##         from pylab import flipud
+##         for t in range(image.data.shape[0]):
+##             for s in range(image.data[t].shape[0]):
+##                 dtemp = flipud(image.data[t,s]).copy()
+##                 image.data[t,s][:] = dtemp
+##                 rtemp = flipud(image.ref_data[0,s]).copy()
+##                 image.ref_data[0,s][:] = rtemp
+                
+
         refVol = image.ref_data[0]
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
 
@@ -226,6 +223,7 @@ class UnbalPhaseCorrection (Operation):
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape, self.lin1, etc)
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
+
         #set up some arrays
         if self.iscentric:
             # centric has 4 distinct profile (2 sets of symmetries)
@@ -237,8 +235,8 @@ class UnbalPhaseCorrection (Operation):
             phs_pos = empty((n_slice, self.lin_fe), Float)
             phs_neg = empty((n_slice, self.lin_fe), Float)
         
-        z_mask = zeros(n_slice)
-        q_mask = zeros((n_slice, self.lin_fe))
+        s_mask = zeros(n_slice)
+        r_mask = zeros((n_slice, self.lin_fe))
         res = zeros((n_slice,), Float)
         if self.iscentric:
             for z in range(n_slice):
@@ -260,9 +258,14 @@ class UnbalPhaseCorrection (Operation):
                 
                 phs_neg_lower[z], mask_nl, res_nl = \
                        self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
+##                 phs_pos_lower[z], mask_pl, res_pl = \
+##                        self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
+                
+##                 phs_neg_lower[z], mask_nl, res_nl = \
+##                        self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
                 
                 res[z] = res_pu + res_nu + res_pl + res_nl
-                q_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
+                r_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
         else:
             for z in range(n_slice):
                 # for pos_order, skip 1st 2 for xleave=2
@@ -275,14 +278,14 @@ class UnbalPhaseCorrection (Operation):
                                             neg_order[:-self.xleave]))
 
                 res[z] = res_p + res_n
-                q_mask[z] = mask_p*mask_n
+                r_mask[z] = mask_p*mask_n
 
         # find 4 slices with smallest residual
         sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:6]]
+        selected = [find(res==c)[0] for c in sres[:4]]
         for c in selected:
-            z_mask[c] = 1
-            if(sum(q_mask[c]) == 0):
+            s_mask[c] = 1
+            if(sum(r_mask[c]) == 0):
                 self.log("Could not find enough slices with sufficiently uniform\n"\
                 "phase profiles. Try shortening the lin_radius parameter to\n"\
                 "unwrap a less noisy region of the image phase.\n"\
@@ -291,14 +294,15 @@ class UnbalPhaseCorrection (Operation):
         
         if self.iscentric:
             # want to correct both segments "separately" (by splicing 2 thetas)
-            self.coefs = self.solve_phase(phs_pos_upper, phs_neg_upper, \
-                                          q_mask, z_mask)
+            v = self.solve_phase(phs_pos_upper, phs_neg_upper, \
+                                          r_mask, s_mask)
+            self.coefs = tuple(matrixmultiply(diag([1,1,1,1,1,1]),asarray(v)))
             print self.coefs
             theta_upper = self.correction_volume(pos_order, neg_order)
 
             # can use same inverse matrix to solve for lower half,
-            # but transform with diag([1, -1, 1, -1, 1, -1])
-            v = self.solve_phase(phs_pos_lower, phs_neg_lower, q_mask, z_mask)
+            # but need to transform it with diag([1, -1, 1, -1, 1, -1])
+            v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
             self.coefs = tuple(matrixmultiply(diag([1, -1, 1, -1, 1, -1]), \
                                               asarray(v)))
             print self.coefs        
@@ -309,7 +313,7 @@ class UnbalPhaseCorrection (Operation):
             theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
             
         else:
-            self.coefs = self.solve_phase(phs_pos, phs_neg, q_mask, z_mask)
+            self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
             print self.coefs
             theta_vol = self.correction_volume(pos_order, neg_order)            
 
@@ -331,12 +335,12 @@ class UnbalPhaseCorrection (Operation):
 ##         (a1,a2,a3,a4,a5,a6) = self.coefs
 ##         from pylab import title, plot, show
 ##         for z in range(n_slice):
-##             plot(find(q_mask[z]), take(phs_pos[z], find(q_mask[z])))
-##             plot(find(q_mask[z]), take(phs_neg[z], find(q_mask[z])))
+##             plot(find(r_mask[z]), take(phs_pos[z], find(r_mask[z])))
+##             plot(find(r_mask[z]), take(phs_neg[z], find(r_mask[z])))
 ##             plot((arange(self.lin_fe)+self.lin1)*(-a2 - 2*a1) + z*(-a4 - 2*a3) - a6 - 2*a5, 'g--')
 ##             plot((arange(self.lin_fe)+self.lin1)*(-a2 + 2*a1) + z*(-a4 + 2*a3) - a6 + 2*a5, 'b--')
 ##             tstr = "slice %d"%(z)
-##             if z_mask[z]: tstr += " (selected)"
+##             if s_mask[z]: tstr += " (selected)"
 ##             title(tstr)
 ##             show()
 

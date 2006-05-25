@@ -220,16 +220,16 @@ def unwrap_ref_volume(phases, fe1, fe2):
     """
     zdim,ydim,xdim = vol_shape = phases.shape
     uphases = empty(vol_shape, Float)
-    midsl, midpt = (vol_shape[0]/2, vol_shape[2]/2)
+    zerosl, zeropt = (0, vol_shape[2]/2)
 
     # unwrap the volume sliced along each PE line
     # the middle of each surface should be between -pi and pi,
     # if not, put it there!
-    for r in range(0,vol_shape[1],1):
-        uphases[:,r,:] = unwrap2D(phases[:,r,:])
-        height = uphases[midsl,r,midpt]
+    for u in range(0,vol_shape[1],1):
+        uphases[:,u,:] = unwrap2D(phases[:,u,:])
+        height = uphases[zerosl,u,zeropt]
         height = int((height+sign(height)*pi)/2/pi)
-        uphases[:,r,:] = uphases[:,r,:] - 2*pi*height
+        uphases[:,u,:] = uphases[:,u,:] - 2*pi*height
 
     return uphases[:,:,fe1:fe2]
 
