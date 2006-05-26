@@ -1,6 +1,6 @@
 "This module can write NIFTI files."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape, product
+  Complex32, fromstring, reshape, product, array, sin, cos, pi
 import struct
 import exceptions
 
@@ -27,6 +27,20 @@ NIFTI_UNITS_MICRON = 3
 NIFTI_UNITS_SEC = 8
 NIFTI_UNITS_MSEC = 16
 NIFTI_UNITS_USEC = 24
+
+#q/sform codes
+NIFTI_XFORM_UNKNOWN = 0
+NIFTI_XFORM_SCANNER_ANAT = 1
+NIFTI_XFORM_ALIGNED_ANAT = 2
+NIFTI_XFORM_TALAIRACH = 3
+NIFTI_XFORM_MNI_152 = 4
+
+#slice codes:
+NIFTI_SLICE_UNKNOWN = 0
+NIFTI_SLICE_SEQ_INC = 1
+NIFTI_SLICE_SEQ_DEC = 2
+NIFTI_SLICE_ALT_INC = 3
+NIFTI_SLICE_ALT_DEC = 4
 
 # map datatype to number of bits per pixel (or voxel)
 datatype2bitpix = {
@@ -60,6 +74,7 @@ struct_fields = odict((
     ('session_error','h'),
     ('regular','c'),
     ('dim_info','B'),
+    # these are short dim[8]
     ('ndim','h'),
     ('xdim','h'),
     ('ydim','h'),
@@ -75,7 +90,8 @@ struct_fields = odict((
     ('datatype', 'h'),
     ('bitpix','h'),
     ('slice_start', 'h'),
-    ('pixdim0','f'),
+    # these 8 float are float pixdim[8] (pixdim[0] encodes qfac)
+    ('qfac','f'),
     ('xsize','f'),
     ('ysize','f'),
     ('zsize','f'),
@@ -97,14 +113,14 @@ struct_fields = odict((
     ('glmin','i'),
     ('descrip','80s'),
     ('aux_file','24s'),
-    ('gform_code','h'),
+    ('qform_code','h'),
     ('sform_code','h'),
     ('quatern_b','f'),
     ('quatern_c','f'),
     ('quatern_d','f'),
-    ('quatern_x','f'),
-    ('quatern_y','f'),
-    ('quatern_z','f'),
+    ('qoffset_x','f'),
+    ('qoffset_y','f'),
+    ('qoffset_z','f'),
     ('srow_x0','f'),
     ('srow_x1','f'),
     ('srow_x2','f'),
@@ -219,21 +235,33 @@ class NiftiWriter (object):
     #-------------------------------------------------------------------------
     def make_hdr(self):
         "Pack a NIFTI format header."
+        rot = pi/2
         image = self.image
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
+          'slice_code': NIFTI_SLICE_SEQ_INC,
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
           'ndim': image.ndim,
           'xdim': image.xdim,
           'ydim': image.ydim,
+          # including t,z info should probably depend on targetdims
           'zdim': image.zdim,
           'tdim': image.tdim,
           'xsize': image.xsize,
           'ysize': image.ysize,
           'zsize': image.zsize,
           'tsize': image.tsize,
-          'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC)}
+          'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
+          'qfac': -1.0, #
+          'qform_code': NIFTI_XFORM_ALIGNED_ANAT,
+          'quatern_b': -sin(rot/2), # -sin(pi/4) works
+          'quatern_c': sin(rot/2),  # sin(pi/4) works
+          'quatern_d': 0.0,
+          'qoffset_x': float(image.xsize*image.xdim/2.),
+          'qoffset_y': float(image.ysize*image.ydim/2.),
+          'qoffset_z': 0.0,
+          }
         
         if self.filetype=='single':
             imagevalues['vox_offset'] = HEADER_SIZE + self.sizeof_extension
