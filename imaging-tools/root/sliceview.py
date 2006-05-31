@@ -255,7 +255,7 @@ class ColPlot (FigureCanvas):
         indices = range(len(data))
         if not hasattr(self, "data"): ax.plot(data, indices)
         else: ax.lines[0].set_data(data, indices)
-        ax.set_ylim(len(data)-.5, -.5)
+        ax.set_ylim(-.5,len(data)-.5)
         self.data = data
         self.draw()
 
@@ -318,7 +318,7 @@ class SlicePlot (FigureCanvas):
         self.norm = norm
         nrows, ncols = data.shape[:2]
         ax.set_xlim((0,ncols))
-        ax.set_ylim((nrows,0))
+        ax.set_ylim((0,nrows))
         self.data = data
         self.draw()
 
