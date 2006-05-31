@@ -140,7 +140,11 @@ class ProcParImageMixin (object):
     n_fe_true = CachedReadOnlyProperty(lambda self: self.n_fe/2, "")
 
     isepi = CachedReadOnlyProperty(
-        lambda self: self.pulse_sequence.find("epi") != -1, "")
+        lambda self: self.pulse_sequence.find("epidw") != -1, "")
+
+    isravi = CachedReadOnlyProperty(
+        lambda self: not self.isepi and \
+        self.pulse_sequence.find("epi") != -1, "")
 
     # oops, nv is screwed up for half-space data! try nv/2 + over-scan
     n_pe = CachedReadOnlyProperty(lambda self: self.isepi and \
