@@ -17,7 +17,8 @@ class Rot90 (Operation):
         data = image.data
         for vol in data:
             for slice in vol:
-                rotated = flipud(rot90(slice))
+                #rotated = flipud(rot90(slice))
+                rotated = rot90(slice)
                 reshape(slice, rotated.shape)
                 slice[:] = rotated.copy()
         image.setData(data)

@@ -10,6 +10,8 @@ class Shift (Operation):
                   description="number of points to shift left to right"))
 
     def run(self, image):
-        shift(image.data, 0, self.xshift)
-        shift(image.data, 1, self.yshift)
+        if self.xshift:
+            shift(image.data, 0, self.xshift)
+        if self.yshift:
+            shift(image.data, 1, self.yshift)
 
