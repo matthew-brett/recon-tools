@@ -253,10 +253,10 @@ class NiftiWriter (object):
           'zsize': image.zsize,
           'tsize': image.tsize,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
-          'qfac': -1.0, #
-          'qform_code': NIFTI_XFORM_ALIGNED_ANAT,
-          'quatern_b': -sin(rot/2), # -sin(pi/4) works
-          'quatern_c': sin(rot/2),  # sin(pi/4) works
+          'qfac': -1.0,
+          'qform_code': NIFTI_XFORM_SCANNER_ANAT,
+          'quatern_b': sin(rot/2), # -sin(pi/4) works
+          'quatern_c': -sin(rot/2),  # sin(pi/4) works
           'quatern_d': 0.0,
           'qoffset_x': float(image.xsize*image.xdim/2.),
           'qoffset_y': float(image.ysize*image.ydim/2.),
