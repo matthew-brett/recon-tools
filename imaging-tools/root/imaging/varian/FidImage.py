@@ -2,6 +2,7 @@
 import struct
 import stat
 import os.path
+import sys
 from Numeric import empty
 from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr,\
   zeros, fromstring, reshape, arange, take, floor, argmax, multiply, asarray
@@ -28,9 +29,12 @@ def getPulseSeq(datadir):
 
 #-----------------------------------------------------------------------------
 def complex_fromstring(data, numtype):
-    return fromstring(
-      fromstring(data, numtype).byteswapped().astype(Float32).tostring(),
-      Complex32)
+    if sys.byteorder == "little":
+        return fromstring(
+            fromstring(data, numtype).byteswapped().astype(Float32).tostring(),
+            Complex32)
+    else:
+        return fromstring(data, numtype).astype(Complex32)
 
 ##############################################################################
 class FidImage (BaseImage, ProcParImageMixin):
@@ -368,7 +372,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
 
 ##             # reverse ENTIRE negative-gradient read (probably wrong)
-##             if vol in self.ref_vols and vol==1 and time_reverse:
+##             if vol in self.ref_vols and vol==1:
 ##                 volume[:] = take(volume, time_rev, axis=(len(volume.shape)-1))
 
             # time-reverse the data
