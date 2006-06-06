@@ -34,7 +34,8 @@ def complex_fromstring(data, numtype):
             fromstring(data, numtype).byteswapped().astype(Float32).tostring(),
             Complex32)
     else:
-        return fromstring(data, Complex32)
+        return fromstring(
+	    fromstring(data,numtype).astype(Float32).tostring(), Complex32)
 
 ##############################################################################
 class FidImage (BaseImage, ProcParImageMixin):
