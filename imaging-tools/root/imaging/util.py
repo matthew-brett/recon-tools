@@ -6,7 +6,8 @@ import struct
 from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff
+  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, norm, \
+  matrixmultiply, trace, putmask
 from punwrap import unwrap2D
 
 
@@ -274,48 +275,6 @@ def unwrap1D(p,discont=pi,axis=-1):
 ##         uph[:,col+1] = uph[:,col] + dd_wr[:,col]
 ##     return uph
 #-----------------------------------------------------------------------------
-## "Depricated" 4/24/06
-## def unwrap_phase(image):
-##     from imaging.imageio import readImage, writeImage
-##     wrapped_fname = "wrapped_cmplx" 
-##     unwrapped_fname = "unwrapped"
-##     writeImage(image, wrapped_fname, "analyze")
-##     exec_cmd("prelude -c %s -o %s"%(wrapped_fname, unwrapped_fname))
-##     unwrapped_image = readImage(unwrapped_fname, "analyze")
-##     exec_cmd("/bin/rm %s.* %s.*"%(wrapped_fname, unwrapped_fname))
-##     return unwrapped_image
-
-#-----------------------------------------------------------------------------
-def compute_fieldmap(phase_pair, asym_time, dwell_time):
-    """
-    Compute fieldmap using a time-series containing two unwrapped phase
-    volumes.
-    """
-    from imaging.imageio import readImage, writeImage
-    phasepair_fname = "phasepair"
-    fieldmap_fname = "fieldmap"
-    writeImage(phase_pair, phasepair_fname, "analyze")
-    pp = readImage(phasepair_fname, "analyze")
-    pp._dump_header()
-    exec_cmd("fugue -p %s --asym=%f --dwell=%f --savefmap=%s"%\
-        (phasepair_fname, asym_time, dwell_time, fieldmap_fname))
-    fieldmap = readImage(fieldmap_fname, "analyze")
-    exec_cmd("/bin/rm %s.* %s.*"%(fieldmap_fname, phasepair_fname))
-    return fieldmap
-
-#-----------------------------------------------------------------------------
-def exec_cmd(cmd, verbose=False, exit_on_error=False):
-    "Execute unix command and handle errors."
-    import sys, os
-    if(verbose): print "\n" +  cmd
-    status = os.system(cmd)
-    if(status):
-        print "\n****** Error occurred while executing: ******"
-        print cmd
-        print "Aborting procedure\n\n"
-        if exit_on_error: sys.exit(1)
-
-#-----------------------------------------------------------------------------
 def resample_phase_axis(vol_data, pixel_pos):
     """Purpose: Resample along phase encode axis of epi images.
     Performs a trilinear interpolation along the y (pe) axis. This
@@ -360,7 +319,79 @@ def resample_phase_axis(vol_data, pixel_pos):
                         + dy[:,m]*take(s[:,m],iy[:,m]+1)).astype(Float32)
 
     return vol_data
+#-----------------------------------------------------------------------------
+# quaternion and euler rotation helpers
+#-----------------------------------------------------------------------------
+def qmult(a, b):
+    # perform quaternion multiplication
+    w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
+    ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
+    jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
+    kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
+    Q = asarray([w, ii, jj, kk])
+    return Q/norm(Q, p=2)
 
+#-----------------------------------------------------------------------------
+def qconj(Q):
+    return asarray([Q[0], -Q[1], -Q[2], -Q[3]])
+
+#-----------------------------------------------------------------------------
+def euler2quat(phi=0, theta=0, psi=0):
+    return matrix2quat(eulerRot(phi=phi,theta=theta,psi=psi))
+
+#-----------------------------------------------------------------------------
+def matrix2quat(m):
+    # m should be 3x3
+    if trace(m)>0:
+        S = 0.5/sqrt(1+trace(m))
+        w = 0.25/S
+        ii = (m[2,1]-m[1,2])*S
+        jj = (m[0,2]-m[2,0])*S
+        kk = (m[1,0]-m[0,1])*S
+    elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
+        S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
+        w = (m[2,1]-m[1,2])/S
+        ii = S/4
+        jj = (m[0,1] + m[1,0])/S
+        kk = (m[0,2] + m[2,0])/S
+    elif m[1,1] > m[2,2]:
+        S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
+        w = (m[0,2]-m[2,0])/S
+        ii = (m[0,1]+m[1,0])/S
+        jj = S/4
+        kk = (m[1,2]+m[2,1])/S
+    else:
+        S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
+        w = (m[1,0]-m[0,1])/S
+        ii = (m[0,2]+m[2,0])/S
+        jj = (m[1,2]+m[2,1])/S
+        kk = S/4
+    return asarray([w, ii, jj, kk])
+
+#-----------------------------------------------------------------------------
+def eulerRot(phi=0, theta=0, psi=0):
+    aboutX = zeros((3,3),Float)
+    aboutY = zeros((3,3),Float)
+    aboutZ = zeros((3,3),Float)
+    # bank
+    aboutX[0,0] = 1
+    aboutX[1,1] = aboutX[2,2] = cos(phi)
+    aboutX[1,2] = -sin(phi)
+    aboutX[2,1] = sin(phi)
+    # attitude
+    aboutY[1,1] = 1
+    aboutY[0,0] = aboutY[2,2] = cos(theta)
+    aboutY[0,2] = sin(theta)
+    aboutY[2,0] = -sin(theta)
+    # heading
+    aboutZ[2,2] = 1
+    aboutZ[0,0] = aboutZ[1,1] = cos(psi)
+    aboutZ[0,1] = -sin(psi)
+    aboutZ[1,0] = sin(psi)
+    M = matrixmultiply(aboutZ, matrixmultiply(aboutY, aboutX))
+    # make sure no rounding error proprogates from here
+    putmask(M, abs(M)<1e-5, 0)
+    return M
 
 #-----------------------------------------------------------------------------
 if __name__ == "__main__":

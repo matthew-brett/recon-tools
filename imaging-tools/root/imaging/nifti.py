@@ -1,16 +1,16 @@
 "This module can write NIFTI files."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape, product, array, sin, cos, pi
+  Complex32, fromstring, reshape, product, array, sin, cos, pi, asarray, sign
 import struct
 import exceptions
 
 from odict import odict
-from imaging.util import struct_unpack, struct_pack, NATIVE, \
-                            LITTLE_ENDIAN, BIG_ENDIAN
+from imaging.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN, \
+     BIG_ENDIAN, euler2quat, qmult
 from imaging.imageio import BaseImage
 from imaging.analyze import _concatenate
 
-# datatype is a bit flag into the datatype identification byte of the Analyze
+# datatype is a bit flag into the datatype identification byte of the NIFTI
 # header. 
 BYTE = 2
 SHORT = 4
@@ -205,8 +205,9 @@ class NiftiWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
                                 'c': '\0', 's': '', 'B': 0}
 
-    def __init__(self, image, datatype=None, filetype="single"):
+    def __init__(self, image, datatype=None, filetype="single", params=dict()):
         self.image = image
+        self.params = params
         self.filetype = filetype
         self.datatype = datatype or typecode2datatype[image.data.typecode()]
         self.sizeof_extension = len(default_extension)
@@ -235,8 +236,32 @@ class NiftiWriter (object):
     #-------------------------------------------------------------------------
     def make_hdr(self):
         "Pack a NIFTI format header."
-        rot = pi/2
+        # (un)rotation is handled like this: take the image as transformed with
+        # 2 rotations, S, Rb (S is the xform from scanner space into the
+        # data-ordering in the FID file, Rb is the xform applied by slicing
+        # coronal-wise, sagital-wise, etc)
+        # then I = Rb(psi)*Rb(theta)*Rb(phi)*S*I_real
+        # The goal is to encode a quaternion which does this inverse:
+        # R = R(-S)*R(-phi)*R(-theta)*R(-psi)
+        #
+        # the euler angles for inverting S have been determined to be
+        # (phi=pi, theta=0, psi=-pi/2)
+        # The euler angles for slicing rotations are from procpar
+        # To avoid the chance of interpolation, these angles are "normalized"
+        # to the closest multiple of pi/2 (ie 22 degrees->0, 49 degrees->90)
+
         image = self.image
+        pdict = self.params
+        phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
+                            (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
+        print (phi,theta,psi)
+        Qscanner = euler2quat(phi=pi, psi=-pi/2)
+        Qobl = qmult(euler2quat(phi=-phi),qmult(euler2quat(theta=-theta),
+                                                euler2quat(psi=-psi)))
+        Qform = qmult(Qscanner,Qobl)
+        print Qscanner
+        print Qobl
+        print Qform
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
           'slice_code': NIFTI_SLICE_SEQ_INC,
@@ -253,11 +278,11 @@ class NiftiWriter (object):
           'zsize': image.zsize,
           'tsize': image.tsize,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
-          'qfac': -1.0,
+          'qfac': -1.0, # this makes all rotations in right-handed terms now!
           'qform_code': NIFTI_XFORM_SCANNER_ANAT,
-          'quatern_b': sin(rot/2), # -sin(pi/4) works
-          'quatern_c': -sin(rot/2),  # sin(pi/4) works
-          'quatern_d': 0.0,
+          'quatern_b': Qform[1],
+          'quatern_c': Qform[2],
+          'quatern_d': Qform[3],
           'qoffset_x': float(image.xsize*image.xdim/2.),
           'qoffset_y': float(image.ysize*image.ydim/2.),
           'qoffset_z': 0.0,
@@ -303,7 +328,8 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
 
     if targetdim is None: targetdim = image.ndim
     for subimage, substem in images_and_names(image, filestem, targetdim):
-        NiftiWriter(subimage, datatype=datatype, filetype=filetype).write(substem)
+        NiftiWriter(subimage, datatype=datatype, filetype=filetype,
+                    params=image._procpar).write(substem)
 
 #-----------------------------------------------------------------------------
 def writeImageDual(image, filestem, datatype=None, targetdim=None):
