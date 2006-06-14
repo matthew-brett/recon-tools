@@ -27,7 +27,8 @@ def unwrap2D(matrix, mask=None):
             raise ValueError("mask dimensions do not match matrix dimensions!")
     
     in_phase = len(dims) < 2 and reshape(matrix,(1,dims[0])) or matrix
-    in_phase = ( (in_phase/2/Numeric.pi + 1)%1 ).astype(Numeric.Float32)
+    #in_phase = ( (in_phase/2/Numeric.pi + 1)%1 ).astype(Numeric.Float32)
     #in_phase[:] = in_phase*mask.astype(Numeric.Float32)
-    ret = (lpUnwrap(in_phase, mask.astype(Numeric.Int8))*2*Numeric.pi).astype(dtype)
+    #ret = (lpUnwrap(in_phase, mask.astype(Numeric.Int8))*2*Numeric.pi).astype(dtype)
+    ret = (lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
     return ret
