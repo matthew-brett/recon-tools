@@ -140,8 +140,8 @@ void CalcWrappedRangeDiffs(float **dpsi, float **avgdpsi, float **wrappedphase,
   }
   paddpsi=MirrorPad(dpsi,nrow,ncol-1,(kperpdpsi-1)/2,(kpardpsi-1)/2);
   if(paddpsi==dpsi){
-    fprintf(sp0,"Wrapped-gradient averaging box too large "
-	    "for input array size\nAbort\n");
+    //fprintf(sp0,"Wrapped-gradient averaging box too large "
+	  //  "for input array size\nAbort\n");
     exit(ABNORMAL_EXIT);
   }
   BoxCarAvg(avgdpsi,paddpsi,nrow,ncol-1,kperpdpsi,kpardpsi);
@@ -172,8 +172,8 @@ void CalcWrappedAzDiffs(float **dpsi, float **avgdpsi, float **wrappedphase,
   }
   paddpsi=MirrorPad(dpsi,nrow-1,ncol,(kpardpsi-1)/2,(kperpdpsi-1)/2);
   if(paddpsi==dpsi){
-    fprintf(sp0,"Wrapped-gradient averaging box too large "
-	    "for input array size\nAbort\n");
+    //fprintf(sp0,"Wrapped-gradient averaging box too large "
+	  //  "for input array size\nAbort\n");
     exit(ABNORMAL_EXIT);
   }
   BoxCarAvg(avgdpsi,paddpsi,nrow-1,ncol,kpardpsi,kperpdpsi);
@@ -388,12 +388,12 @@ void **Get2DMem(int nrow, int ncol, int psize, size_t size){
   void **array;
 
   if((array=malloc(nrow*psize))==NULL){
-    fprintf(sp0,"Out of memory\n"); 
+    //fprintf(sp0,"Out of memory\n"); 
     exit(ABNORMAL_EXIT);
   }
   for(row=0; row<nrow; row++){
     if((array[row]=malloc(ncol*size))==NULL){
-      fprintf(sp0,"Out of memory\n");
+      //fprintf(sp0,"Out of memory\n");
       exit(ABNORMAL_EXIT);
     }
   }
@@ -413,18 +413,18 @@ void **Get2DRowColMem(long nrow, long ncol, int psize, size_t size){
   void **array;
 
   if((array=malloc((2*nrow-1)*psize))==NULL){
-    fprintf(sp0,"Out of memory\n"); 
+    //fprintf(sp0,"Out of memory\n"); 
     exit(ABNORMAL_EXIT);
   }
   for(row=0; row<nrow-1; row++){
     if((array[row]=malloc(ncol*size))==NULL){
-      fprintf(sp0,"Out of memory\n");
+      //fprintf(sp0,"Out of memory\n");
       exit(ABNORMAL_EXIT);
     }
   }
   for(row=nrow-1; row<2*nrow-1; row++){
     if((array[row]=malloc((ncol-1)*size))==NULL){
-      fprintf(sp0,"Out of memory\n");
+      //fprintf(sp0,"Out of memory\n");
       exit(ABNORMAL_EXIT);
     }
   }
@@ -444,18 +444,18 @@ void **Get2DRowColZeroMem(long nrow, long ncol, int psize, size_t size){
   void **array;
 
   if((array=malloc((2*nrow-1)*psize))==NULL){
-    fprintf(sp0,"Out of memory\n"); 
+    //fprintf(sp0,"Out of memory\n"); 
     exit(ABNORMAL_EXIT);
   }
   for(row=0; row<nrow-1; row++){
     if((array[row]=calloc(ncol,size))==NULL){
-      fprintf(sp0,"Out of memory\n");
+      //fprintf(sp0,"Out of memory\n");
       exit(ABNORMAL_EXIT);
     }
   }
   for(row=nrow-1; row<2*nrow-1; row++){
     if((array[row]=calloc((ncol-1),size))==NULL){
-      fprintf(sp0,"Out of memory\n");
+      //fprintf(sp0,"Out of memory\n");
       exit(ABNORMAL_EXIT);
     }
   }
@@ -472,7 +472,7 @@ void *MAlloc(size_t size){
   void *ptr;
 
   if((ptr=malloc(size))==NULL){
-    fprintf(sp0,"Out of memory\n");
+    //fprintf(sp0,"Out of memory\n");
     exit(ABNORMAL_EXIT);
   }
   return(ptr);
@@ -488,7 +488,7 @@ void *CAlloc(size_t nitems, size_t size){
   void *ptr;
   
   if((ptr=calloc(nitems,size))==NULL){
-    fprintf(sp0,"Out of memory\n");
+    //fprintf(sp0,"Out of memory\n");
     exit(ABNORMAL_EXIT);
   }
   return(ptr);
@@ -504,7 +504,7 @@ void *ReAlloc(void *ptr, size_t size){
   void *ptr2;
   
   if((ptr2=realloc(ptr,size))==NULL){
-    fprintf(sp0,"Out of memory\n");
+    //fprintf(sp0,"Out of memory\n");
     exit(ABNORMAL_EXIT);
   }
   return(ptr2);
@@ -690,8 +690,8 @@ void Despeckle(float **mag, float ***ei, long nrow, long ncol){
   /* pad magnitude and place into new array (don't touch original data) */
   intensity=MirrorPad(mag,nrow,ncol,ARMLEN,ARMLEN);
   if(intensity==mag){
-    fprintf(sp0,"Despeckling box size too large for input array size\n"
-	    "Abort\n");
+    //fprintf(sp0,"Despeckling box size too large for input array size\n"
+	  //  "Abort\n");
     exit(ABNORMAL_EXIT);
   }
 
@@ -1009,8 +1009,8 @@ void SetDump(int signum){
     signal(SIGINT,exit);
 
     /* print nice message and set global variables so program knows to exit */
-    fprintf(sp0,"\n\nSIGINT signal caught.  Please wait for graceful exit\n");
-    fprintf(sp0,"(One more interrupt signal halts job)\n");
+    //fprintf(sp0,"\n\nSIGINT signal caught.  Please wait for graceful exit\n");
+    //fprintf(sp0,"(One more interrupt signal halts job)\n");
     dumpresults_global=TRUE;
     requestedstop_global=TRUE;
 
@@ -1020,12 +1020,12 @@ void SetDump(int signum){
     signal(SIGHUP,SetDump);
 
     /* print a nice message, and set the dump variable */
-    fprintf(sp0,"\n\nSIGHUP signal caught.  Dumping results\n");
+    //fprintf(sp0,"\n\nSIGHUP signal caught.  Dumping results\n");
     dumpresults_global=TRUE;
 
   }else{
-    fprintf(sp0,"WARNING: Invalid signal (%d) passed to signal handler\n",
-	    signum);
+    //fprintf(sp0,"WARNING: Invalid signal (%d) passed to signal handler\n",
+	  //  signum);
   }
 }
 
@@ -1037,8 +1037,8 @@ void SetDump(int signum){
  */
 void KillChildrenExit(int signum){
 
-  fprintf(sp0,"Parent received signal %d\nKilling children and exiting\n",
-	  signum);
+  //fprintf(sp0,"Parent received signal %d\nKilling children and exiting\n",
+	//  signum);
   fflush(NULL);
   signal(SIGTERM,SIG_IGN);
   kill(0,SIGTERM);
@@ -1054,7 +1054,7 @@ void KillChildrenExit(int signum){
 void SignalExit(int signum){
   
   signal(SIGTERM,SIG_IGN);
-  fprintf(sp0,"Exiting with status %d on signal %d\n",ABNORMAL_EXIT,signum);
+  //fprintf(sp0,"Exiting with status %d on signal %d\n",ABNORMAL_EXIT,signum);
   fflush(NULL);
   exit(ABNORMAL_EXIT);
 
@@ -1122,16 +1122,16 @@ void DisplayElapsedTime(time_t tstart, double cputimestart){
     hours=(long )floor(cputime/3600);
     minutes=(long )floor((cputime-3600*hours)/60);
     seconds=cputime-3600*hours-60*minutes;
-    fprintf(sp1,"Elapsed processor time:   %ld:%02ld:%05.2f\n",
-	    hours,minutes,seconds);
+    //fprintf(sp1,"Elapsed processor time:   %ld:%02ld:%05.2f\n",
+	  //  hours,minutes,seconds);
   }
   if(tstart>0 && tstop>0){
     walltime=tstop-tstart;
     hours=(long )floor(walltime/3600);
     minutes=(long )floor((walltime-3600*hours)/60);
     seconds=walltime-3600*hours-60*minutes;
-    fprintf(sp1,"Elapsed wall clock time:  %ld:%02ld:%02ld\n",
-	    hours,minutes,(long )seconds);
+    //fprintf(sp1,"Elapsed wall clock time:  %ld:%02ld:%02ld\n",
+	  //  hours,minutes,(long )seconds);
   }
 }
 

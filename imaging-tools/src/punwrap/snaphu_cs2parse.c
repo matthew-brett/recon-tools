@@ -174,7 +174,7 @@ cumsupply=0;
 nresidues=0;
 
 /* get memory (formerly case 'p' in DIMACS file read) */
-fprintf(sp2,"Setting up data structures for cs2 MCF solver\n");
+//fprintf(sp2,"Setting up data structures for cs2 MCF solver\n");
 n=nnodes;
 m=narcs; 
 if ( n <= 0  || m <= 0 )

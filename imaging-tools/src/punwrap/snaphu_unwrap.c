@@ -56,7 +56,6 @@ void doUnwrap(float *wr_phase, float *uw_phase, long nrow, long ncol) {
   float **phase2D, **uwphase2D, *dp;
   int l,m;
   
-  SetStreamPointers();
   SetDefaults(params);
   params->p=2;
   params->costmode=NOSTATCOSTS;
@@ -148,18 +147,18 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
 		   params->cs2scalefactor);
 
     }else{
-      fprintf(sp0,"Illegal initialization method\nAbort\n");
+      //fprintf(sp0,"Illegal initialization method\nAbort\n");
       exit(ABNORMAL_EXIT);
     }
 
     /* integrate the phase and write out if necessary */
     if(params->initonly){
-      fprintf(sp1,"Integrating phase\n");
+      //fprintf(sp1,"Integrating phase\n");
       unwrappedphase=(float **)Get2DMem(nrow,ncol,
 					sizeof(float *),sizeof(float));
       IntegratePhase(wrappedphase,unwrappedphase,flows,nrow,ncol);
       if(unwrappedest!=NULL){
-	Add2DFloatArrays(unwrappedphase,unwrappedest,nrow,ncol);
+        Add2DFloatArrays(unwrappedphase,unwrappedest,nrow,ncol);
       }
       FlipPhaseArraySign(unwrappedphase,params,nrow,ncol);
 
@@ -202,9 +201,6 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
     /* set up the incremental (residual) cost arrays */
     SetupIncrFlowCosts(costs,incrcosts,flows,nflow,nrow,narcrow,narcsperrow,
 		       params); 
-    if(params->dumpall && params->ntilerow==1 && params->ntilecol==1){
-      DumpIncrCostFiles(incrcosts,++iincrcostfile,nflow,nrow,ncol);
-    }
 
     /* set the tree root (equivalent to source of shortest path problem) */
     source=SelectSource(nodes,ground,nflow,flows,ngroundarcs,

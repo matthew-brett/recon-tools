@@ -58,6 +58,6 @@ setup(
                   'imaging.varian': psfiles},
   
   ext_modules=[Extension('imaging.punwrap._punwrap',
-               punwrap_src],
+               punwrap_src)],
     
 )

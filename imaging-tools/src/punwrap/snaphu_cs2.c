@@ -375,13 +375,13 @@ static void err_end ( cc )
 int cc;
 
 {
-fprintf ( sp0, "\ncs2 solver: Error %d ", cc );
+//fprintf ( sp0, "\ncs2 solver: Error %d ", cc );
 if(cc==ALLOCATION_FAULT){
-  fprintf(sp0,"(allocation fault)\n");
+  //fprintf(sp0,"(allocation fault)\n");
 }else if(cc==UNFEASIBLE){
-  fprintf(sp0,"(problem infeasible)\n");
+  //fprintf(sp0,"(problem infeasible)\n");
 }else if(cc==PRICE_OFL){
-  fprintf(sp0,"(price overflow)\n");
+  //fprintf(sp0,"(price overflow)\n");
 }
 
 /*
@@ -1775,7 +1775,7 @@ void SolveCS2(signed char **residue, short **mstcosts, long nrow, long ncol,
   Free2DArray((void **)mstcosts,2*nrow-1);
 
   /* solve it! */
-  fprintf(sp2,"Running cs2 MCF solver\n");
+  //fprintf(sp2,"Running cs2 MCF solver\n");
   m2 = 2 * m;
   cs2 ( n, m2, ndp, arp, f_sc, c_max, cap, &cost );
 
@@ -1804,7 +1804,7 @@ void SolveCS2(signed char **residue, short **mstcosts, long nrow, long ncol,
 	flow=cap[ N_ARC (a) ] - ( a -> r_cap );
       
 	if(flow>LARGESHORT || flow<-LARGESHORT){
-	  fprintf(sp0,"Flow will overflow short data type\nAbort\n");
+	  //fprintf(sp0,"Flow will overflow short data type\nAbort\n");
 	  exit(ABNORMAL_EXIT);
 	}
 
@@ -1836,11 +1836,11 @@ void SolveCS2(signed char **residue, short **mstcosts, long nrow, long ncol,
 	  }else if(!(to % nNrow)){
 	    colflow[nNrow][(int )((to/nNrow)-1)]-=flow;
 	  }else{
-	    fprintf(sp0,"Unassigned ground arc parsing cs2 solution\nAbort\n");
+	    //fprintf(sp0,"Unassigned ground arc parsing cs2 solution\nAbort\n");
 	    exit(ABNORMAL_EXIT);
 	  }        
 	}else{
-	  fprintf(sp0,"Non-grid arc parsing cs2 solution\nAbort\n");
+	  //fprintf(sp0,"Non-grid arc parsing cs2 solution\nAbort\n");
 	  exit(ABNORMAL_EXIT);
 	}
       } /* end if flow on arc */

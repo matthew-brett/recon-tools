@@ -79,22 +79,22 @@ void BuildCostArrays(void ***costsptr, short ***mstcostsptr,
     /* call specific functions for building cost array and */
     /* set global pointers to functions for calculating and evaluating costs */
     if(params->costmode==TOPO){
-      fprintf(sp1,"Calculating topography-mode cost parameters\n");
+      //fprintf(sp1,"Calculating topography-mode cost parameters\n");
       costs=BuildStatCostsTopo(wrappedphase,mag,unwrappedest,pwr,corr,
 			       rowweight,colweight,nrow,ncol,tileparams,
 			       params);
     }else if(params->costmode==DEFO){
-      fprintf(sp1,"Calculating deformation-mode cost parameters\n");
+      //fprintf(sp1,"Calculating deformation-mode cost parameters\n");
       costs=BuildStatCostsDefo(wrappedphase,mag,unwrappedest,corr,
 			       rowweight,colweight,nrow,ncol,tileparams,
 			       params);
     }else if(params->costmode==SMOOTH){
-      fprintf(sp1,"Calculating smooth-solution cost parameters\n");
+      //fprintf(sp1,"Calculating smooth-solution cost parameters\n");
       costs=BuildStatCostsSmooth(wrappedphase,mag,unwrappedest,corr,
 				 rowweight,colweight,nrow,ncol,tileparams,
 				 params);
     }else{
-      fprintf(sp0,"unrecognized cost mode\n");
+      //fprintf(sp0,"unrecognized cost mode\n");
       exit(ABNORMAL_EXIT);
     }
     (*costsptr)=costs;
@@ -281,13 +281,13 @@ void **BuildStatCostsTopo(float **wrappedphase, float **mag,
   re=params->earthradius;
 
   /* despeckle the interferogram intensity */
-  fprintf(sp2,"Despeckling intensity image\n");
+  //fprintf(sp2,"Despeckling intensity image\n");
   ei=NULL;
   Despeckle(pwr,&ei,nrow,ncol);
   Free2DArray((void **)pwr,nrow);
 
   /* remove large-area average intensity */
-  fprintf(sp2,"Normalizing intensity\n");
+  //fprintf(sp2,"Normalizing intensity\n");
   RemoveMean(ei,nrow,ncol,params->krowei,params->kcolei);
 
   /* compute some midswath parameters */
@@ -334,7 +334,7 @@ void **BuildStatCostsTopo(float **wrappedphase, float **mag,
   /* build array of mean wrapped phase differences in range */
   /* simple average of phase differences is biased, but mean phase */
   /*   differences usually near zero, so don't bother with complex average */
-  fprintf(sp2,"Building range cost arrays\n");
+  //fprintf(sp2,"Building range cost arrays\n");
   CalcWrappedRangeDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 			nrow,ncol);
 
@@ -482,7 +482,7 @@ void **BuildStatCostsTopo(float **wrappedphase, float **mag,
 
   /* build array of mean wrapped phase differences in azimuth */
   /* biased, but not much, so don't bother with complex averaging */
-  fprintf(sp2,"Building azimuth cost arrays\n");
+  //fprintf(sp2,"Building azimuth cost arrays\n");
   CalcWrappedAzDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 		     nrow,ncol);
   
@@ -674,7 +674,7 @@ void **BuildStatCostsDefo(float **wrappedphase, float **mag,
   /* build array of mean wrapped phase differences in range */
   /* simple average of phase differences is biased, but mean phase */
   /*   differences usually near zero, so don't bother with complex average */
-  fprintf(sp2,"Building range cost arrays\n");
+  //fprintf(sp2,"Building range cost arrays\n");
   CalcWrappedRangeDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 			nrow,ncol);
 
@@ -740,7 +740,7 @@ void **BuildStatCostsDefo(float **wrappedphase, float **mag,
 
   /* build array of mean wrapped phase differences in azimuth */
   /* biased, but not much, so don't bother with complex averaging */
-  fprintf(sp2,"Building azimuth cost arrays\n");
+  //fprintf(sp2,"Building azimuth cost arrays\n");
   CalcWrappedAzDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 		     nrow,ncol);
 
@@ -861,7 +861,7 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
   /* build array of mean wrapped phase differences in range */
   /* simple average of phase differences is biased, but mean phase */
   /*   differences usually near zero, so don't bother with complex average */
-  fprintf(sp2,"Building range cost arrays\n");
+  //fprintf(sp2,"Building range cost arrays\n");
   CalcWrappedRangeDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 			nrow,ncol);
 
@@ -913,7 +913,7 @@ void **BuildStatCostsSmooth(float **wrappedphase, float **mag,
 
   /* build array of mean wrapped phase differences in azimuth */
   /* biased, but not much, so don't bother with complex averaging */
-  fprintf(sp2,"Building azimuth cost arrays\n");
+  //fprintf(sp2,"Building azimuth cost arrays\n");
   CalcWrappedAzDiffs(dpsi,avgdpsi,wrappedphase,kperpdpsi,kpardpsi,
 		     nrow,ncol);
 
@@ -1001,8 +1001,8 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
   
   /* read intensity, if specified */
     if(params->costmode==TOPO){
-      fprintf(sp1,"No brightness file specified.  ");
-      fprintf(sp1,"Using interferogram magnitude as intensity\n");
+      //fprintf(sp1,"No brightness file specified.  ");
+      //fprintf(sp1,"Using interferogram magnitude as intensity\n");
     }
     pwr=(float **)Get2DMem(nrow,ncol,sizeof(float *),sizeof(float));
     for(row=0;row<nrow;row++){
@@ -1015,7 +1015,7 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
   if(pwr1!=NULL && pwr2!=NULL && params->havemagnitude){
 
     /* generate the correlation info from the interferogram and amplitude */
-    fprintf(sp1,"Generating correlation from interferogram and intensity\n");
+    //fprintf(sp1,"Generating correlation from interferogram and intensity\n");
 
     /* get the correct number of looks, and make sure its odd */
     krowcorr=1+2*floor(params->ncorrlooksaz/(double )params->nlooksaz/2);
@@ -1024,8 +1024,8 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
     /* calculate equivalent number of independent looks */
     params->ncorrlooks=(kcolcorr*(params->dr/params->rangeres))
       *(krowcorr*(params->da/params->azres))*params->nlooksother;
-    fprintf(sp1,"   (%.1f equivalent independent looks)\n",
-	    params->ncorrlooks);
+    //fprintf(sp1,"   (%.1f equivalent independent looks)\n",
+	  //  params->ncorrlooks);
     
     /* get real and imaginary parts of interferogram */
     realcomp=(float **)Get2DMem(nrow,ncol,sizeof(float *),sizeof(float));
@@ -1041,8 +1041,8 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
     padreal=MirrorPad(realcomp,nrow,ncol,(krowcorr-1)/2,(kcolcorr-1)/2);
     padimag=MirrorPad(imagcomp,nrow,ncol,(krowcorr-1)/2,(kcolcorr-1)/2);
     if(padreal==realcomp || padimag==imagcomp){
-      fprintf(sp0,"Correlation averaging box too large for input array size\n"
-	      "Abort\n");
+      //fprintf(sp0,"Correlation averaging box too large for input array size\n"
+	    //  "Abort\n");
       exit(ABNORMAL_EXIT);
     }
     avgreal=realcomp;
@@ -1090,8 +1090,8 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
     /* find biased default correlation using */
     /* inverse of unbias method used by BuildCostArrays() */
     corr=(float **)Get2DMem(nrow,ncol,sizeof(float *),sizeof(float));
-    fprintf(sp1,"No correlation file specified.  Assuming correlation = %g\n",
-	   params->defaultcorr);
+    //fprintf(sp1,"No correlation file specified.  Assuming correlation = %g\n",
+	  // params->defaultcorr);
     rho0=(params->rhosconst1)/(params->ncorrlooks)+(params->rhosconst2);
     rhomin=params->rhominfactor*rho0;
     if(params->defaultcorr>rhomin){
@@ -1110,7 +1110,7 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
   for(row=0;row<nrow;row++){
     for(col=0;col<ncol;col++){
       if(!IsFinite(corr[row][col])){
-	fprintf(sp0,"NaN or infinity found in correlation data\nAbort\n");
+	//fprintf(sp0,"NaN or infinity found in correlation data\nAbort\n");
 	exit(ABNORMAL_EXIT);
       }else if(corr[row][col]>1.0){
 	if(corr[row][col]>1.001){
@@ -1126,8 +1126,8 @@ void GetIntensityAndCorrelation(float **mag, float **wrappedphase,
     }
   }
   if(iclipped){
-    fprintf(sp0,"WARNING: %ld illegal correlation values clipped to [0,1]\n",
-	    iclipped);
+    //fprintf(sp0,"WARNING: %ld illegal correlation values clipped to [0,1]\n",
+	  //  iclipped);
   }
 
   /* free memory and set output pointers */
@@ -1171,8 +1171,8 @@ void RemoveMean(float **ei, long nrow, long ncol,
   /* pad ei in new array */
   padei=MirrorPad(ei,nrow,ncol,(krowei-1)/2,(kcolei-1)/2);
   if(padei==ei){
-    fprintf(sp0,"Intensity-normalization averaging box too large "
-	    "for input array size\nAbort\n");
+    //fprintf(sp0,"Intensity-normalization averaging box too large "
+	  //  "for input array size\nAbort\n");
     exit(ABNORMAL_EXIT);
   }
 
@@ -1217,9 +1217,9 @@ float *BuildDZRCritLookupTable(double *nominc0ptr, double *dnomincptr,
   slantrange+=params->dr*tileparams->ncol;
   nomincmax=acos((a*a-slantrange*slantrange-re*re)/(2*slantrange*re));
   if(!IsFinite(nominc0) || !IsFinite(nomincmax)){
-    fprintf(sp0,"Geometry error detected.  " 
-	    "Check altitude, near range, and earth radius parameters\n"
-	    "Abort\n");
+    //fprintf(sp0,"Geometry error detected.  " 
+	  //  "Check altitude, near range, and earth radius parameters\n"
+	  //  "Abort\n");
     exit(ABNORMAL_EXIT);
   }
 
@@ -1285,8 +1285,8 @@ double SolveDZRCrit(double sinnomincangle, double cosnomincangle,
     }
     step/=2.0;
     if(++i>MAXITERATION){
-      fprintf(sp0,"Couldn't find critical incidence angle ");
-      fprintf(sp0,"(check scattering parameters)\nAbort\n");
+      //fprintf(sp0,"Couldn't find critical incidence angle ");
+      //fprintf(sp0,"(check scattering parameters)\nAbort\n");
       exit(ABNORMAL_EXIT);
     }
   }
@@ -1310,8 +1310,8 @@ double SolveDZRCrit(double sinnomincangle, double cosnomincangle,
     }
     step/=2.0;
     if(++i>MAXITERATION){
-      fprintf(sp0,"Couldn't find critical slope ");
-      fprintf(sp0,"(check geometry parameters)\nAbort\n");
+      //fprintf(sp0,"Couldn't find critical slope ");
+      //fprintf(sp0,"(check geometry parameters)\nAbort\n");
       exit(ABNORMAL_EXIT);
     }
   }
@@ -1482,9 +1482,9 @@ double CalcDZRhoMax(double rho, double nominc, paramT *params,
       rhos=0;
     }
     if(++i>MAXITERATION){
-      fprintf(sp0,"Couldn't find slope for correlation of %f\n",rho);
-      fprintf(sp0,"(check geometry and spatial decorrelation parameters)\n");
-      fprintf(sp0,"Abort\n");
+      //fprintf(sp0,"Couldn't find slope for correlation of %f\n",rho);
+      //fprintf(sp0,"(check geometry and spatial decorrelation parameters)\n");
+      //fprintf(sp0,"Abort\n");
       exit(ABNORMAL_EXIT);
     }
   }
