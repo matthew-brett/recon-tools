@@ -254,14 +254,11 @@ class NiftiWriter (object):
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
                             (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
-        print (phi,theta,psi)
+
         Qscanner = euler2quat(phi=pi, psi=-pi/2)
         Qobl = qmult(euler2quat(phi=-phi),qmult(euler2quat(theta=-theta),
                                                 euler2quat(psi=-psi)))
         Qform = qmult(Qscanner,Qobl)
-        print Qscanner
-        print Qobl
-        print Qform
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
           'slice_code': NIFTI_SLICE_SEQ_INC,
