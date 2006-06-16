@@ -29,5 +29,5 @@ def unwrap2D(matrix, mask=None):
     #in_phase = ( (in_phase/2/Numeric.pi + 1)%1 ).astype(Numeric.Float32)
     #ret = (lpUnwrap(in_phase, mask.astype(Numeric.Int8))*2*Numeric.pi).astype(dtype)
     in_phase[:] = (in_phase*mask).astype(dtype)
-    ret = (lpUnwrap(in_phase.astype(Numeric.Float32)).astype(dtype)
+    ret = (lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
     return ret
