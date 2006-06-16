@@ -19,16 +19,15 @@ def unwrap2D(matrix, mask=None):
     dims = matrix.shape
 
     if len(dims)>2: raise ValueError("matrix has too many dimensions to unwrap")
-
     if mask is None: mask = Numeric.ones(dims)
     else:
-        print "warning: masking feature has unpredictable results"
+        #print "warning: masking feature has unpredictable results"
         if dims != mask.shape:
             raise ValueError("mask dimensions do not match matrix dimensions!")
     
     in_phase = len(dims) < 2 and reshape(matrix,(1,dims[0])) or matrix
     #in_phase = ( (in_phase/2/Numeric.pi + 1)%1 ).astype(Numeric.Float32)
-    #in_phase[:] = in_phase*mask.astype(Numeric.Float32)
     #ret = (lpUnwrap(in_phase, mask.astype(Numeric.Int8))*2*Numeric.pi).astype(dtype)
-    ret = (lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
+    in_phase[:] = (in_phase*mask).astype(Numeric.Float32)
+    ret = (lpUnwrap(in_phase)).astype(dtype)
     return ret

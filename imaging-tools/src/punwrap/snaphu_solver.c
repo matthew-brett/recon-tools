@@ -1985,7 +1985,6 @@ void MSTInitFlows(float **wrappedphase, short ***flowsptr,
   residue=(signed char **)Get2DMem(nrow-1,ncol-1,sizeof(signed char *),
 				   sizeof(signed char));
   CycleResidue(wrappedphase,residue,nrow,ncol);
-
   /* get memory for flow arrays */
   (*flowsptr)=(short **)Get2DRowColZeroMem(nrow,ncol,
 					   sizeof(short *),sizeof(short));
@@ -2005,7 +2004,7 @@ void MSTInitFlows(float **wrappedphase, short ***flowsptr,
       }
     }
     if(source==NULL){
-      fprintf(sp1,"No residues found\n");
+      //fprintf(sp1, "No residues found\n");
       break;
     }
 

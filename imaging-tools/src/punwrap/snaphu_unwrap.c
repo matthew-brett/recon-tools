@@ -72,9 +72,7 @@ void doUnwrap(float *wr_phase, float *uw_phase, long nrow, long ncol) {
     dp += ncol;
   }
   WrapPhase(phase2D, nrow, ncol);
-
   uwphase2D = UnwrapTile(phase2D, params, tileparams, nrow);
-
   dp = uw_phase;
   for(l=0; l<nrow; l++) {
     memmove(dp, uwphase2D[l], ncol*sizeof(float));
@@ -123,7 +121,6 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
   /* build the cost arrays */  
   BuildCostArrays(&costs,&mstcosts,mag,wrappedphase,unwrappedest,
 		  nlines,nrow,ncol,params,tileparams);
-
   /* set network function pointers for grid network */
   NeighborNode=NeighborNodeGrid;
   GetArc=GetArcGrid;
@@ -135,17 +132,13 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
 
     /* see which initialization method to use */
     if(params->initmethod==MSTINIT){
-
       /* use minimum spanning tree (MST) algorithm */
       MSTInitFlows(wrappedphase,&flows,mstcosts,nrow,ncol,
 		   &nodes,ground,params->initmaxflow);
-    
     }else if(params->initmethod==MCFINIT){
-
       /* use minimum cost flow (MCF) algorithm */
       MCFInitFlows(wrappedphase,&flows,mstcosts,nrow,ncol,
 		   params->cs2scalefactor);
-
     }else{
       //fprintf(sp0,"Illegal initialization method\nAbort\n");
       exit(ABNORMAL_EXIT);
@@ -165,16 +158,15 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
       /* return if called in init only; otherwise, free memory and continue */
       if(params->initonly){
 
-	Free2DArray((void **)mag,nrow);
-	if(nodes!=NULL){
-	  Free2DArray((void **)nodes,nrow-1);
-	}
-	Free2DArray((void **)flows,2*nrow-1);
-	return;
+        Free2DArray((void **)mag,nrow);
+      if(nodes!=NULL){
+        Free2DArray((void **)nodes,nrow-1);
+      }
+      Free2DArray((void **)flows,2*nrow-1);
+      return;
       }
     }
   }
-
   /* initialize network variables */
   InitNetwork(flows,&ngroundarcs,&ncycle,&nflowdone,&mostflow,&nflow,
 	      &candidatebagsize,&candidatebag,&candidatelistsize,

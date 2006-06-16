@@ -34,7 +34,6 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
 //      Py_XDECREF(ap1);
     return NULL;
   }
-  
   ap1 = (PyArrayObject *)PyArray_ContiguousFromObject(op1, typenum_phs, 0, 0);
   
   if(ap1->nd != 2) {
@@ -42,7 +41,6 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
     Py_XDECREF(ap1);
     return NULL;
   }
-
   ret = (PyArrayObject *)PyArray_FromDims(ap1->nd, ap1->dimensions, typenum_phs);
   doUnwrap((float *) ap1->data, (float *) ret->data, (long) ap1->dimensions[0], (long) ap1->dimensions[1]);
   
