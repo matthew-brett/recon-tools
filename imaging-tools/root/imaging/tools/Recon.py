@@ -70,45 +70,22 @@ class Recon (ConsoleTool):
         self.add_options(self.options)
 
     #-------------------------------------------------------------------------
-    def configureOperations(self, opfile):
-        """
-        Creates an OrderedConfigParser object to parse the config file.
-     
-        Returns a list of (opclass, args) pairs by querying _opmanager for 
-        the operation class by opname, and querying the OrderedConfigParser 
-        for items (argumentss) by section (opname)
-        
-        @param configfile: filename of operations config file.
-        @return: a list of operation pairs (operation, args).
-        """
-        config = OrderedConfigParser()
-        config.read(opfile)
-        opname = lambda k: k.rsplit(".",1)[0]
-        return [
-          (self._opmanager.getOperation(opname(opkey)), dict(config.items(opkey)))
-          for opkey in config.sections()]
+    def _running(self, opname, opseq):
+        # see if current Recon is running said operation
+        ops = [opclass for (opclass, _) in opseq]
+        return self._opmanager.getOperation(opname) in ops
+    
+    #-------------------------------------------------------------------------
+    def _argsFromPWD(self):
+        # try to get correct files from pwd or throttle
+        if os.path.isfile("fid") and os.path.isfile("procpar"):
+            pwd = os.path.abspath(".")
+            name = os.path.split(pwd[:pwd.rfind(".fid")])[-1]
+            return (pwd, name+".recon")
+        else: self.error("Expecting 2 arguments: datadir outfile")
 
     #-------------------------------------------------------------------------
-    def parseVolRange(self, vol_range):
-        """
-        Separates out the command-line option volume range into distinct numbers
-        @param vol_range: volume range as x:y
-        @return: vol_start = x, vol_end = y
-        """
-        parts = vol_range.split(":")
-        if len(parts) < 2: self.error(
-          "The specification of vol-range must contain a colon separating "\
-          "the start index from the end index.")
-        try: vol_start = int(parts[0] or 0)
-        except ValueError: self.error(
-          "Bad vol-range start index '%s'.  Must be an integer."%parts[0])
-        try: vol_end = int(parts[1] or -1)
-        except ValueError: self.error(
-          "Bad vol-range end index '%s'. Must be an integer."%parts[1])
-        return vol_start, vol_end
-
-    #-------------------------------------------------------------------------
-    def findOplist(self, datadir):
+    def _findOplist(self, datadir):
         "Determine which stock oplist to use based on pulse sequence."
         
         oplistBySeq = {
@@ -131,6 +108,74 @@ class Recon (ConsoleTool):
         return imaging.conf.getOplistFileName(opfilename)
         
     #-------------------------------------------------------------------------
+    def configureOperations(self, opfile):
+        """
+        Creates an OrderedConfigParser object to parse the config file.
+     
+        Returns a list of (opclass, args) pairs by querying _opmanager for 
+        the operation class by opname, and querying the OrderedConfigParser 
+        for items (argumentss) by section (opname)
+        
+        @param configfile: filename of operations config file.
+        @return: a list of operation pairs (operation, args).
+        """
+        config = OrderedConfigParser()
+        config.read(opfile)
+        opname = lambda k: k.rsplit(".",1)[0]
+        return [
+          (self._opmanager.getOperation(opname(opkey)), dict(config.items(opkey)))
+          for opkey in config.sections()]
+
+    #-------------------------------------------------------------------------
+    def confirmOps(self, opseq):
+        """This routine currently looks at the file i/o ops to make sure they
+        are in a sane order. This routine might be expanded to double-check
+        other sequence requirements
+        """
+        # make sure ReadImage is first op and only happens once,
+        # if not change things around
+        class_list = [opclass for (opclass, _) in opseq]
+        read_op = self._opmanager.getOperation('ReadImage')
+        op_spot = class_list.index(read_op)
+        if op_spot > 0:
+            (_, read_args) = opseq[op_spot]
+            opseq.__delitem__(op_spot)
+            opseq.insert(0,(read_op, read_args))
+            # need to keep class_list synced for next step
+            class_list.__delitem__(op_spot)
+            class_list.insert(0,read_op)
+        if class_list.count(read_op) > 1:
+            n = 1
+            while opseq[n:] != []:
+                n += class_list[n:].index(read_op)
+                opseq.__delitem__(n)
+                class_list.__delitem__(n)
+        # print warning if WriteImage isn't the last op
+        write_op = self._opmanager.getOperation('WriteImage')
+        if class_list.index(write_op) != (len(class_list)-1):
+            print "warning! Operation sequence doesn't end with "\
+                  "WriteImage."
+
+    #-------------------------------------------------------------------------
+    def parseVolRange(self, vol_range):
+        """
+        Separates out the command-line option volume range into distinct numbers
+        @param vol_range: volume range as x:y
+        @return: vol_start = x, vol_end = y
+        """
+        parts = vol_range.split(":")
+        if len(parts) < 2: self.error(
+          "The specification of vol-range must contain a colon separating "\
+          "the start index from the end index.")
+        try: vol_start = int(parts[0] or 0)
+        except ValueError: self.error(
+          "Bad vol-range start index '%s'.  Must be an integer."%parts[0])
+        try: vol_end = int(parts[1] or -1)
+        except ValueError: self.error(
+          "Bad vol-range end index '%s'. Must be an integer."%parts[1])
+        return vol_start, vol_end
+
+    #-------------------------------------------------------------------------
     def getOptions(self):
         """
         Bundle command-line arguments and options into a single options
@@ -143,27 +188,38 @@ class Recon (ConsoleTool):
         """
     
         options, args = self.parse_args()
+        # Recon can be run with these combos defined:
+        # (_, _) (first logic stage, try to find fid files in pwd)
+        # (args, _) (2nd logic stage, try to find default oplist)
+        # (_, oplist) (3rd logic stage, try a couple things here)
+        # (args,oplist) (last stage, not ambiguous)
+        if not options.oplist and len(args) != 2:
+            args = self._argsFromPWD()
+        if not options.oplist:
+            options.oplist = self._findOplist(args[0])
+        options.operations = self.configureOperations(options.oplist)
         if len(args) != 2:
-            # let's see if anything's in the current directory:
-            if os.path.isfile("fid") and os.path.isfile("procpar"):
-                pwd = os.path.abspath(".")
-                name = os.path.split(pwd[:pwd.rfind(".fid")])[-1]
-                args = (pwd, name+"_recon")
-            else: self.error("Expecting 2 arguments: datadir outfile")
-
-        # treat the raw (or cooked) args as named options
-        options.datadir, options.outfile = args
-
-        # use stock oplist if none specified
-        if not options.oplist: options.oplist = self.findOplist(options.datadir)
-
+            # only care if we need to set up ReadImage and WriteImage later
+            if not (self.running('ReadImage') and self.running('WriteImage')):
+                args = self._argsFromPWD()
+        if not self._running('ReadImage', options.operations):
+            # append ReadImage op to BEGINNING of list
+            op_args = {'filename': os.path.abspath(args[0]),
+                       'format': 'fid'}
+            opclass = self._opmanager.getOperation('ReadImage')
+            options.operations.insert(0,(opclass, op_args))
+        if not self._running('WriteImage', options.operations):
+            op_args = {'filename': os.path.abspath(args[1]),
+                       'format': options.file_format,
+                       'datatype': options.output_datatype}
+            opclass = self._opmanager.getOperation('WriteImage')
+            options.operations.append((opclass, op_args))
+        # run some checks on the operations sequence
+        self.confirmOps(options.operations)
         # parse vol-range
         options.vol_start, options.vol_end = \
           self.parseVolRange(options.vol_range)
-
-        # configure operations
-        options.operations = self.configureOperations(options.oplist)
-
+        
         return options
 
     #-------------------------------------------------------------------------
@@ -190,23 +246,19 @@ class Recon (ConsoleTool):
         runlogger = RunLogger(file(options.log_file,'w'))
 
         # Load k-space image from the fid file and log it.
-        reader = self._opmanager.getOperation("ReadImage")(
-            filename=options.datadir, format="fid")
+        reader_class, reader_args = options.operations[0]
+        reader = reader_class(**reader_args)
         image = reader.run()
-        runlogger.logop(reader)
-
+        runlogger.logop(reader)        
+        
         # Log some parameter info to the console.
         image.logParams()
 
         # Instantiate the operations declared in oplist file.
-        operations = [opclass(**args) for opclass,args in options.operations]
-
-        # Add an operation for saving data.
-        operations.append(
-           WriteImage.WriteImage(
-            filename=options.outfile,
-            format=options.file_format,
-            datatype=options.output_datatype))
+        operations = [opclass(**args)
+                      for opclass,args in options.operations[1:]]
 
         # Run the operations.
         self.runOperations(operations, image, runlogger)
+
+        runlogger.setExecutable()

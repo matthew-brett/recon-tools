@@ -114,18 +114,23 @@ class RunLogger (object):
     """
 
     # what command is used to run the executable log
-    _magic_string = "#!/usr/bin/env runops"
+    _magic_string = "#!/usr/bin/env python\n"\
+                    "from imaging.tools.Rerun import Rerun\n"\
+                    "if __name__==\"__main__\": Rerun(__file__).run()\n"
 
+    _start_string = "## BEGIN OPS LOG\n"
+    _end_string = "## END OPS LOG\n"
     #-------------------------------------------------------------------------
     def __init__(self, ostream=sys.stdout):
         self.ostream = ostream
         print >> self.ostream, self._magic_string
+        print >> self.ostream, self._start_string
 
     #-------------------------------------------------------------------------
     def _format_doc(self, doc):
         for line in (doc or "").splitlines():
             line = line.strip()
-            if line: print >> self.ostream, "#", line
+            if line: print >> self.ostream, "##", line
 
     #-------------------------------------------------------------------------
     def logop(self, operation):
@@ -135,14 +140,22 @@ class RunLogger (object):
         and facilitate reproduction of results.
         """
         self._format_doc(operation.__class__.__doc__)
-        print >> self.ostream, "[%s]"%operation.__class__.__name__
+        print >> self.ostream, "#[%s]"%operation.__class__.__name__
         for parameter in operation.params:
             self._format_doc(parameter.description)
             paramval = getattr(operation, parameter.name)
-            print >> self.ostream, "%s = %s"%(parameter.name, paramval)
+            print >> self.ostream, "#%s = %s"%(parameter.name, paramval)
         print >> self.ostream
 
-
+    #-------------------------------------------------------------------------
+    def setExecutable(self):
+        # check to see if we're using abnormal file streams, but nothing
+        # done about general file permissions
+        import os
+        if self.ostream.name not in ('/dev/null', '<stdout>'):
+            os.system('chmod +x %s'%(self.ostream.name))
+            
+        
 ##############################################################################
 class OperationManager (object):
     """
