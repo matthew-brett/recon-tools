@@ -144,16 +144,17 @@ class Recon (ConsoleTool):
             # need to keep class_list synced for next step
             class_list.__delitem__(op_spot)
             class_list.insert(0,read_op)
-        if class_list.count(read_op) > 1:
-            n = 1
-            while opseq[n:] != []:
-                n += class_list[n:].index(read_op)
-                opseq.__delitem__(n)
-                class_list.__delitem__(n)
+        op_count = class_list.count(read_op)
+        n = 1
+        while op_count > 1:
+            n += class_list[n:].index(read_op)
+            opseq.__delitem__(n)
+            class_list.__delitem__(n)
+            op_count -= 1
         # print warning if WriteImage isn't the last op
         write_op = self._opmanager.getOperation('WriteImage')
         if class_list.index(write_op) != (len(class_list)-1):
-            print "warning! Operation sequence doesn't end with "\
+            print "WARNING! Operation sequence doesn't end with "\
                   "WriteImage."
 
     #-------------------------------------------------------------------------
@@ -200,7 +201,8 @@ class Recon (ConsoleTool):
         options.operations = self.configureOperations(options.oplist)
         if len(args) != 2:
             # only care if we need to set up ReadImage and WriteImage later
-            if not (self.running('ReadImage') and self.running('WriteImage')):
+            if not (self._running('ReadImage', options.operations) and \
+                    self._running('WriteImage', options.operations)):
                 args = self._argsFromPWD()
         if not self._running('ReadImage', options.operations):
             # append ReadImage op to BEGINNING of list
