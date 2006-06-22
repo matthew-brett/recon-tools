@@ -12,7 +12,6 @@ psfiles.remove('root/imaging/varian/tablib/TODOs')
 psfiles = ['%s'%(file[20:]) for file in psfiles]
 
 punwrap_src = glob.glob(os.path.join("src/punwrap","*.c"))
-punwrap_src.remove('src/punwrap/snaphu_cs2parse.c')
 
 setup(
 
