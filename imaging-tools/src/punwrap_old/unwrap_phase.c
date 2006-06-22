@@ -4,6 +4,7 @@
 #include "Numeric/arrayobject.h"
 
 #define BORDER 0x20
+#define ZERO_WEIGHT  0x40
 
 static void pullSubGrid(float *dest, const float *src, int gx, int gy, int sgx, int sgy);
 
@@ -82,23 +83,15 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
         if (i<xsize && j<ysize) {
             dct_phase[j*DCT_xsize + i] = dct_phase[j*xsize + i];
             // embed and convert bitmask (0 or 1) to (BORDER or 0)
-            bitflags[j*DCT_xsize + i] = (!bitflags[j*xsize + i]) ? BORDER : 0;
-            qual_map[j*DCT_xsize + i] = (bitflags[j*DCT_xsize + i] & BORDER) ? 0.0 : 1.0;
+            bitflags[j*DCT_xsize + i] = (!bitflags[j*xsize + i]) ? ZERO_WEIGHT : 0;
+            qual_map[j*DCT_xsize + i] = (bitflags[j*DCT_xsize + i] & ZERO_WEIGHT) ? 0.0 : 1.0;
         }
         else {
-            // everything outside of embedded region is BORDER (aka 0 valued)
+            // everything outside of embedded region is BORDER (and qual_map = 0) valued
             dct_phase[j*DCT_xsize + i] = 0.0;
             bitflags[j*DCT_xsize + i] = BORDER;
             qual_map[j*DCT_xsize + i] = 0.0;        }
     }
-/*      printf("bitmask and qualmap for row %d:\n",j);
-      for (i=0; i<DCT_xsize; i++) 
-          printf("0x%x ", bitflags[j*DCT_xsize + i]);
-      printf("\n");
-      for (i=0; i<DCT_xsize; i++)
-          printf("%d ", (int) qual_map[j*DCT_xsize + i]);
-      printf("\n");
-*/
   }
 //  printf("ysize for DCT: %d, xsize for DCT: %d\n", DCT_ysize, DCT_xsize);
 

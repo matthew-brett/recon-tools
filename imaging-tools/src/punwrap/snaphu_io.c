@@ -223,31 +223,19 @@ void CheckParams(long linelen, long nlines, paramT *params){
   }
 
   /* set global pointers to functions for calculating and evaluating costs */
-  if(params->p<0){
-    if(params->costmode==TOPO){
-      CalcCost=CalcCostTopo;
-      EvalCost=EvalCostTopo;
-    }else if(params->costmode==DEFO){
-      CalcCost=CalcCostDefo;
-      EvalCost=EvalCostDefo;
-    }else if(params->costmode==SMOOTH){
-      CalcCost=CalcCostSmooth;
-      EvalCost=EvalCostSmooth;
-    }
+  if(params->p==0){
+    CalcCost=CalcCostL0;
+    EvalCost=EvalCostL0;
+  }else if(params->p==1){
+    CalcCost=CalcCostL1;
+    EvalCost=EvalCostL1;
+  }else if(params->p==2){
+    CalcCost=CalcCostL2;
+    EvalCost=EvalCostL2;
   }else{
-    if(params->p==0){
-      CalcCost=CalcCostL0;
-      EvalCost=EvalCostL0;
-    }else if(params->p==1){
-      CalcCost=CalcCostL1;
-      EvalCost=EvalCostL1;
-    }else if(params->p==2){
-      CalcCost=CalcCostL2;
-      EvalCost=EvalCostL2;
-    }else{
-      CalcCost=CalcCostLP;
-      EvalCost=EvalCostLP;
-    }
+    CalcCost=CalcCostLP;
+    EvalCost=EvalCostLP;
   }
 }
+
 

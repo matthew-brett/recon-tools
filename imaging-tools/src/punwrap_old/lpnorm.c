@@ -26,7 +26,7 @@ void LpNormUnwrap(float *soln, float *phase, float *dxwts,
   residual = rarray;  /* borrow rarray to compute the residual */
   ResidualPhase(residual, phase, soln, xsize, ysize);
   n = Residues(residual, bitflags, POS_RES, NEG_RES, 
-               BORDER, xsize, ysize);
+               BORDER | ZERO_WEIGHT, xsize, ysize);
   for (k=0; k<iter && n>0; k++) {
     //printf("\nIter %d: %d residues\n", k+1, n);
     ComputeDerivWts(phase, soln, dxwts, dywts, qual_map, e0,
@@ -40,13 +40,13 @@ void LpNormUnwrap(float *soln, float *phase, float *dxwts,
     ResidualPhase(residual, phase, soln, xsize, ysize);
     for (i=0; i<xsize*ysize; i++) bitflags[i] &= ~(POS_RES | NEG_RES);
     n = Residues(residual, bitflags, POS_RES, NEG_RES, 
-                 BORDER, xsize, ysize);
+                 BORDER | ZERO_WEIGHT, xsize, ysize);
   }
   //printf("%d residues after %d iter.  Processing residual...\n", 
   //       n, k);
   /* see if the entire nonmasked array is residue-free */
   for (i=0; i<xsize*ysize; i++) bitflags[i] &= ~(POS_RES | NEG_RES);
-  n = Residues(residual, NULL, POS_RES, NEG_RES, 
+  n = Residues(residual, bitflags, POS_RES, NEG_RES, 
                BORDER, xsize, ysize);
   if (n==0) { 
     /* Unwrap residual and add to solution */

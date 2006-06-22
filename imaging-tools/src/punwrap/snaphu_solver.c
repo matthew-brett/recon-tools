@@ -2403,22 +2403,22 @@ signed char ClipFlow(signed char **residue, short **flows,
  * ------------------------
  * Initializes the flow on a the network using minimum cost flow
  * algorithm.  
- */
-void MCFInitFlows(float **wrappedphase, short ***flowsptr, short **mstcosts, 
-		  long nrow, long ncol, long cs2scalefactor){
+ /* *\/ */
+/* void MCFInitFlows(float **wrappedphase, short ***flowsptr, short **mstcosts,  */
+/* 		  long nrow, long ncol, long cs2scalefactor){ */
 
-  signed char **residue;
+/*   signed char **residue; */
 
-#ifndef NO_CS2
+/* #ifndef NO_CS2 */
 
-  /* calculate phase residues (integer numbers of cycles) */
-  //fprintf(sp1,"Initializing flows with MCF algorithm\n");
-  residue=(signed char **)Get2DMem(nrow-1,ncol-1,sizeof(signed char *),
-				   sizeof(signed char));
-  CycleResidue(wrappedphase,residue,nrow,ncol);
+/*   /\* calculate phase residues (integer numbers of cycles) *\/ */
+/*   //fprintf(sp1,"Initializing flows with MCF algorithm\n"); */
+/*   residue=(signed char **)Get2DMem(nrow-1,ncol-1,sizeof(signed char *), */
+/* 				   sizeof(signed char)); */
+/*   CycleResidue(wrappedphase,residue,nrow,ncol); */
 
-  /* run the solver (memory freed within solver) */
-  SolveCS2(residue,mstcosts,nrow,ncol,cs2scalefactor,flowsptr);
+/*   /\* run the solver (memory freed within solver) *\/ */
+/*   SolveCS2(residue,mstcosts,nrow,ncol,cs2scalefactor,flowsptr); */
 
-#endif
-}
+/* #endif */
+/* } */
