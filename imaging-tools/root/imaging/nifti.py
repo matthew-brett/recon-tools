@@ -249,16 +249,20 @@ class NiftiWriter (object):
         # The euler angles for slicing rotations are from procpar
         # To avoid the chance of interpolation, these angles are "normalized"
         # to the closest multiple of pi/2 (ie 22 degrees->0, 49 degrees->90)
+        #
+        # There is also the chance of software rotations, undone by the
+        # Qsoft quaternion
 
         image = self.image
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
                             (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
-
+        
+        Qsoft = euler2quat(psi=-pi/2*image.zRots)
         Qscanner = euler2quat(phi=pi, psi=-pi/2)
         Qobl = qmult(euler2quat(phi=-phi),qmult(euler2quat(theta=-theta),
                                                 euler2quat(psi=-psi)))
-        Qform = qmult(Qscanner,Qobl)
+        Qform = qmult(Qsoft,qmult(Qscanner,Qobl))
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
           'slice_code': NIFTI_SLICE_SEQ_INC,

@@ -423,5 +423,5 @@ class FidImage (BaseImage, ProcParImageMixin):
             else:
                 self.data[vol-numrefs] = ksp_image
                 self.nav_data[vol-numrefs] = navigators
-
+        self.zeroRots()
         self.setData(self.data)

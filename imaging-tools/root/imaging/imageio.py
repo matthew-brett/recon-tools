@@ -53,14 +53,16 @@ class BaseImage (object):
       x0:  position of first column
       y0:  position of first row
       z0:  position of first slice
+      zRots: how many times in software image has been rotated around Z
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0):
+    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0, zRots):
         self.setData(data)
         self.xsize, self.ysize, self.zsize, self.tsize = \
           (xsize, ysize, zsize, tsize)
         self.x0, self.y0, self.z0 = (x0, y0, z0)
+        self.zRots = zRots
 
     #-------------------------------------------------------------------------
     def info(self):
@@ -102,7 +104,7 @@ class BaseImage (object):
     def _subimage(self, data):
         return BaseImage(data,
           self.xsize, self.ysize, self.zsize, self.tsize,
-          self.x0, self.y0, self.z0)
+          self.x0, self.y0, self.z0, self.zRots)
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
@@ -112,6 +114,12 @@ class BaseImage (object):
     #-------------------------------------------------------------------------
     def subImages(self):
         for subnum in xrange(len(self.data)): yield self.subImage(subnum)
+    #-------------------------------------------------------------------------
+    def zeroRots(self):
+        self.zRots = 0
+    #-------------------------------------------------------------------------
+    def noteRot(self):
+        self.zRots += 1
 
 #-----------------------------------------------------------------------------
 def get_reader(format):
