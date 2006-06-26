@@ -7,6 +7,8 @@ from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
+import matplotlib
+ASPECT = matplotlib.__version__.find('0.87') > -1 and 'auto' or 'preserve'
 
 def iscomplex(a): return hasattr(a, "imag")
 
@@ -389,7 +391,7 @@ class ColorBar (FigureCanvas):
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
         ax.imshow(data, interpolation="nearest",
-                  cmap=self.cmap, norm=norm, aspect='auto',
+                  cmap=self.cmap, norm=norm, aspect=ASPECT,
                   extent=(r_pts[0], r_pts[-1], 0, 1))
         ax.images[0].set_data(data)
         ax.xaxis.set_ticks(tx)
