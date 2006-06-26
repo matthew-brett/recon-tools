@@ -1,0 +1,13 @@
+# $Id: $
+PortSystem	1.0
+PortGroup	python24 1.0
+
+name		python-imaging-tools
+version		0.3
+categories	python
+maintainers	mtrumpis@gmail.com
+description	mri reconstruction tools
+long_description    ditto
+homepage	https://cirl.berkeley.edu/view/BIC/ImagingTools
+master_sites	https://cirl.berkeley.edu/twiki/pub/BIC/ImagingTools/
+checksums	md5 bb658c82584d2c5d08aa2432af413586
