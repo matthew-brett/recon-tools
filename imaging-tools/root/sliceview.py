@@ -389,9 +389,11 @@ class ColorBar (FigureCanvas):
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
         ax.imshow(data, interpolation="nearest",
-              cmap=self.cmap, norm=norm, extent=(r_pts[0], r_pts[-1], 0, 1))
+                  cmap=self.cmap, norm=norm, aspect='auto',
+                  extent=(r_pts[0], r_pts[-1], 0, 1))
         ax.images[0].set_data(data)
         ax.xaxis.set_ticks(tx)
+        for tk in ax.xaxis.get_ticklabels(): tk.set_size(10.0)
         self.data = data
         self.draw()
 
