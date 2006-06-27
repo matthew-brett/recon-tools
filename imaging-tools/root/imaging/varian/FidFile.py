@@ -38,6 +38,10 @@ class _SharedHeaderStatus (_FlagsByte):
         doc="0=real, 1=complex" )
     S_HYPERCOMPLEX = property( lambda self: self._byte&0x20 !=0,
         doc="1=hypercomplex" )
+    # if I make a dummy-constructor, epydoc is forced to add this class
+    # before it is prematurely referenced as a parent class
+    def __init(byte):
+        super(_SharedHeaderStatus, self).__init__(byte)
 
 
 ##############################################################################
