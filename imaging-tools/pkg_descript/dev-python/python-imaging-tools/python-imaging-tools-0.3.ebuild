@@ -17,7 +17,7 @@ KEYWORDS="x86 ppc amd64 ia64 ppc64"
 IUSE=""
 
 DEPEND=">=dev-lang/python-2.4
-        >=dev-python/numeric-24.2
+        >=dev-python/bic-numeric-24.2
 	>=dev-python/matplotlib-0.87.2 
 	>=dev-python/pygtk-2.8.6"
 
