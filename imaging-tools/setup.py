@@ -6,9 +6,11 @@ import os, glob
 from distutils.core import setup, Extension
 
 # a little help to make setup go smoothly
-psfiles = glob.glob('root/imaging/varian/tablib/*')
-psfiles.remove('root/imaging/varian/tablib/TODOs')
 # grab extra file names to include in varian.tablib package
+psfiles = glob.glob('root/imaging/varian/tablib/*')
+# with RPM builds, TODOs is already pruned from MANIFEST.in
+if 'root/imaging/varian/tablib/TODOs' in psfiles:
+    psfiles.remove('root/imaging/varian/tablib/TODOs')
 psfiles = ['%s'%(file[20:]) for file in psfiles]
 
 punwrap_src = glob.glob(os.path.join("src/punwrap","*.c"))
