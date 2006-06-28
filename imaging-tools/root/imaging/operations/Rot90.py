@@ -4,7 +4,7 @@ radiological format.
 """
 from pylab import reshape, rot90, flipud
 from imaging.operations import Operation
-
+from imaging.imageio import BaseImage
 
 ##############################################################################
 class Rot90 (Operation):
@@ -22,3 +22,4 @@ class Rot90 (Operation):
                 reshape(slice, rotated.shape)
                 slice[:] = rotated.copy()
         image.setData(data)
+        image.noteRot()
