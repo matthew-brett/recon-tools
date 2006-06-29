@@ -2,7 +2,7 @@
 This module defines a rotation on all slices, putting them into standard
 radiological format.
 """
-from pylab import reshape, rot90, flipup
+from pylab import reshape, rot90, flipud
 from imaging.operations import Operation, Parameter
 from imaging.imageio import BaseImage
 

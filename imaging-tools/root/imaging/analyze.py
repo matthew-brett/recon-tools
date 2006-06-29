@@ -2,7 +2,7 @@
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
   Complex32, fromstring, reshape, amin, amax
 import struct
-
+import sys
 from odict import odict
 from imaging.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
   BIG_ENDIAN
@@ -38,6 +38,12 @@ datatype2typecode = {
 # map Numeric typecode to Analyze datatype
 typecode2datatype = \
   dict([(v,k) for k,v in datatype2typecode.items()])
+        
+# what is native and what is swapped?
+byteorders = {
+    sys.byteorder: sys.byteorder=='little' and LITTLE_ENDIAN or BIG_ENDIAN,
+    'swapped': sys.byteorder=='little' and BIG_ENDIAN or LITTLE_ENDIAN
+    }
 
 HEADER_SIZE = 348
 struct_fields = odict((
@@ -127,10 +133,14 @@ class AnalyzeImage (BaseImage):
         # Determine byte order of the header.  The first header element is the
         # header size.  It should always be 384.  If it is not then you know
         # you read it in the wrong byte order.
-        byte_order = LITTLE_ENDIAN
+
+        byte_order = byteorders[sys.byteorder]
+        self.swapped = False
         reported_length = struct_unpack(file(filename),
           byte_order, field_formats[0:1])[0]
-        if reported_length != HEADER_SIZE: byte_order = BIG_ENDIAN
+        if reported_length != HEADER_SIZE:
+            byte_order = byteorders['swapped']
+            self.swapped=True
 
         # unpack all header values
         values = struct_unpack(file(filename), byte_order, field_formats)
@@ -148,8 +158,8 @@ class AnalyzeImage (BaseImage):
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
                           or (self.zdim, self.ydim, self.xdim)
         datasize = bytepix * reduce(lambda x,y: x*y, dims)
-        image = fromstring(file(filename).read(datasize),numtype)#\
-                #.astype(new_numtype)
+        image = fromstring(file(filename).read(datasize),numtype)
+        if self.swapped: image = image.byteswapped()
         self.setData(reshape(image, dims))
 
 

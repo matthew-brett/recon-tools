@@ -3,12 +3,12 @@ from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
   Complex32, fromstring, reshape, product, array, sin, cos, pi, asarray, sign
 import struct
 import exceptions
-
+import sys
 from odict import odict
-from imaging.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN, \
-     BIG_ENDIAN, euler2quat, qmult
+from imaging.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult
 from imaging.imageio import BaseImage
-from imaging.analyze import _concatenate
+from imaging.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
+     typecode2datatype, byteorders
 
 # datatype is a bit flag into the datatype identification byte of the NIFTI
 # header. 
@@ -41,29 +41,6 @@ NIFTI_SLICE_SEQ_INC = 1
 NIFTI_SLICE_SEQ_DEC = 2
 NIFTI_SLICE_ALT_INC = 3
 NIFTI_SLICE_ALT_DEC = 4
-
-# map datatype to number of bits per pixel (or voxel)
-datatype2bitpix = {
-  BYTE: 8,
-  SHORT: 16,
-  INTEGER: 32,
-  FLOAT: 32,
-  DOUBLE: 64,
-  COMPLEX: 64,
-}
-
-# map NIFTI datatype to Numeric typecode
-datatype2typecode = {
-  BYTE: Int8,
-  SHORT: Int16,
-  INTEGER: Int32,
-  FLOAT: Float32,
-  DOUBLE: Float64,
-  COMPLEX: Complex32}
-
-# map Numeric typecode to NIFTI datatype
-typecode2datatype = \
-  dict([(v,k) for k,v in datatype2typecode.items()])
 
 HEADER_SIZE = 348
 struct_fields = odict((
@@ -148,6 +125,8 @@ class NiftiImage (BaseImage):
     """
     def __init__(self, filestem):
         self.load_header(filestem)
+        self.x0,self.y0,self.z0 = (self.qoffset_x, self.qoffset_y,
+                                   self.qoffset_z)
         self.load_image(filestem)
 
     def load_header(self, filestem):
@@ -160,10 +139,13 @@ class NiftiImage (BaseImage):
                 raise "no NIFTI file found with this name: %s"%filestem
             self.filetype = 'single'
         else: self.filetype = 'dual'
-#        print self.filetype
-        byte_order = LITTLE_ENDIAN
+
+        byte_order = byteorders[sys.byteorder]
+        self.swapped = False
         reported_length = struct_unpack(fp, byte_order, field_formats[0:1])[0]
-        if reported_length != HEADER_SIZE: byte_order = BIG_ENDIAN
+        if reported_length != HEADER_SIZE:
+            byte_order = byteorders['swapped']
+            self.swapped = True
         fp.seek(0)
         # unpack all header values
         values = struct_unpack(fp, byte_order, field_formats)
@@ -188,6 +170,7 @@ class NiftiImage (BaseImage):
                           or (self.zdim, self.ydim, self.xdim)
         datasize = (self.bitpix/8)*product(dims)
         image = fromstring(fp.read(datasize), numtype)
+        if self.swapped: image = image.byteswapped()
         self.setData(reshape(image, dims))
         fp.close()
 
@@ -239,7 +222,7 @@ class NiftiWriter (object):
         # (un)rotation is handled like this: take the image as transformed with
         # 2 rotations, S, Rb (S is the xform from scanner space into the
         # data-ordering in the FID file, Rb is the xform applied by slicing
-        # coronal-wise, sagital-wise, etc)
+        # coronal-wise, sagital-wise, etc with the slice gradient)
         # then I = Rb(psi)*Rb(theta)*Rb(phi)*S*I_real
         # The goal is to encode a quaternion which does this inverse:
         # R = R(-S)*R(-phi)*R(-theta)*R(-psi)
@@ -250,14 +233,16 @@ class NiftiWriter (object):
         # To avoid the chance of interpolation, these angles are "normalized"
         # to the closest multiple of pi/2 (ie 22 degrees->0, 49 degrees->90)
         #
-        # There is also the chance of software rotations, undone by the
-        # Qsoft quaternion
+        # There is also the chance of software rotations whose xform would
+        # left-multiply I above; this will be undone by the Qsoft quaternion
 
         image = self.image
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
                             (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
         
+        #Qsoft = qmult(euler2quat(theta=pi),
+        #              euler2quat(psi=-pi/2*image.zRots))
         Qsoft = euler2quat(psi=-pi/2*image.zRots)
         Qscanner = euler2quat(phi=pi, psi=-pi/2)
         Qobl = qmult(euler2quat(phi=-phi),qmult(euler2quat(theta=-theta),
