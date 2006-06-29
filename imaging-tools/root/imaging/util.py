@@ -207,7 +207,7 @@ def linReg(X, Y, yvar=None):
     b = (Sxx*Sy - Sx*Sxy)/delta
     m = (N*Sxy - Sx*Sy)/delta
     #res = sum((Y-(m*X+b))**2)
-    res = sum(abs(Y-(m*X+b)))
+    res = sum(abs(Y-(m*X+b)))/float(len(X))
     return (b, m, res)
 
 #-----------------------------------------------------------------------------
