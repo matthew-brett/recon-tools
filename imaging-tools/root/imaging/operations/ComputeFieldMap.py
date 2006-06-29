@@ -54,7 +54,8 @@ class ComputeFieldMap (Operation):
         diff_vols = zeros((image.tdim-1,image.zdim,image.ydim,image.xdim), \
                           Complex32)
         for vol in range(image.tdim-1):
-            diff_vols[vol] = conjugate(image.data[vol])*(image.data[vol+1])
+            #diff_vols[vol] = conjugate(image.data[vol])*(image.data[vol+1])
+            diff_vols[vol] = conjugate(image.data[vol+1])*image.data[vol]
         phase_map = unwrap_phase(diff_vols)
         phase_map = (phase_map/asym_time).astype(Float32)
         fmap_phase = image._subimage(phase_map)
