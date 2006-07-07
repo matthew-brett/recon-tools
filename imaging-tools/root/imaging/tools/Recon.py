@@ -108,7 +108,7 @@ class Recon (ConsoleTool):
         return imaging.conf.getOplistFileName(opfilename)
         
     #-------------------------------------------------------------------------
-    def configureOperations(self, opfile):
+    def configureOperations(self, opfileptr):
         """
         Creates an OrderedConfigParser object to parse the config file.
      
@@ -116,11 +116,11 @@ class Recon (ConsoleTool):
         the operation class by opname, and querying the OrderedConfigParser 
         for items (argumentss) by section (opname)
         
-        @param configfile: filename of operations config file.
+        @param opfileptr: fileptr of operations config file.
         @return: a list of operation pairs (operation, args).
         """
         config = OrderedConfigParser()
-        config.read(opfile)
+        config.readfp(opfileptr)
         opname = lambda k: k.rsplit(".",1)[0]
         return [
           (self._opmanager.getOperation(opname(opkey)), dict(config.items(opkey)))
@@ -198,7 +198,7 @@ class Recon (ConsoleTool):
             args = self._argsFromPWD()
         if not options.oplist:
             options.oplist = self._findOplist(args[0])
-        options.operations = self.configureOperations(options.oplist)
+        options.operations = self.configureOperations(open(options.oplist,'r'))
         if len(args) != 2:
             # only care if we need to set up ReadImage and WriteImage later
             if not (self._running('ReadImage', options.operations) and \

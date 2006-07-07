@@ -30,19 +30,6 @@ class Rerun (Recon):
             except StopIteration:
                 read = False
         return ops_str
-        
-    #-------------------------------------------------------------------------
-    def configureOperations(self, opfileptr):
-        """
-        Overloads Recon's method by using the readfp() method, otherwise
-        performs identically.
-        """
-        config = OrderedConfigParser()
-        config.readfp(opfileptr)
-        opname = lambda k: k.rsplit(".",1)[0]
-        return [
-          (self._opmanager.getOperation(opname(opkey)), dict(config.items(opkey)))
-          for opkey in config.sections()]
     
     #-------------------------------------------------------------------------
     def getOptions(self):
