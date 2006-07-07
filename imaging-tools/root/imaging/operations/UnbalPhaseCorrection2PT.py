@@ -1,16 +1,16 @@
 from Numeric import empty, sort
-from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
-     pi, sqrt, ones, sum, find, Int, resize, matrixmultiply, svd, transpose, \
-     diag, putmask, sign, asarray
+from pylab import angle, conjugate, Float, arange, take, zeros, mean, \
+     pi, sqrt, ones, sum, find, Int, matrixmultiply, svd, transpose, \
+     diag, putmask, asarray
 from imaging.operations import Operation, Parameter
 from imaging.util import ifft, apply_phase_correction, mod, linReg, shift, \
      unwrap_ref_volume
 
-class UnbalPhaseCorrection (Operation):
+class UnbalPhaseCorrection2PT (Operation):
     """Unbalanced Phase Correction tries to determine six parameters which
     define the shape of reference scan phase lines via an SVD solution. Using
     these parameters, a volume of correction phases is built and applied. The
-    influence of the parameters change slightly with different acquisition
+    solution of the parameters changes slightly with different acquisition
     orders, as do the correction lines. Terminology used are "positive",
     "negative", referring to slope direction, and "upper", "lower", in the case
     of multishot-centric acquisition, where there are symmetric phase lines
@@ -21,167 +21,69 @@ class UnbalPhaseCorrection (Operation):
                   description="Radius of the region of greatest linearity "\
                   "within the magnetic field, in mm (normally 70-80mm)"),
         )
-    
+#-----------------------------------------------------------------------------
     def masked_avg(self, S):
-        """
-        Take all pos or neg lines in a slice, return the mean of these lines
+        """Take all pos or neg lines in a slice, return the mean of these lines
         along with a mask, where the mask is set to zero if the standard
         deviation exceeds a threshold (taken to mean noisy data), and also
         a sum of residuals from the linear fit of each line (taken as a measure
         of linearity)
-        @param S is all pos or neg lines of a slice
+        @param S: is all pos or neg lines of a slice
         @return: E is the mean of these lines, mask is variance based mask, and
         sum(res) is the measure of linearity
         """
+        nr,np = S.shape
+        mask = ones((np,))
+        res = empty((nr,), Float)
         
-        nrow,npt = S.shape
-        mask = ones((npt,))
-        res = empty((nrow,), Float)
-
         E = mean(S)
-        std = sqrt(sum((S-E)**2)/nrow)
+        std = sqrt(sum((S-E)**2)/nr)
         putmask(mask, std>1, 0)
 
+##         # UNCOMMENT FOR PLOTTING
 ##         from pylab import show, plot, title
 ##         color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
-##         for r in range(nrow):
+##         for r in range(nr):
 ##             plot(S[r], color[r%7])
 ##         plot(std, 'bo')
 ##         plot(E, 'go')
 ##         show()
-
+        
         x_ax = find(mask)
         if sum(mask)>2:
-            for r in range(nrow):
+            for r in range(nr):
                 (_, _, res[r]) = linReg(x_ax, take(S[r], x_ax))
-        else: res = 1e10*ones(nrow)
+        else: res = 1e10*ones(nr)
 
         return E, mask, sum(res)
 
-    def solve_phase(self, pos, neg, r_mask, s_mask):
-        """let V = (a1 a2 a3 a4 a5 a6)^T,
-        we want to solve:
-        phi(s,u,r) =  2[rA1 + sA3 + A5] - [rA2 + sA4 + A6] u-pos
-        phi(s,u,r) = -2[rA1 + sA3 + A5] - [rA2 + sA4 + A6] u-neg
-        with our overdetermined data.
-        so P = [neg[0] pos[0] neg[1] pos[1] ... neg[S] pos[S]]^T
-        for all selected slices, and similarly
-        A = [-2r0 -r0 -2s0 -s0 -2 -1;  <--
-             -2r1 -r1 -2s0 -s0 -2 -1;  <-- neg going u, s,r=0
-             ...
-             2r0 -r0 2s0 -s0 2 -1;     <--
-             2r1 -r1 2s0 -s0 2 -1;     <-- pos going u, s,r=0
-             ...
-             -2r0 -r0 -2s1 -s1 -2 -1;  <-- neg going u, r=0,s=1
-             ...
-             2r0 -r0 2s1 -s1 2 -1;     <-- pos going u, r=0,s=1
-             ...]
-        Then with AV = P, solve V = inv(A)P
-        """
-        R = self.refShape[-1]
-        A1, A2, A3, A4, A5, A6 = (0,1,2,3,4,5)
-        # need 2*(sum-of-unmasked-points) rows for each selected slice
-        n_rows = sum(r_mask, axis=1)
-        s_ind = find(s_mask)
-        A = empty((sum(take(n_rows, s_ind))*2, 6), Float)
-        P = empty((sum(take(n_rows, s_ind))*2, 1), Float)
-        row_start, row_end = 0, 0
-        for s in s_ind:
-            # alternate for pos and neg rows
-            for b in [-1, 1]:
-                row_start = row_end
-                row_end = row_start + n_rows[s]
-                r_ind = find(r_mask[s])
-                P[row_start:row_end,0] = b==-1 and take(neg[s], r_ind) \
-                                               or  take(pos[s], r_ind)
-                # note these r_ind values are made relative to real fe points:
-                A[row_start:row_end,A1] = b*2*(r_ind + self.lin1-R/2)
-                A[row_start:row_end,A2] = -(r_ind + self.lin1-R/2)
-                A[row_start:row_end,A3] = b*2*s
-                A[row_start:row_end,A4] = -s
-                A[row_start:row_end,A5] = b*2
-                A[row_start:row_end,A6] = -1
+#-----------------------------------------------------------------------------
 
-        # take the SVD of A, and left-multiply its inverse with P              
+    def solve_phase2(self, pos, neg, s_mask):
+        #A1, A2, B1, B2 = (0,1,2,3)
+        A1,B1 = (0,1)
+        n_rows = sum(s_mask)
+        s_ind = find(s_mask)
+        #A = empty((n_rows*2, 4), Float)
+        A = empty((n_rows*2, 2), Float)
+        P = empty((n_rows*2, 1), Float)
+        row_start, row_end = 0,0
+        for b in [-1, 1]:
+            row_start = row_end
+            row_end = row_start + n_rows
+            P[row_start:row_end,0] = b==-1 and take(neg, s_ind) \
+                                           or  take(pos, s_ind)
+            A[row_start:row_end,A1] = b*2
+            #A[row_start:row_end,A2] = b*2*s_ind
+            A[row_start:row_end,B1] = -1
+            #A[row_start:row_end,B2] = -s_ind
         [u,s,vt] = svd(A)
         V = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
                                           matrixmultiply(transpose(u), P)))
 
-        return tuple(V) 
-
-    def correction_volume(self, m_pos, m_neg):
-        """
-        build the volume of phase correction lines with::
-            theta(s,m,r) = m*[r*A2 + s*A4 + A6] + (-1)^m*[r*A1 + s*A3 + A5]
-
-        or some scan-dependent variation (see doc)
-
-        B is always 6 rows, the first two giving the r-dependencies, the last
-        four being constants::
-            B is (6 x n_fe) = [0:N*a1; 0:N*a2; a3; a4; a5; a6]
-            A[s] represents the u and s dependencies: at each row, it multiplies
-            values in the columns of B by the appropriate (m,s) relationship (thus
-            A[s] changes for each value of s in the volume)
-            A[s] is (n_pe x 6)
-        """
-        # the framework here is such that once zigzag[m] and m-line[m] are set
-        # up correctly, theta[s] = A[s]*B ALWAYS!
-        (S, M, R) = self.volShape
-        (a1, a2, a3, a4, a5, a6) = self.coefs
-        A = empty((M, len(self.coefs)), Float)
-        B = empty((len(self.coefs), R), Float)
-        theta = empty(self.volShape, Float)
-        
-        # m_line & zigzag define how the correction changes per PE line
-        # m_line is usually {-32,-31,...,30, 31}, but changes in multishot
-        # zigzag[m] defines which rows goes negative or positive (is [-1,1])
-        # this sets up for linear sampling:
-        zigzag = empty(M)
-        for r in range(M/2):
-            zigzag[m_pos[r]] = 1
-            zigzag[m_neg[r]] = -1
-        m_line = empty(M)
-        for r in range(self.xleave):
-            m_line[r:M:self.xleave] = arange(M/self.xleave)-M/(2*self.xleave)
-
-        # if data is 2-shot centric, must count mu=0 twice AND mu-negative is
-        # made positive. ie m_line is:
-        # [-M/2 + 1 ... 0] M [0 ... M/2 - 1],
-        #
-        # zigzag still depends on even-/odd-ness, [-1,1,...,1,1,...,1,-1]
-        # this fixes for centric sampling
-        if self.iscentric:
-            m_line[0:M/2] = -1*(m_line[0:M/2]+1)
-            zigzag[0:M/2] *= -1
-            
-        # build B matrix, always stays the same
-##         # ADD THIS PART TO CHANGE r->f(r)
-##         from pylab import power
-##         g = arange(R)-R/2
-##         g = g/(1 + power(g/(R*.45), 6))
-##         g += (R/2 - g[R/2])
-##         B[0] = g
-##         B[1] = g
-        B[0,:] = (arange(R)-R/2)*a1[0]
-        B[1,:] = (arange(R)-R/2)*a2[0]
-        B[2,:] = a3[0]
-        B[3,:] = a4[0]
-        B[4,:] = a5[0]
-        B[5,:] = a6[0]
-        
-        # build A matrix, changes slightly as s varies
-        A[:,0] = zigzag
-        A[:,1] = m_line
-        A[:,4] = zigzag
-        A[:,5] = m_line
-        for s in range(S):
-            # these are the slice-dependent columns
-            A[:,2] = s*zigzag
-            A[:,3] = s*m_line
-            theta[s] = matrixmultiply(A,B)
-            
-        return theta
-
+        return tuple(V)
+    
+#-----------------------------------------------------------------------------
     def run(self, image):
         # basic tasks here:
         # 1: data preparation
@@ -210,13 +112,13 @@ class UnbalPhaseCorrection (Operation):
         # (in the case of multishot interleave)
         self.iscentric = image.petable_name.find('cen') > 0 or \
                          image.petable_name.find('alt') > 0
-        self.xleave = self.iscentric and 1 or image.nseg
-                
+        self.xleave = self.iscentric and 1 or image.nseg                
+
         refVol = image.ref_data[0]
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
 
         # [self.lin1:self.lin2] is the linear region of the gradient
-        # self.lin_fe is the # of points in this region
+        # self.lin_fe is the number of points in this region
         lin_pix = int(round(self.lin_radius/image.xsize))
         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
@@ -240,7 +142,7 @@ class UnbalPhaseCorrection (Operation):
        
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
-        # (still have "true" referrences from from self.refShape, self.lin1, etc)
+        # (still have "true" referrences from self.refShape, self.lin1, etc)
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
 
         #set up some arrays
@@ -259,54 +161,69 @@ class UnbalPhaseCorrection (Operation):
         res = zeros((n_slice,), Float)
         ### FIND THE MEANS FOR EACH SLICE
         if self.iscentric:
-            for z in range(n_slice):
+            for s in range(n_slice):
                 # seems that for upper, skip 1st pos and last neg; 
                 #            for lower, skip last pos and last neg
                 # pos_order, neg_order naming scheme breaks down here!
-                # for mu < 0 rows, ODD rows go "positive"
+                # because for mu < 0 rows, where ref volume is upside-down,
+                # ODD rows go "positive"
                 # try to fix this some time
-                phs_pos_upper[z], mask_pu, res_pu = \
-                       self.masked_avg(take(phs_vol[z], \
+                phs_pos_upper[s], mask_pu, res_pu = \
+                       self.masked_avg(take(phs_vol[s], \
                                             pos_order[n_pe/4+1:]))
                 
-                phs_neg_upper[z], mask_nu, res_nu = \
-                       self.masked_avg(take(phs_vol[z], \
+                phs_neg_upper[s], mask_nu, res_nu = \
+                       self.masked_avg(take(phs_vol[s], \
                                             neg_order[n_pe/4:n_pe/2-1]))
                 
-                phs_pos_lower[z], mask_pl, res_pl = \
-                       self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
+                phs_pos_lower[s], mask_pl, res_pl = \
+                       self.masked_avg(take(phs_vol[s], neg_order[:n_pe/4-1]))
                 
-                phs_neg_lower[z], mask_nl, res_nl = \
-                       self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
+                phs_neg_lower[s], mask_nl, res_nl = \
+                       self.masked_avg(take(phs_vol[s], pos_order[1:n_pe/4]))
                 
-                res[z] = res_pu + res_nu + res_pl + res_nl
-                r_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
+                res[s] = res_pu + res_nu + res_pl + res_nl
+                r_mask[s] = mask_pu*mask_nu*mask_pl*mask_nl
         else:
-            for z in range(n_slice):
-                # for pos_order, skip 1st 2 for xleave=2
-                # for neg_order, skip last 2 for xleave=2
-                phs_pos[z], mask_p, res_p = \
-                            self.masked_avg(take(phs_vol[z], \
+            for s in range(n_slice):
+                # for pos_order, skip 1st xleave rows
+                # for neg_order, skip last xleave rows
+                phs_pos[s], mask_p, res_p = \
+                            self.masked_avg(take(phs_vol[s], \
                                             pos_order[self.xleave:]))
-                phs_neg[z], mask_n, res_n = \
-                            self.masked_avg(take(phs_vol[z], \
+                phs_neg[s], mask_n, res_n = \
+                            self.masked_avg(take(phs_vol[s], \
                                             neg_order[:-self.xleave]))
 
-                res[z] = res_p + res_n
-                r_mask[z] = mask_p*mask_n
+                res[s] = res_p + res_n
+                r_mask[s] = mask_p*mask_n
 
         # find 4 slices with smallest residual
         sres = sort(res)
         print sres
         selected = [find(res==c)[0] for c in sres[:4]]
         print selected
+##         from pylab import plot, show, subplot, title
+##         for c in selected:
+##             subplot(211)
+##             for row in take(phs_vol[c], pos_order[self.xleave:]):
+##                 plot(row)
+##             plot(r_mask[c], 'bo')
+##             subplot(212)
+##             title("slice %d, residual = %f"%(c,res[c]))
+##             for row in take(phs_vol[c], neg_order[:-self.xleave]):
+##                 plot(row)
+##             plot(r_mask[c], 'bo')
+##             show()
+            
         for c in selected:
             s_mask[c] = 1
             if(sum(r_mask[c]) == 0):
-                self.log("Could not find enough slices with sufficiently uniform\n"\
+                self.log("Not enough slices with sufficiently uniform\n"\
                 "phase profiles. Try shortening the lin_radius parameter to\n"\
                 "unwrap a less noisy region of the image phase.\n"\
-                "Current FOV: %fmm, Current lin_radius: %fmm\n"%(n_fe*image.xsize,self.lin_radius))
+                "Current FOV: %fmm, Current lin_radius: %fmm\n"\
+                         %(n_fe*image.xsize,self.lin_radius))
                 return
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         if self.iscentric:
@@ -317,7 +234,7 @@ class UnbalPhaseCorrection (Operation):
             print self.coefs
             theta_upper = self.correction_volume(pos_order, neg_order)
 
-            # THIS HAS CHANGED:
+            # THIS IS IN FLUX:
             # can use same inverse matrix to solve for lower half,
             # but need to transform it with diag([1, -1, 1, -1, 1, -1])
             v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
@@ -332,9 +249,58 @@ class UnbalPhaseCorrection (Operation):
             theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
             
         else:
-            self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
-            print self.coefs
-            theta_vol = self.correction_volume(pos_order, neg_order)            
+##             self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
+##             theta_vol = self.correction_volume(pos_order, neg_order)
+
+            a1 = empty((n_fe,), Float)
+            #a2 = empty((n_fe,), Float)
+            b1 = empty((n_fe,), Float)
+            #b2 = empty((n_fe,), Float)
+            # recompute means
+            phs_vol = unwrap_ref_volume(angle(inv_ref), 0, n_fe)
+            phs_pos = empty((n_slice, n_fe), Float)
+            phs_neg = empty((n_slice, n_fe), Float)
+            for s in range(n_slice):
+                
+                phs_pos[s] = mean(take(phs_vol[s], \
+                                            pos_order[self.xleave:]))
+                phs_neg[s] = mean(take(phs_vol[s], \
+                                            neg_order[:-self.xleave]))
+            for r in range(n_fe):
+##                 (a1[r], a2[r], b1[r], b2[r]) = \
+##                         self.solve_phase2(phs_pos[:,r], phs_neg[:,r], s_mask)
+                (a1[r], b1[r]) = \
+                        self.solve_phase2(phs_pos[:,r], phs_neg[:,r], s_mask)
+
+            from imaging.util import checkerline
+            theta_vol = empty(self.volShape, Float)
+            m_line = arange(n_pe)-n_pe/2
+            s_line = arange(n_slice)
+            zigzag = checkerline(n_pe)
+            for s in range(n_slice):
+                for m in range(n_pe):
+                    for r in range(n_fe):
+##                         theta_vol[s,m,r] = m_line[m]*(b1[r]+s*b2[r]) + \
+##                                            zigzag[m]*(a1[r]+s*a2[r])
+                        theta_vol[s,m,r] = m_line[m]*(b1[r]) + \
+                                           zigzag[m]*(a1[r])
+
+##             from pylab import show, subplot, title, plot
+##             for s in range(n_slice):
+##                 subplot(2,1,1)
+##                 plot(phs_pos[s])
+##                 subplot(2,1,2)
+##                 plot(phs_neg[s])
+##                 title("slice #%d"%(s,))
+##                 show()
+##                 subplot(2,1,1)
+##                 for r in range(0,n_pe,2):
+##                     plot(theta_vol[s,r])
+##                 subplot(2,1,2)
+##                 for r in range(1,n_pe,2):
+##                     plot(theta_vol[s,r])
+##                 title("correction slice #%d"%(s,))
+##                 show()
 
         for dvol in image.data:
             dvol[:] = apply_phase_correction(dvol, -theta_vol)
