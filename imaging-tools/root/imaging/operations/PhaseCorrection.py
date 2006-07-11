@@ -19,4 +19,5 @@ class PhaseCorrection (Operation):
         ref_phs = angle(ifft(image.ref_data[0]))
         
         # apply correction to image data
-        image.data = apply_phase_correction(image.data, -ref_phs)
+        for dvol in image.data:
+            dvol[:] = apply_phase_correction(dvol, -ref_phs)
