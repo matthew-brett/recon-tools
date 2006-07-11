@@ -18,8 +18,11 @@ class Rot90 (Operation):
                         "radiological or neurological"),
               )
 
+    # x-size/y-size swap is not yet reflected
+
     def run(self, image):
         data = image.data
+        dshape = data.shape
         if self.orient.lower()=='radiological':
             # psi = 90
             xform = lambda x: rot90(x)
@@ -29,7 +32,9 @@ class Rot90 (Operation):
         for vol in data:
             for slice in vol:
                 rotated = xform(slice)
-                reshape(slice, rotated.shape)
+                slice = reshape(slice, rotated.shape)
                 slice[:] = rotated.copy()
+        data = reshape(data, (dshape[0],dshape[1],rotated.shape[0],
+                              rotated.shape[1]))
         image.setData(data)
         image.noteRot()

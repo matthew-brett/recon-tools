@@ -219,35 +219,50 @@ class NiftiWriter (object):
     #-------------------------------------------------------------------------
     def make_hdr(self):
         "Pack a NIFTI format header."
-        # (un)rotation is handled like this: take the image as transformed with
-        # 2 rotations, S, Rb (S is the xform from scanner space into the
-        # data-ordering in the FID file, Rb is the xform applied by slicing
-        # coronal-wise, sagital-wise, etc with the slice gradient)
-        # then I = Rb(psi)*Rb(theta)*Rb(phi)*S*I_real
-        # The goal is to encode a quaternion which does this inverse:
-        # R = R(-S)*R(-phi)*R(-theta)*R(-psi)
+        # The NIFTI Q-form field is helpful for keeping track of anatomical
+        # dimensions in the presence of rotations.
         #
-        # the euler angles for inverting S have been determined to be
-        # (phi=pi, theta=0, psi=-pi/2)
+        # (un)rotation is handled like this: take the image as transformed with
+        # 2 rotations, Qs, Rb (Qs represents a transform between scanner space
+        # and a radiological interpretation of the FID file, Rb is the xform
+        # applied by slicing coronal-wise, sagital-wise, etc with the slice
+        # gradient).
+        #     Then I_m = Qs*Rb(psi,theta,phi)*I_real
+        # The Varian scanner uses a transformation composed of:
+        #     R = Rk(phi)*Rj(psi)*Ri(theta)
+        # The goal is to encode a quaternion which corrects this rotation:
+        #     Rc = Ri(-theta)*Rj(-psi)*Rk(-phi)*inv(Qs)
+        #     so I_real = Rc*I_m
+        #
+        # I have chosen to first put the image into left-handed "radiological"
+        # coordinates by reflecting over the y-axis (psi=pi) and rotating the
+        # new x-y plane (phi=-pi/2)
+        #
         # The euler angles for slicing rotations are from procpar
         # To avoid the chance of interpolation, these angles are "normalized"
         # to the closest multiple of pi/2 (ie 22 degrees->0, 49 degrees->90)
-        #
+        # 
         # There is also the chance of software rotations whose xform would
         # left-multiply I above; this will be undone by the Qsoft quaternion
+        # (not working yet)
 
         image = self.image
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
                             (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
-        
-        #Qsoft = qmult(euler2quat(theta=pi),
-        #              euler2quat(psi=-pi/2*image.zRots))
+        #print "phi=%f, theta=%f, psi=%f"%(pdict.phi[0],pdict.theta[0],
+        #                                  pdict.psi[0])
+
         Qsoft = euler2quat(psi=-pi/2*image.zRots)
-        Qscanner = euler2quat(phi=pi, psi=-pi/2)
-        Qobl = qmult(euler2quat(phi=-phi),qmult(euler2quat(theta=-theta),
-                                                euler2quat(psi=-psi)))
-        Qform = qmult(Qsoft,qmult(Qscanner,Qobl))
+        # from scanner to image-> flip on y-axis, then rotate z
+        Qscanner = qmult(euler2quat(phi=-pi/2),euler2quat(psi=pi))
+        # Y-angle (psi) keeps original sign due to LHS-RHS flip
+        # NIFTI rotations are applied in the reverse order of Varian's,
+        # so don't need to compose them backwards:
+        Qobl = euler2quat(theta=-theta, psi=psi, phi=-phi)
+        #Qform = qmult(Qobl,Qscanner)
+        # don't know how to do Qsoft yet
+        Qform = qmult(Qsoft, qmult(Qobl, Qscanner))
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
           'slice_code': NIFTI_SLICE_SEQ_INC,
@@ -264,7 +279,7 @@ class NiftiWriter (object):
           'zsize': image.zsize,
           'tsize': image.tsize,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
-          'qfac': -1.0, # this makes all rotations in right-handed terms now!
+          'qfac': -1.0,
           'qform_code': NIFTI_XFORM_SCANNER_ANAT,
           'quatern_b': Qform[1],
           'quatern_c': Qform[2],

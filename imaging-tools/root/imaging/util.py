@@ -336,7 +336,7 @@ def qconj(Q):
     return asarray([Q[0], -Q[1], -Q[2], -Q[3]])
 
 #-----------------------------------------------------------------------------
-def euler2quat(phi=0, theta=0, psi=0):
+def euler2quat(theta=0, psi=0, phi=0):
     return matrix2quat(eulerRot(phi=phi,theta=theta,psi=psi))
 
 #-----------------------------------------------------------------------------
@@ -369,26 +369,29 @@ def matrix2quat(m):
     return asarray([w, ii, jj, kk])
 
 #-----------------------------------------------------------------------------
-def eulerRot(phi=0, theta=0, psi=0):
+def eulerRot(theta=0, psi=0, phi=0):
+    # NIFTI defines A = B*C*D = Ri(theta)*Rk(psi)*Rj(phi)
+    # so the quaternions will have this convention
+    # http://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/figqformusage
     aboutX = zeros((3,3),Float)
     aboutY = zeros((3,3),Float)
     aboutZ = zeros((3,3),Float)
     # bank
     aboutX[0,0] = 1
-    aboutX[1,1] = aboutX[2,2] = cos(phi)
-    aboutX[1,2] = -sin(phi)
-    aboutX[2,1] = sin(phi)
+    aboutX[1,1] = aboutX[2,2] = cos(theta)
+    aboutX[1,2] = sin(theta)
+    aboutX[2,1] = -sin(theta)
     # attitude
     aboutY[1,1] = 1
-    aboutY[0,0] = aboutY[2,2] = cos(theta)
-    aboutY[0,2] = sin(theta)
-    aboutY[2,0] = -sin(theta)
+    aboutY[0,0] = aboutY[2,2] = cos(psi)
+    aboutY[0,2] = sin(psi)
+    aboutY[2,0] = -sin(psi)
     # heading
     aboutZ[2,2] = 1
-    aboutZ[0,0] = aboutZ[1,1] = cos(psi)
-    aboutZ[0,1] = -sin(psi)
-    aboutZ[1,0] = sin(psi)
-    M = matrixmultiply(aboutZ, matrixmultiply(aboutY, aboutX))
+    aboutZ[0,0] = aboutZ[1,1] = cos(phi)
+    aboutZ[0,1] = sin(phi)
+    aboutZ[1,0] = -sin(phi)
+    M = matrixmultiply(aboutX, matrixmultiply(aboutY, aboutZ))
     # make sure no rounding error proprogates from here
     putmask(M, abs(M)<1e-5, 0)
     return M

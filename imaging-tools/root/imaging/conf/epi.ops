@@ -2,20 +2,11 @@
 flip_slices=False
 
 [UnbalPhaseCorrection]
-#[PhaseCorrection]
-
-[SegmentationCorrection]
 
 [FermiFilter]
 trans_width=0.3
 cutoff=0.95
 
-[Window]
-win_name = hanning
-
 [InverseFFT]
-
-#[GeometricUndistortion]
-#fmap_file=fieldmap-0
 
 [ViewImage]
