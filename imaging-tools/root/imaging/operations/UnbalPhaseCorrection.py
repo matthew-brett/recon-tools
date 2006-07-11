@@ -261,7 +261,7 @@ class UnbalPhaseCorrection (Operation):
         if self.iscentric:
             for z in range(n_slice):
                 # seems that for upper, skip 1st pos and last neg; 
-                #            for lower, skip last pos and last neg
+                #            for lower, skip 1st pos and last neg
                 # pos_order, neg_order naming scheme breaks down here!
                 # for mu < 0 rows, ODD rows go "positive"
                 # try to fix this some time
@@ -277,7 +277,7 @@ class UnbalPhaseCorrection (Operation):
                        self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
                 
                 phs_neg_lower[z], mask_nl, res_nl = \
-                       self.masked_avg(take(phs_vol[z], pos_order[:n_pe/4-1]))
+                       self.masked_avg(take(phs_vol[z], pos_order[1:n_pe/4]))
                 
                 res[z] = res_pu + res_nu + res_pl + res_nl
                 r_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
@@ -297,9 +297,7 @@ class UnbalPhaseCorrection (Operation):
 
         # find 4 slices with smallest residual
         sres = sort(res)
-        print sres
         selected = [find(res==c)[0] for c in sres[:4]]
-        print selected
         for c in selected:
             s_mask[c] = 1
             if(sum(r_mask[c]) == 0):
@@ -313,16 +311,11 @@ class UnbalPhaseCorrection (Operation):
             # want to correct both segments "separately" (by splicing 2 thetas)
             v = self.solve_phase(phs_pos_upper, phs_neg_upper, \
                                           r_mask, s_mask)
-            self.coefs = tuple(matrixmultiply(diag([1,1,1,1,1,1]),asarray(v)))
+            self.coefs = v
             print self.coefs
             theta_upper = self.correction_volume(pos_order, neg_order)
 
-            # THIS HAS CHANGED:
-            # can use same inverse matrix to solve for lower half,
-            # but need to transform it with diag([1, -1, 1, -1, 1, -1])
             v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
-##             self.coefs = tuple(matrixmultiply(diag([1, -1, 1, -1, 1, -1]), \
-##                                               asarray(v)))
             self.coefs = v
             print self.coefs        
             theta_lower = self.correction_volume(pos_order, neg_order)
