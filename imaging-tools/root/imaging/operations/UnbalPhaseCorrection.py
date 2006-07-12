@@ -21,7 +21,183 @@ class UnbalPhaseCorrection (Operation):
                   description="Radius of the region of greatest linearity "\
                   "within the magnetic field, in mm (normally 70-80mm)"),
         )
-    
+
+
+
+    def run(self, image):
+        # basic tasks here:
+        # 1: data preparation
+        # 2: phase unwrapping
+        # 3: find mean phase lines (2 means or 4, depending on sequence)
+        # 4: solve for linear coefficients
+        # 5: create correction matrix from coefs
+        # 6: apply correction to all image volumes
+        #
+        # *all linearly-sampled data can be treated in a generalized way by
+        # paying attention to the interleave factor (self.xleave)
+        # *centric sampled data, whose k-space trajectory had directions,
+        # needs special treatment: basically the general case is handled in
+        # separated parts
+        
+        if not image.ref_data:
+            self.log("No reference volume, quitting")
+            return
+        if len(image.ref_vols) > 1:
+            self.log("Could be performing Balanced Phase Correction!")
+
+        self.volShape = image.data.shape[1:]
+        refVol = image.ref_data[0]        
+        n_slice, n_pe, n_fe = self.refShape = refVol.shape
+
+        # [self.lin1:self.lin2] is the linear region of the gradient
+        # self.lin_fe is the # of points in this region
+        lin_pix = int(round(self.lin_radius/image.xsize))
+        (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
+                                 ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
+        self.lin_fe = self.lin2-self.lin1
+        self.FOV = image.xsize*n_fe
+        # iscentric says whether kspace is multishot centric;
+        # xleave is the factor to which kspace data has been interleaved
+        # (in the case of multishot interleave)
+        self.iscentric = image.petable_name.find('cen') > 0 or \
+                         image.petable_name.find('alt') > 0
+        self.xleave = self.iscentric and 1 or image.nseg
+        # want to fork the code based on sampling style
+        theta = self.iscentric and self.run_centric(ifft(refVol)) or \
+                self.run_linear(ifft(refVol))
+
+        for dvol in image.data:
+            dvol[:] = apply_phase_correction(dvol, -theta)
+
+    def run_linear(self, inv_ref):
+        n_slice, n_pe, n_fe = self.refShape
+        # conj order tells us how to make the unbalanced phase differences
+        conj_order = arange(n_pe)
+        shift(conj_order, 0, -self.xleave)
+        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
+        # set up data indexing helpers, based on acquisition order.            
+        # pos_order, neg_order define which rows in a slice are grouped
+        pos_order = zeros(n_pe/2)
+        neg_order = zeros(n_pe/2)
+        for n in range(self.xleave):
+            pos_order[n:n_pe/2:self.xleave] = arange(n,n_pe,2*self.xleave)
+            neg_order[n:n_pe/2:self.xleave] = arange(self.xleave+n,n_pe,2*self.xleave)
+        # comes back truncated to linear region:
+        # from this point on, into the svd, work with truncated arrays
+        # (still have "true" referrences from from self.refShape and self.lin1)
+        phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
+        phs_pos = empty((n_slice, self.lin_fe), Float)
+        phs_neg = empty((n_slice, self.lin_fe), Float)
+        s_mask = zeros(n_slice)
+        r_mask = zeros((n_slice, self.lin_fe))
+        res = zeros((n_slice,), Float)
+
+        ### FIND THE MEANS FOR EACH SLICE
+        for s in range(n_slice):
+            # for pos_order, skip 1st 2 for xleave=2
+            # for neg_order, skip last 2 for xleave=2
+            phs_pos[s], mask_p, res_p = \
+                        self.masked_avg(take(phs_vol[s], \
+                                             pos_order[self.xleave:]))
+            phs_neg[s], mask_n, res_n = \
+                        self.masked_avg(take(phs_vol[s], \
+                                             neg_order[:-self.xleave]))
+
+            res[s] = res_p + res_n
+            r_mask[s] = mask_p*mask_n
+
+        # find 4 slices with smallest residual
+        sres = sort(res)
+        selected = [find(res==c)[0] for c in sres[:4]]
+        for c in selected:
+            s_mask[c] = 1
+            if(sum(r_mask[c]) == 0):
+                self.log("Could not find enough slices with sufficiently uniform\n"\
+                "phase profiles. Try shortening the lin_radius parameter to\n"\
+                "unwrap a less noisy region of the image phase.\n"\
+                "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
+                                                               self.lin_radius))
+                return
+        ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
+        self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
+        print self.coefs
+        return self.correction_volume(pos_order, neg_order) 
+
+    def run_centric(self, inv_ref):
+        n_slice, n_pe, n_fe = self.refShape
+        # conj order tells us how to make the unbalanced phase differences
+        conj_order = arange(n_pe)
+        shift(conj_order[:n_pe/2],0,1)
+        shift(conj_order[n_pe/2:],0,-1)
+        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
+        # set up data indexing helpers, based on acquisition order.            
+        # pos_order, neg_order define which rows in a slice are grouped
+        pos_order = arange(0,n_pe,2)
+        pos_order[:n_pe/4] += 1
+        neg_order = arange(1,n_pe,2)
+        neg_order[:n_pe/4] -= 1
+        # comes back truncated to linear region:
+        # from this point on, into the svd, work with truncated arrays
+        # (still have "true" referrences from from self.refShape, self.lin1, etc)
+        phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
+        # set up some arrays for mean phases
+        phs_pos_upper = empty((n_slice, self.lin_fe), Float)
+        phs_pos_lower = empty((n_slice, self.lin_fe), Float)
+        phs_neg_upper = empty((n_slice, self.lin_fe), Float)
+        phs_neg_lower = empty((n_slice, self.lin_fe), Float)
+        s_mask = zeros(n_slice)
+        r_mask = zeros((n_slice, self.lin_fe))
+        res = zeros((n_slice,), Float)
+        for s in range(n_slice):
+            # seems that for upper, skip 1st pos and last neg; 
+            #            for lower, skip 1st pos and last neg
+            # pos_order, neg_order naming scheme breaks down here!
+            # for mu < 0 rows, ODD rows go "positive"
+            # try to fix this some time
+            phs_pos_upper[s], mask_pu, res_pu = \
+                        self.masked_avg(take(phs_vol[s], \
+                                             pos_order[n_pe/4+1:]))            
+            phs_neg_upper[s], mask_nu, res_nu = \
+                        self.masked_avg(take(phs_vol[s], \
+                                             neg_order[n_pe/4:n_pe/2-1]))
+            phs_pos_lower[s], mask_pl, res_pl = \
+                        self.masked_avg(take(phs_vol[s], pos_order[:n_pe/4-1]))
+            phs_neg_lower[s], mask_nl, res_nl = \
+                        self.masked_avg(take(phs_vol[s], neg_order[1:n_pe/4]))
+                
+            res[s] = res_pu + res_nu + res_pl + res_nl
+            r_mask[s] = mask_pu*mask_nu*mask_pl*mask_nl
+
+        
+        # find 4 slices with smallest residual
+        sres = sort(res)
+        selected = [find(res==c)[0] for c in sres[:4]]
+        for c in selected:
+            s_mask[c] = 1
+            if(sum(r_mask[c]) == 0):
+                self.log("Could not find enough slices with sufficiently uniform\n"\
+                "phase profiles. Try shortening the lin_radius parameter to\n"\
+                "unwrap a less noisy region of the image phase.\n"\
+                "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
+                                                               self.lin_radius))
+                return
+        ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
+        # want to correct both segments "separately" (by splicing 2 thetas)
+        v = self.solve_phase(phs_pos_upper, phs_neg_upper, r_mask, s_mask)
+        self.coefs = v
+        print self.coefs
+        theta_upper = self.correction_volume(pos_order, neg_order)
+        
+        v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
+        self.coefs = v
+        print self.coefs        
+        theta_lower = self.correction_volume(pos_order, neg_order)
+        
+        theta_vol = empty(theta_lower.shape, theta_lower.typecode())
+        theta_vol[:,:n_pe/2,:] = theta_lower[:,:n_pe/2,:]
+        theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
+        return theta_vol
+
     def masked_avg(self, S):
         """
         Take all pos or neg lines in a slice, return the mean of these lines
@@ -135,6 +311,7 @@ class UnbalPhaseCorrection (Operation):
         # m_line & zigzag define how the correction changes per PE line
         # m_line is usually {-32,-31,...,30, 31}, but changes in multishot
         # zigzag[m] defines which rows goes negative or positive (is [-1,1])
+        # it should follow from "pos_order"/"neg_order" groupings
         # this sets up for linear sampling:
         zigzag = empty(M)
         for r in range(M/2):
@@ -148,11 +325,10 @@ class UnbalPhaseCorrection (Operation):
         # made positive. ie m_line is:
         # [-M/2 + 1 ... 0] M [0 ... M/2 - 1],
         #
-        # zigzag still depends on even-/odd-ness, [-1,1,...,1,1,...,1,-1]
+        # zigzag should already be [-1,1,...,1,1,...,1,-1]
         # this fixes for centric sampling
         if self.iscentric:
             m_line[0:M/2] = -1*(m_line[0:M/2]+1)
-            zigzag[0:M/2] *= -1
             
         # build B matrix, always stays the same
 ##         # ADD THIS PART TO CHANGE r->f(r)
@@ -181,173 +357,3 @@ class UnbalPhaseCorrection (Operation):
             theta[s] = matrixmultiply(A,B)
             
         return theta
-
-    def run(self, image):
-        # basic tasks here:
-        # 1: data preparation
-        # 2: phase unwrapping
-        # 3: find mean phase lines (2 means or 4, depending on sequence)
-        # 4: solve for linear coefficients
-        # 5: create correction matrix from coefs
-        # 6: apply correction to all image volumes
-        #
-        # *all linearly-sampled data can be treated in a generalized way by
-        # paying attention to the interleave factor (self.xleave)
-        # *centric sampled data, whose k-space trajectory had directions,
-        # needs special treatment: basically the general case is handled in
-        # separated parts
-        
-        if not image.ref_data:
-            self.log("No reference volume, quitting")
-            return
-        if len(image.ref_vols) > 1:
-            self.log("Could be performing Balanced Phase Correction!")
-
-        self.volShape = image.data.shape[1:]
-        # set up data indexing helpers, based on acquisition order.
-        # iscentric says whether kspace is multishot centric;
-        # xleave is the factor to which kspace data has been interleaved
-        # (in the case of multishot interleave)
-        self.iscentric = image.petable_name.find('cen') > 0 or \
-                         image.petable_name.find('alt') > 0
-        self.xleave = self.iscentric and 1 or image.nseg
-                
-        refVol = image.ref_data[0]
-        n_slice, n_pe, n_fe = self.refShape = refVol.shape
-
-        # [self.lin1:self.lin2] is the linear region of the gradient
-        # self.lin_fe is the # of points in this region
-        lin_pix = int(round(self.lin_radius/image.xsize))
-        (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
-                                 ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
-        self.lin_fe = self.lin2-self.lin1
-
-        conj_order = arange(n_pe)
-        if self.iscentric:
-            shift(conj_order[:n_pe/2],0,1)
-            shift(conj_order[n_pe/2:],0,-1)
-        else:
-            shift(conj_order, 0, -self.xleave)
-        inv_ref = ifft(refVol)
-        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
-
-        # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = zeros(n_pe/2)
-        neg_order = zeros(n_pe/2)
-        for n in range(self.xleave):
-            pos_order[n:n_pe/2:self.xleave] = arange(n,n_pe,2*self.xleave)
-            neg_order[n:n_pe/2:self.xleave] = arange(self.xleave+n,n_pe,2*self.xleave)
-       
-        # comes back truncated to linear region:
-        # from this point on, into the svd, work with truncated arrays
-        # (still have "true" referrences from from self.refShape, self.lin1, etc)
-        phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
-
-        #set up some arrays
-        if self.iscentric:
-            # centric has 4 distinct profile (2 sets of symmetries)
-            phs_pos_upper = empty((n_slice, self.lin_fe), Float)
-            phs_pos_lower = empty((n_slice, self.lin_fe), Float)
-            phs_neg_upper = empty((n_slice, self.lin_fe), Float)
-            phs_neg_lower = empty((n_slice, self.lin_fe), Float)
-        else:
-            phs_pos = empty((n_slice, self.lin_fe), Float)
-            phs_neg = empty((n_slice, self.lin_fe), Float)
-        
-        s_mask = zeros(n_slice)
-        r_mask = zeros((n_slice, self.lin_fe))
-        res = zeros((n_slice,), Float)
-        ### FIND THE MEANS FOR EACH SLICE
-        if self.iscentric:
-            for z in range(n_slice):
-                # seems that for upper, skip 1st pos and last neg; 
-                #            for lower, skip 1st pos and last neg
-                # pos_order, neg_order naming scheme breaks down here!
-                # for mu < 0 rows, ODD rows go "positive"
-                # try to fix this some time
-                phs_pos_upper[z], mask_pu, res_pu = \
-                       self.masked_avg(take(phs_vol[z], \
-                                            pos_order[n_pe/4+1:]))
-                
-                phs_neg_upper[z], mask_nu, res_nu = \
-                       self.masked_avg(take(phs_vol[z], \
-                                            neg_order[n_pe/4:n_pe/2-1]))
-                
-                phs_pos_lower[z], mask_pl, res_pl = \
-                       self.masked_avg(take(phs_vol[z], neg_order[:n_pe/4-1]))
-                
-                phs_neg_lower[z], mask_nl, res_nl = \
-                       self.masked_avg(take(phs_vol[z], pos_order[1:n_pe/4]))
-                
-                res[z] = res_pu + res_nu + res_pl + res_nl
-                r_mask[z] = mask_pu*mask_nu*mask_pl*mask_nl
-        else:
-            for z in range(n_slice):
-                # for pos_order, skip 1st 2 for xleave=2
-                # for neg_order, skip last 2 for xleave=2
-                phs_pos[z], mask_p, res_p = \
-                            self.masked_avg(take(phs_vol[z], \
-                                            pos_order[self.xleave:]))
-                phs_neg[z], mask_n, res_n = \
-                            self.masked_avg(take(phs_vol[z], \
-                                            neg_order[:-self.xleave]))
-
-                res[z] = res_p + res_n
-                r_mask[z] = mask_p*mask_n
-
-        # find 4 slices with smallest residual
-        sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:4]]
-        for c in selected:
-            s_mask[c] = 1
-            if(sum(r_mask[c]) == 0):
-                self.log("Could not find enough slices with sufficiently uniform\n"\
-                "phase profiles. Try shortening the lin_radius parameter to\n"\
-                "unwrap a less noisy region of the image phase.\n"\
-                "Current FOV: %fmm, Current lin_radius: %fmm\n"%(n_fe*image.xsize,self.lin_radius))
-                return
-        ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
-        if self.iscentric:
-            # want to correct both segments "separately" (by splicing 2 thetas)
-            v = self.solve_phase(phs_pos_upper, phs_neg_upper, \
-                                          r_mask, s_mask)
-            self.coefs = v
-            print self.coefs
-            theta_upper = self.correction_volume(pos_order, neg_order)
-
-            v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
-            self.coefs = v
-            print self.coefs        
-            theta_lower = self.correction_volume(pos_order, neg_order)
-
-            theta_vol = empty(theta_lower.shape, theta_lower.typecode())
-            theta_vol[:,:n_pe/2,:] = theta_lower[:,:n_pe/2,:]
-            theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
-            
-        else:
-            self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
-            print self.coefs
-            theta_vol = self.correction_volume(pos_order, neg_order)            
-
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -theta_vol)
-
-##         print "computed coefficients:"
-##         print "\ta1: %f, a2: %f, a3: %f, a4: %f, a5: %f, a6: %f"\
-##               %self.coefs
-
-## ## Uncomment this section to see how the computed lines fit the real lines
-##         (a1,a2,a3,a4,a5,a6) = self.coefs
-##         from pylab import title, plot, show
-##         for z in range(n_slice):
-##             plot(find(r_mask[z]), take(phs_pos[z], find(r_mask[z])))
-##             plot(find(r_mask[z]), take(phs_neg[z], find(r_mask[z])))
-##             plot((arange(self.lin_fe)+self.lin1)*(-a2 - 2*a1) + z*(-a4 - 2*a3) - a6 - 2*a5, 'g--')
-##             plot((arange(self.lin_fe)+self.lin1)*(-a2 + 2*a1) + z*(-a4 + 2*a3) - a6 + 2*a5, 'b--')
-##             tstr = "slice %d"%(z)
-##             if s_mask[z]: tstr += " (selected)"
-##             title(tstr)
-##             show()
-
-            
-
