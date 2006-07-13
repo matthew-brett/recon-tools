@@ -1,9 +1,9 @@
 /*
- *  untitled.c
+ *  unwrap_phase.c
  *  
  *
  *  Created by miket on 6/13/06.
- *  Copyright 2006 __MyCompanyName__. All rights reserved.
+ *  Copyright 2006 Mike Trumpis.
  *
  */
 #include <stdio.h>
@@ -12,7 +12,7 @@
 #include "Numeric/arrayobject.h"
 #include "snaphu_unwrap.h"
 
-static char doc_lpUnwrap[] = "Performs 2D phase unwrapping on a 2D Numeric array, via the LP-norm method";
+static char doc_lpUnwrap[] = "Performs 2D phase unwrapping on a Numeric array via the LP-norm method";
 
 PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   PyObject *op1;
@@ -31,7 +31,6 @@ PyObject *punwrap_lpUnwrap(PyObject *self, PyObject *args) {
   typenum_phs = PyArray_ObjectType(op1,0);
   if(typenum_phs != PyArray_FLOAT) {
     PyErr_SetString(PyExc_TypeError, "Currently I can only handle single-precision floating point numbers");
-//      Py_XDECREF(ap1);
     return NULL;
   }
   ap1 = (PyArrayObject *)PyArray_ContiguousFromObject(op1, typenum_phs, 0, 0);
@@ -56,7 +55,6 @@ static struct PyMethodDef punwrap_module_methods[] = {
 
 DL_EXPORT(void) init_punwrap(void) {
   PyObject *m;
-  
   m = Py_InitModule3("_punwrap", punwrap_module_methods, "c library for phase unwrapping in python");
   import_array();
 }

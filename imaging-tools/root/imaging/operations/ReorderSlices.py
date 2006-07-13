@@ -1,6 +1,7 @@
 from Numeric import empty
-from pylab import mlab, zeros, arange, take
+from pylab import mlab, zeros, arange, take, array, find
 from imaging.operations import Operation, Parameter
+from imaging.util import reverse
 
 ##############################################################################
 class ReorderSlices (Operation):
@@ -12,18 +13,16 @@ class ReorderSlices (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-        nslice = image.nslice
-        imgdata = image.data
-        refdata = image.ref_data
-        # this needs testing on odd number of slices
-        midpoint = nslice/2 + (nslice%2 and 1 or 0)
-        tmp = empty(imgdata.shape, imgdata.typecode())
-        indices = nslice - 1 - arange(nslice)
-        tmp[:,::2] = take(imgdata, indices[:midpoint], axis=1)
-        tmp[:,1::2] = take(imgdata, indices[midpoint:], axis=1)
-        imgdata[:] = self.flip_slices and take(tmp, indices, axis=1) or tmp
-        tmp = empty(refdata.shape, refdata.typecode())
-        tmp[:,::2] = take(refdata, indices[:midpoint], axis=1)
-        tmp[:,1::2] = take(refdata, indices[midpoint:], axis=1)
-        refdata[:] = self.flip_slices and take(tmp, indices, axis=1) or tmp
+        S = image.nslice
+        img = image.data
+        s_order = array(range(S-1,-1,-2) + range(S-2,-1,-2))
+        s_ind = array([find(s_order==s)[0] for s in range(S)])
+        img[:] = self.flip_slices and take(img, reverse(s_ind), axis=1) \
+                                  or take(img, s_ind, axis=1)
+        if hasattr(image, 'ref_data'):
+            ref = image.ref_data
+            ref[:] = self.flip_slices and take(ref, reverse(s_ind), axis=1) \
+                                      or take(ref, s_ind, axis=1)
+
+        return 
         

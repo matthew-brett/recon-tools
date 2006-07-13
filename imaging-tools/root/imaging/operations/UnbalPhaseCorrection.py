@@ -335,9 +335,8 @@ class UnbalPhaseCorrection (Operation):
 ##         from pylab import power
 ##         g = arange(R)-R/2
 ##         g = g/(1 + power(g/(R*.45), 6))
-##         g += (R/2 - g[R/2])
-##         B[0] = g
-##         B[1] = g
+##         B[0] = g*a1[0]
+##         B[1] = g*a2[0]
         B[0,:] = (arange(R)-R/2)*a1[0]
         B[1,:] = (arange(R)-R/2)*a2[0]
         B[2,:] = a3[0]

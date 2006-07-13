@@ -6,7 +6,7 @@ import struct
 from Numeric import empty
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, norm, \
+  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, norm,\
   matrixmultiply, trace, putmask
 from punwrap import unwrap2D
 
@@ -87,7 +87,10 @@ def half_shift(matrix, dim=0):
     tmp = matrix.copy()
     shift(tmp, dim, matrix.shape[-1-dim]/2)
     return tmp
-    
+
+#-----------------------------------------------------------------------------
+def reverse(seq): return take(seq, -1-arange(len(seq)))
+
 #-----------------------------------------------------------------------------
 def embedIm(subIm, Im, yOff, xOff):
     """
@@ -144,6 +147,7 @@ def complex_checkerboard(rows, cols):
  
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
+    "apply a phase correction to k-space"
     corrector = cos(phase) + 1.j*sin(phase)
     return fft(ifft(image)*corrector).astype(image.typecode())
 
