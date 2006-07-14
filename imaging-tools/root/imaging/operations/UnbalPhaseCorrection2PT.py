@@ -284,26 +284,12 @@ class UnbalPhaseCorrection2PT (Operation):
 ##                                            zigzag[m]*(a1[r]+s*a2[r])
                         theta_vol[s,m,r] = m_line[m]*(b1[r]) + \
                                            zigzag[m]*(a1[r])
-
-##             from pylab import show, subplot, title, plot
-##             for s in range(n_slice):
-##                 subplot(2,1,1)
-##                 plot(phs_pos[s])
-##                 subplot(2,1,2)
-##                 plot(phs_neg[s])
-##                 title("slice #%d"%(s,))
-##                 show()
-##                 subplot(2,1,1)
-##                 for r in range(0,n_pe,2):
-##                     plot(theta_vol[s,r])
-##                 subplot(2,1,2)
-##                 for r in range(1,n_pe,2):
-##                     plot(theta_vol[s,r])
-##                 title("correction slice #%d"%(s,))
-##                 show()
-
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -theta_vol)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = apply_phase_correction(image.data, -theta_vol)
+        else:
+            for dvol in image.data:
+                dvol[:] = apply_phase_correction(dvol, -theta_vol)
 
 ##         print "computed coefficients:"
 ##         print "\ta1: %f, a2: %f, a3: %f, a4: %f, a5: %f, a6: %f"\

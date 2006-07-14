@@ -66,8 +66,12 @@ class UnbalPhaseCorrection (Operation):
         theta = self.iscentric and self.run_centric(ifft(refVol)) or \
                 self.run_linear(ifft(refVol))
 
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -theta)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = apply_phase_correction(image.data, -theta)
+        else:
+            for dvol in image.data:
+                dvol[:] = apply_phase_correction(dvol, -theta)
 
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape

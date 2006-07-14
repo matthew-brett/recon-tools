@@ -1,13 +1,15 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
 import os
-
 import imaging.conf
 from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
 from imaging.tools import OrderedConfigParser, ConsoleTool
 from imaging.operations import OperationManager, RunLogger, WriteImage
 from imaging.varian.FidImage import getPulseSeq
+
+# here is a global flag to control fast/slow array logic
+_FAST_ARRAY = False
 
 ##############################################################################
 class Recon (ConsoleTool):
@@ -61,7 +63,12 @@ class Recon (ConsoleTool):
 
       Option("-l", "--log-file", default=default_logfile,
         help="where to record reconstruction details ('%s' by default)"\
-             %default_logfile))
+             %default_logfile),
+
+      Option("-x", action="store_true", dest="fastArray", default=False,
+             help="this may shave off a few seconds from the reconstruction, "\
+             "but expect memory usage to go up by a factor of 4."))
+      
 
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
@@ -174,7 +181,8 @@ class Recon (ConsoleTool):
         try: vol_end = int(parts[1] or -1)
         except ValueError: self.error(
           "Bad vol-range end index '%s'. Must be an integer."%parts[1])
-        return vol_start, vol_end
+        return (vol_start, vol_end) != (0,-1) and (vol_start, vol_end) \
+                                              or ()
 
     #-------------------------------------------------------------------------
     def getOptions(self):
@@ -189,6 +197,7 @@ class Recon (ConsoleTool):
         """
     
         options, args = self.parse_args()
+        options.vrange = self.parseVolRange(options.vol_range)
         # Recon can be run with these combos defined:
         # (_, _) (first logic stage, try to find fid files in pwd)
         # (args, _) (2nd logic stage, try to find default oplist)
@@ -207,7 +216,8 @@ class Recon (ConsoleTool):
         if not self._running('ReadImage', options.operations):
             # append ReadImage op to BEGINNING of list
             op_args = {'filename': os.path.abspath(args[0]),
-                       'format': 'fid'}
+                       'format': 'fid',
+                       'vrange': options.vrange}
             opclass = self._opmanager.getOperation('ReadImage')
             options.operations.insert(0,(opclass, op_args))
         if not self._running('WriteImage', options.operations):
@@ -219,8 +229,12 @@ class Recon (ConsoleTool):
         # run some checks on the operations sequence
         self.confirmOps(options.operations)
         # parse vol-range
-        options.vol_start, options.vol_end = \
-          self.parseVolRange(options.vol_range)
+        #options.vol_start, options.vol_end = \
+        #  self.parseVolRange(options.vol_range)
+
+        if options.fastArray:
+            global _FAST_ARRAY
+            _FAST_ARRAY = True
         
         return options
 

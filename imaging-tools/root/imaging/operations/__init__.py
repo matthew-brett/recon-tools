@@ -33,7 +33,9 @@ class Parameter (object):
       "bool":bool_valuator,
       "int":int,
       "float":float,
-      "complex":complex}
+      "complex":complex,
+      "list":list,
+      "tuple":tuple}
 
     #-------------------------------------------------------------------------
     def __init__(self, name, type="str", default=None, description=""):

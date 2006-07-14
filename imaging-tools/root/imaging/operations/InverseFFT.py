@@ -20,5 +20,10 @@ class InverseFFT (Operation):
 
         # 2D checkerboard the shape of one image slice
         mask = checkerboard(*(image.data.shape[-2:]))
-        for vol in image.data:
-            vol[:] = (mask * inverse_fft2d(mask * vol)).astype(Complex32)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = (mask * \
+                             inverse_fft2d(mask * image.data)).astype(Complex32)
+        else:
+            for vol in image.data:
+                vol[:] = (mask * inverse_fft2d(mask * vol)).astype(Complex32)

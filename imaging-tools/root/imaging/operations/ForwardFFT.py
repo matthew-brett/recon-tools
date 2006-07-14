@@ -17,5 +17,10 @@ class ForwardFFT (Operation):
     def run(self, image):
         ydim, xdim = image.data.shape[-2:]
         mask = checkerboard(ydim, xdim)
-        for vol in image.data:
-            vol[:] = (mask * fft2d(mask * vol)).astype(Complex32)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = (mask * fft2d(mask * image.data)).astype(Complex32)
+        else:
+            for vol in image.data:
+                vol[:] = (mask * fft2d(mask * vol)).astype(Complex32)
+

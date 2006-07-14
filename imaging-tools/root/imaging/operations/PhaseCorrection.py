@@ -3,7 +3,6 @@ from pylab import mlab, angle, cos, sin, Float, Complex32, asarray
 from imaging.operations import Operation
 from imaging.util import shift, ifft, apply_phase_correction
 
-
 ##############################################################################
 class PhaseCorrection (Operation):
 
@@ -19,5 +18,9 @@ class PhaseCorrection (Operation):
         ref_phs = angle(ifft(image.ref_data[0]))
         
         # apply correction to image data
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -ref_phs)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data = apply_phase_correction(image.data, -ref_phs)
+        else:
+            for dvol in image.data:
+                dvol[:] = apply_phase_correction(dvol, -ref_phs)

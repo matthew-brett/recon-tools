@@ -50,8 +50,8 @@ class FidImage (BaseImage, ProcParImageMixin):
     to interface with the actual data on-disk.
     """
     #-------------------------------------------------------------------------
-    def __init__(self, datadir, tr=None):
-        ProcParImageMixin.__init__(self, datadir, tr=tr)
+    def __init__(self, datadir, vrange=None):
+        ProcParImageMixin.__init__(self, datadir, vrange=vrange)
         self.initializeData()
         self.loadData(datadir)
 
@@ -230,6 +230,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         """
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
+            # should change to nvol_true?
             block = fidfile.getBlock(pe*self.nvol + vol)
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
@@ -250,6 +251,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
             for slice in range(self.nslice):
+                # should change to nvol_true?
                 block = fidfile.getBlock(
                   ((pe*self.nslice+slice)*self.nvol + vol))
                 bias = complex(block.lvl, block.tlt)
@@ -366,8 +368,9 @@ class FidImage (BaseImage, ProcParImageMixin):
         # load phase encode table
         if needs_pe_reordering: self._load_petable()
 
-        for vol in range(nvol_true):
-
+        #could be for vnum, vol in enumerate(self.ref_vols + self.image_vols):
+        #for vol in range(nvol_true):
+        for vnum, vol in enumerate(self.ref_vols+self.image_vols):
             # read the next image volume
             volume = volreader(fidfile, vol)
 
@@ -418,10 +421,10 @@ class FidImage (BaseImage, ProcParImageMixin):
 
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:
-                self.ref_data[vol] = ksp_image
-                self.ref_nav_data[vol] = navigators
+                self.ref_data[vnum] = ksp_image
+                self.ref_nav_data[vnum] = navigators
             else:
-                self.data[vol-numrefs] = ksp_image
-                self.nav_data[vol-numrefs] = navigators
+                self.data[vnum-numrefs] = ksp_image
+                self.nav_data[vnum-numrefs] = navigators
         self.zeroRots()
         self.setData(self.data)

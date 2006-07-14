@@ -19,5 +19,10 @@ class InverseFFT3D (Operation):
     def run(self, image):
         nslice, n_pe, n_fe = image.data.shape[-3:]
         mask = checkercube(nslice, n_pe, n_fe)
-        for volume in image.data:
-                volume[:] = (mask * inverse_fftnd(mask * volume)).astype(Complex32)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = (mask*inverse_fftnd(mask*image.data,
+                                                axes=[1,2,3])).astype(Complex32)
+        else:
+            for volume in image.data:
+                volume[:] = (mask*inverse_fftnd(mask*volume)).astype(Complex32)

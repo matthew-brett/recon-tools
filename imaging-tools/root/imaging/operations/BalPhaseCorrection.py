@@ -204,5 +204,9 @@ class BalPhaseCorrection (Operation):
         print "Tl = %f; delT = %f"%(Tl,delT,)
         theta_vol = self.correction_volume(Tl, delT)
 
-        for dvol in image.data:
-            dvol[:] = apply_phase_correction(dvol, -theta_vol)
+        from imaging.tools import Recon
+        if Recon._FAST_ARRAY:
+            image.data[:] = apply_phase_correction(image.data, -theta_vol)
+        else:
+            for dvol in image.data:
+                dvol[:] = apply_phase_correction(dvol, -theta_vol)

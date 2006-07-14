@@ -216,10 +216,13 @@ class ProcParImageMixin (object):
 
     image_vols = CachedReadOnlyProperty(
         lambda self:\
-        [i for i, isimage in enumerate(self.is_imagevol) if isimage], "")
+        [i for i, isimage in enumerate(self.is_imagevol) \
+                     if (isimage and i in self.vrange)], "")
 
-    nvol = CachedReadOnlyProperty(
-        lambda self: self.nvol_true - len(self.ref_vols), "")
+##     nvol = CachedReadOnlyProperty(
+##         lambda self: self.nvol_true - len(self.ref_vols), "")
+
+    nvol = CachedReadOnlyProperty(lambda self: len(self.vrange), "")
 
     slice_positions = CachedReadOnlyProperty(
         lambda self: 10.*asarray(self._procpar.pss), "")
@@ -316,11 +319,16 @@ class ProcParImageMixin (object):
         lambda self: self._procpar.get("dquiet", (0,))[0], "")
 
     #-------------------------------------------------------------------------
-    def __init__(self, datadir, tr=None):
+    def __init__(self, datadir, vrange=None):
         procpar = self._procpar = ProcPar(pjoin(datadir, "procpar"))
-        # allow manual override of tr value
-        self._tr = tr
-
+        # allow manual override of some values
+        #self._tr= tr
+        if vrange:
+            skip = len(self.ref_vols)
+            vend =  vrange[1] < 0 and self.nvol_true or vrange[1]+1+skip
+            vstart = vrange[0]+skip
+            self.vrange = range(vstart,vend)
+        else: self.vrange = range(len(self.ref_vols), self.nvol_true)
 
 ##############################################################################
 if __name__ == "__main__":
