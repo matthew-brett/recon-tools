@@ -1,6 +1,6 @@
 "This module implements details of the Analyze7.5 file format."
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape, amin, amax
+  Complex32, fromstring, reshape, amin, amax, product
 import struct
 import sys
 from odict import odict
@@ -118,9 +118,9 @@ class AnalyzeImage (BaseImage):
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, filestem):
+    def __init__(self, filestem, vrange=()):
         self.load_header(filestem+".hdr")
-        self.load_image(filestem+".img")
+        self.load_image(filestem+".img", vrange)
 
     #-------------------------------------------------------------------------
     def _dump_header(self):
@@ -149,18 +149,27 @@ class AnalyzeImage (BaseImage):
         map(self.__setattr__, struct_fields.keys(), values)
 
     #-------------------------------------------------------------------------
-    def load_image(self, filename):
+    def load_image(self, filename, vrange):
 
         # bytes per pixel
         bytepix = self.bitpix/8
         numtype = datatype2typecode[self.datatype]
-        #new_numtype = self.datatype==COMPLEX and Complex32 or Float32
+        datasize = bytepix*product((self.zdim,self.ydim,self.xdim))
+        # need to cook tdim if vrange is set, also bump datasize
+        if self.tdim:
+            datasize *= self.tdim
+            if vrange:
+                self.tdim = vrange[1] < 0 and self.tdim - vrange[0] or \
+                            vrange[1] - vrange[0] + 1
+            else: vrange = (0,self.tdim)
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
                           or (self.zdim, self.ydim, self.xdim)
-        datasize = bytepix * reduce(lambda x,y: x*y, dims)
         image = fromstring(file(filename).read(datasize),numtype)
         if self.swapped: image = image.byteswapped()
-        self.setData(reshape(image, dims))
+        if len(dims) < 4:
+            self.setData(reshape(image, dims))
+        else:
+            self.setData(reshape(image[vrange[0]:self.tdim+vrange[0]], dims))
 
 
 ##############################################################################
@@ -274,4 +283,4 @@ def writeImage(image, filestem, datatype=None, targetdim=None):
         AnalyzeWriter(subimage, datatype=datatype).write(substem)
 
 #-----------------------------------------------------------------------------
-def readImage(filename): return AnalyzeImage(filename)
+def readImage(filename, **kwargs): return AnalyzeImage(filename, **kwargs)
