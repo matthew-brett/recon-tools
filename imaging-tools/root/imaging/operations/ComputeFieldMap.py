@@ -1,15 +1,14 @@
 from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
-     angle, conjugate, putmask
+     angle, conjugate, putmask, Int8
 from Numeric import empty, sum, sort
 from LinearAlgebra import *
-import math
-from imaging.imageio import writeImage
+#from imaging.imageio import writeImage
 from imaging.punwrap import unwrap2D
 from imaging.analyze import writeImage
-from imaging.operations import Operation
+from imaging.operations import Operation, Parameter
 
 def build_3Dmask(vol):
-    mask = ones(vol.shape)
+    mask = ones(vol.shape, Int8)
     p = sort(abs(vol.flat))
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
@@ -20,11 +19,12 @@ def build_3Dmask(vol):
 def unwrap_phase(vols):
     shape = vols.shape
     uw_phase = empty(shape, Float32)
+    masks = empty(shape, Int8)
     for t in range(shape[0]):
-        mask = build_3Dmask(vols[t])
+        masks[t] = build_3Dmask(vols[t])
         for z in range(shape[1]):
-            uw_phase[t,z] = unwrap2D(angle(vols[t,z]), mask=mask[z])
-    return uw_phase
+            uw_phase[t,z] = unwrap2D(angle(vols[t,z]), mask=masks[t,z])
+    return uw_phase, masks
 
 #-----------------------------------------------------------------------------
 def phase_offset(phase):
@@ -35,6 +35,13 @@ def phase_offset(phase):
 class ComputeFieldMap (Operation):
     "Perform phase unwrapping and calculate field map"
 
+    params=(
+        Parameter(name="fmap_file", type="str", default="fieldmap",
+                  description="Name of the field map file to store"),
+        Parameter(name="mask_file", type="str", default="volmask",
+                  description="Name of the volume mask file to store")
+        )
+    
     #-------------------------------------------------------------------------
     def run(self, image):
 
@@ -56,11 +63,15 @@ class ComputeFieldMap (Operation):
         for vol in range(image.tdim-1):
             #diff_vols[vol] = conjugate(image.data[vol])*(image.data[vol+1])
             diff_vols[vol] = conjugate(image.data[vol+1])*image.data[vol]
-        phase_map = unwrap_phase(diff_vols)
+        phase_map, bytemasks = unwrap_phase(diff_vols)
         phase_map = (phase_map/asym_time).astype(Float32)
-        fmap_phase = image._subimage(phase_map)
-        for index, subIm in enumerate(fmap_phase.subImages()):
-            writeImage(subIm, "fieldmap-%d"%(index))
+        fmap_im = image._subimage(phase_map)
+        bmask_im = image._subimage(bytemasks)
+        #for index, subIm in enumerate(fmap_phase.subImages()):
+        #    writeImage(subIm, self.fmap_file+"-%d"%(index))
+        for index in range(fmap_im.tdim):
+            writeImage(fmap_im.subImage(index), self.fmap_file+"-%d"%(index))
+            writeImage(bmask_im.subImage(index), self.mask_file+"-%d"%(index))
 
 
 ## FUTURE DEVELOPMENT HERE
