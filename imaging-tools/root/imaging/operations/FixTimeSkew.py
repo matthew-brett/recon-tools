@@ -1,19 +1,31 @@
 from FFT import fft, inverse_fft
-from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32
+from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32, \
+     swapaxes, product, NewAxis, reshape, squeeze
 from imaging.operations import Operation
 from imaging.util import reverse
 
-def subsampInterp(ts, c):
-    T = 3*len(ts)
+# NOTE: 2-shot not yet set
+
+def subsampInterp(ts, c, axis=-1):
+    # convert arbitrarily shaped ts into a 2d array
+    # with time series in last dimension
+    To = ts.shape[axis]
+    dimlist = list(ts.shape)
+    dimlist.remove(To)
+    if axis != -1: ts = swapaxes(ts, axis, -1)
+    T = 3*To
     Fn = int(T/2.) + 1
-    ts_buf = empty((T,), Complex)
-    ts_buf[len(ts):2*len(ts)] = ts
-    ts_buf[:len(ts)] = -reverse(ts) + 2*ts[0] - (ts[1]-ts[0])
-    ts_buf[2*len(ts):] = -reverse(ts) + 2*ts[-1] - (ts[-2]-ts[-1])
+    ts_buf = empty(tuple(dimlist)+ (T,), Complex)
+    ts_buf[...,To:2*To] = ts
+    ts_buf[...,:To] = -reverse(ts) + \
+                      (2*ts[...,0] - (ts[...,1]-ts[...,0]))[...,NewAxis]
+    ts_buf[...,2*To:] = -reverse(ts) + \
+                        (2*ts[...,-1] - (ts[...,-2]-ts[...,-1]))[...,NewAxis]
     phs_shift = empty((T,), Complex)
     phs_shift[:Fn] = exp(-2.j*pi*c*arange(Fn)/float(T))
     phs_shift[Fn:] = conjugate(reverse(phs_shift[1:Fn-1]))
-    return inverse_fft(fft(ts_buf)*phs_shift)[len(ts):2*len(ts)]
+    ts[:] = inverse_fft(fft(ts_buf)*phs_shift)[...,To:2*To].astype(ts.typecode())
+    if axis != -1: ts = swapaxes(ts, axis, -1)
 
 class FixTimeSkew (Operation):
 
@@ -22,28 +34,28 @@ class FixTimeSkew (Operation):
         if image.nseg == 1:
             for s in range(nslice):
                 c = float(s)/float(nslice)
-                for p in range(npe):
-                    for r in range(nfe):
-                        ts = image.data[:,s,p,r]
-                        image.data[:,s,p,r] = subsampInterp(ts,c).astype(Complex32)
+                #sl = (slice(0,nvol), slice(s,s+1), slice(0,npe), slice(0,nfe))
+                subsampInterp(image.data[:,s,:,:], c, axis=0)
         else:
             for s in range(nslice):
                 # want to shift seg1 forward temporally and seg2 backwards--
                 # have them meet halfway (??)
                 c1 = -(S-s-0.5)/float(nslice)
                 c2 = (s+0.5)/float(nslice)
-                for r in range(nfe):
-                    for p in self.segn(image,0):
-                        ts = image.data[:,s,p,r]
-                        image.data[:,s,p,r] = subsampInterp(ts,c1).astype(Complex32)
-                    for p in self.segn(image,1):
-                        ts = image.data[:,s,p,r]
-                        image.data[:,s,p,r] = subsampInterp(ts,c2).astype(Complex32)
+                # get the appropriate slicing for sampling type
+                sl1 = (slice(0,nvol), slice(s,s+1),
+                       self.segn(image,0), slice(0,nfe))
+                sl2 = (slice(0,nvol), slice(s,s+1),
+                       self.segn(image,1), slice(0,nfe))
+                # interpolate for each segment
+                subsampInterp(squeeze(image.data[sl1]), c1, axis=0)
+                subsampInterp(squeeze(image.data[sl2]), c2, axis=0)
 
     def segn(self, image, n):
         npe = image.data.shape[-2]
         if image.petable_name.find('cen') > 0 or \
            image.petable_name.find('alt') > 0:
-            return arange(npe/2)+n*npe/2
-        else: return arange(n,npe,2)
+            #return arange(npe/2)+n*npe/2
+            return slice(0,npe/2+n*npe/2)
+        else: return slice(n,npe,2)
     
