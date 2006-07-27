@@ -49,7 +49,7 @@ class ComputeFieldMap (Operation):
         if not hasattr(image._procpar, "asym_time"):
             self.log("No asym_time, can't compute field map.")
             return
-        asym_time = image._procpar.asym_time[1]
+        asym_times = image._procpar.asym_time
 
         # Make sure there are at least two volumes
         if image.tdim < 2:
@@ -61,14 +61,13 @@ class ComputeFieldMap (Operation):
         diff_vols = zeros((image.tdim-1,image.zdim,image.ydim,image.xdim), \
                           Complex32)
         for vol in range(image.tdim-1):
-            #diff_vols[vol] = conjugate(image.data[vol])*(image.data[vol+1])
             diff_vols[vol] = conjugate(image.data[vol+1])*image.data[vol]
         phase_map, bytemasks = unwrap_phase(diff_vols)
-        phase_map = (phase_map/asym_time).astype(Float32)
+        for vol in range(image.tdim-1):
+            asym_time = asym_times[vol] - asym_times[vol+1]
+            phase_map[vol] = (phase_map[vol]/asym_time).astype(Float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)
-        #for index, subIm in enumerate(fmap_phase.subImages()):
-        #    writeImage(subIm, self.fmap_file+"-%d"%(index))
         for index in range(fmap_im.tdim):
             writeImage(fmap_im.subImage(index), self.fmap_file+"-%d"%(index))
             writeImage(bmask_im.subImage(index), self.mask_file+"-%d"%(index))
