@@ -89,7 +89,7 @@ def half_shift(matrix, dim=0):
     return tmp
 
 #-----------------------------------------------------------------------------
-def reverse(seq): return take(seq, -1-arange(len(seq)))
+def reverse(seq, axis=-1): return take(seq, -1-arange(seq.shape[axis]), axis)
 
 #-----------------------------------------------------------------------------
 def embedIm(subIm, Im, yOff, xOff):

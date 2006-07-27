@@ -1,5 +1,5 @@
 import sys
-from os.path import join, basename, dirname
+from os.path import join, basename, dirname, split
 from optparse import OptionParser, Option
 from imaging.tools import ConsoleTool
 from imaging.imageio import readImage
@@ -32,10 +32,11 @@ class ViewImageTool (ConsoleTool):
         filetype = opts.file_format
         # remove extension if present
         pruned_exts = ['nii', 'hdr', 'img']
-        file_ext = basename(args[0]).rsplit(".",1)[1]
+        (impath, imfile) = split(args[0])
+        file_ext = imfile.rfind(".") > 0 and imfile.rsplit(".",1)[1] or ""
         filestem = file_ext in pruned_exts and \
-                   join(dirname(args[0]), basename(args[0]).rsplit(".",1)[0]) \
-                   or args[0]
+                   join(impath, imfile.rsplit(".",1)[0]) or \
+                   join(impath, imfile)
         image = readImage(filestem, filetype)
         image.info()
         ViewImage().run(image)

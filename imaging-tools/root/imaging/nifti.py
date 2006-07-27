@@ -123,11 +123,11 @@ class NiftiImage (BaseImage):
     """
     Loads an image from a NIFTI file as a BaseImage
     """
-    def __init__(self, filestem):
+    def __init__(self, filestem, vrange=()):
         self.load_header(filestem)
         self.x0,self.y0,self.z0 = (self.qoffset_x, self.qoffset_y,
                                    self.qoffset_z)
-        self.load_image(filestem)
+        self.load_image(filestem, vrange)
 
     def load_header(self, filestem):
         try:
@@ -158,17 +158,28 @@ class NiftiImage (BaseImage):
             print "Got %s NIFTI file, but read %s magic string"%\
                   (self.filetype, self.magic)
             
-    def load_image(self, filestem):
+    def load_image(self, filestem, vrange):
+        # REDO THIS TO READ ONLY LEN(VRANGE) CONTIGUOUS VOLUMES
         if self.filetype == 'single':
             fp = open(filestem+".nii", 'r')
             fp.seek(self.vox_offset)
         else:
             fp = open(filestem+".img", 'r')
-
+        bytepix = self.bitpix/8
         numtype = datatype2typecode[self.datatype]
+        byteoffset = 0
+        # need to cook tdim if vrange is set
+        if self.tdim and vrange:
+            vend = (vrange[1]<0 or vrange[1]>=self.tdim) \
+                   and self.tdim-1 or vrange[1]
+            vstart = (vrange[0] > vend) and vend or vrange[0]
+            self.tdim = vend-vstart+1
+            byteoffset = vstart*bytepix*product((self.zdim,self.ydim,self.xdim))
+
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
                           or (self.zdim, self.ydim, self.xdim)
-        datasize = (self.bitpix/8)*product(dims)
+        datasize = bytepix * product(dims)
+        fp.seek(byteoffset, 1)
         image = fromstring(fp.read(datasize), numtype)
         if self.swapped: image = image.byteswapped()
         self.setData(reshape(image, dims))
@@ -249,20 +260,21 @@ class NiftiWriter (object):
         image = self.image
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
-                            (pdict.phi[0], pdict.theta[0], pdict.psi[0]))
+                            (pdict['phi'][0], pdict['theta'][0], pdict['psi'][0]))
         #print "phi=%f, theta=%f, psi=%f"%(pdict.phi[0],pdict.theta[0],
         #                                  pdict.psi[0])
 
-        Qsoft = euler2quat(psi=-pi/2*image.zRots)
+        #Qsoft = euler2quat(psi=pi/2*image.zRots)
         # from scanner to image-> flip on y-axis, then rotate z
         Qscanner = qmult(euler2quat(phi=-pi/2),euler2quat(psi=pi))
         # Y-angle (psi) keeps original sign due to LHS-RHS flip
         # NIFTI rotations are applied in the reverse order of Varian's,
         # so don't need to compose them backwards:
         Qobl = euler2quat(theta=-theta, psi=psi, phi=-phi)
-        #Qform = qmult(Qobl,Qscanner)
+        Qform = qmult(Qobl,Qscanner)
         # don't know how to do Qsoft yet
-        Qform = qmult(Qsoft, qmult(Qobl, Qscanner))
+        #Qform = qmult(Qsoft, qmult(Qobl, Qscanner))
+
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
           'slice_code': NIFTI_SLICE_SEQ_INC,
@@ -337,4 +349,4 @@ def writeImageDual(image, filestem, datatype=None, targetdim=None):
     writeImage(image, filestem, datatype, targetdim, filetype="dual")
 
 #-----------------------------------------------------------------------------
-def readImage(filestem): return NiftiImage(filestem)
+def readImage(filestem, **kwargs): return NiftiImage(filestem, **kwargs)

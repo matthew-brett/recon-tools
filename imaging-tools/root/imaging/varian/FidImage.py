@@ -231,7 +231,7 @@ class FidImage (BaseImage, ProcParImageMixin):
         volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
         for pe in range(self.n_pe):
             # should change to nvol_true?
-            block = fidfile.getBlock(pe*self.nvol + vol)
+            block = fidfile.getBlock(pe*self.nvol_true + vol)
             bias = complex(block.lvl, block.tlt)
             for slice, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_typecode)
@@ -253,7 +253,7 @@ class FidImage (BaseImage, ProcParImageMixin):
             for slice in range(self.nslice):
                 # should change to nvol_true?
                 block = fidfile.getBlock(
-                  ((pe*self.nslice+slice)*self.nvol + vol))
+                  ((pe*self.nslice+slice)*self.nvol_true + vol))
                 bias = complex(block.lvl, block.tlt)
                 trace = complex_fromstring(block.getData(), self.raw_typecode)
                 volume[slice,pe] = (trace - bias).astype(Complex32)

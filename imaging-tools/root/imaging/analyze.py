@@ -150,27 +150,28 @@ class AnalyzeImage (BaseImage):
 
     #-------------------------------------------------------------------------
     def load_image(self, filename, vrange):
-
+        # REDO THIS TO READ ONLY LEN(VRANGE) CONTIGUOUS VOLUMES
         # bytes per pixel
         bytepix = self.bitpix/8
         numtype = datatype2typecode[self.datatype]
-        datasize = bytepix*product((self.zdim,self.ydim,self.xdim))
-        # need to cook tdim if vrange is set, also bump datasize
-        if self.tdim:
-            datasize *= self.tdim
-            if vrange:
-                self.tdim = vrange[1] < 0 and self.tdim - vrange[0] or \
-                            vrange[1] - vrange[0] + 1
-            else: vrange = (0,self.tdim)
+        byteoffset = 0
+        # need to cook tdim if vrange is set
+        if self.tdim and vrange:
+            vend = (vrange[1]<0 or vrange[1]>=self.tdim) \
+                   and self.tdim-1 or vrange[1]
+            vstart = (vrange[0] > vend) and vend or vrange[0]
+            self.tdim = vend-vstart+1
+            byteoffset = vstart*bytepix*product((self.zdim,self.ydim,self.xdim))
+
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
                           or (self.zdim, self.ydim, self.xdim)
-        image = fromstring(file(filename).read(datasize),numtype)
+        datasize = bytepix * product(dims)
+        fp = file(filename)
+        fp.seek(byteoffset, 1)
+        image = fromstring(fp.read(datasize),numtype)
         if self.swapped: image = image.byteswapped()
-        if len(dims) < 4:
-            self.setData(reshape(image, dims))
-        else:
-            self.setData(reshape(image[vrange[0]:self.tdim+vrange[0]], dims))
-
+        self.setData(reshape(image, dims))
+        fp.close()
 
 ##############################################################################
 class AnalyzeWriter (object):

@@ -325,8 +325,10 @@ class ProcParImageMixin (object):
         #self._tr= tr
         if vrange:
             skip = len(self.ref_vols)
-            vend =  vrange[1] < 0 and self.nvol_true or vrange[1]+1+skip
-            vstart = vrange[0]+skip
+            # if vrange[1] is -1 or too big, set it to nvol_true
+            vend = vrange[1] in range(self.nvol_true-skip) \
+                   and vrange[1]+1+skip or self.nvol_true
+            vstart = vrange[0] in range(vend-skip) and vrange[0]+skip or vend-1
             self.vrange = range(vstart,vend)
         else: self.vrange = range(len(self.ref_vols), self.nvol_true)
 

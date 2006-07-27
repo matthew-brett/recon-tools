@@ -15,7 +15,7 @@ def subsampInterp(ts, c, axis=-1):
     if axis != -1: ts = swapaxes(ts, axis, -1)
     T = 3*To
     Fn = int(T/2.) + 1
-    ts_buf = empty(tuple(dimlist)+ (T,), Complex)
+    ts_buf = empty((dimlist[-1],)+tuple(dimlist[:-1])+ (T,), Complex)
     ts_buf[...,To:2*To] = ts
     ts_buf[...,:To] = -reverse(ts) + \
                       (2*ts[...,0] - (ts[...,1]-ts[...,0]))[...,NewAxis]
@@ -43,19 +43,17 @@ class FixTimeSkew (Operation):
                 c1 = -(S-s-0.5)/float(nslice)
                 c2 = (s+0.5)/float(nslice)
                 # get the appropriate slicing for sampling type
-                sl1 = (slice(0,nvol), slice(s,s+1),
-                       self.segn(image,0), slice(0,nfe))
-                sl2 = (slice(0,nvol), slice(s,s+1),
-                       self.segn(image,1), slice(0,nfe))
+                sl1 = self.segn(image,0)
+                sl2 = self.segn(image,1)
                 # interpolate for each segment
-                subsampInterp(squeeze(image.data[sl1]), c1, axis=0)
-                subsampInterp(squeeze(image.data[sl2]), c2, axis=0)
+                subsampInterp(squeeze(image.data[:,s,sl1,:]), c1, axis=0)
+                subsampInterp(squeeze(image.data[:,s,sl2,:]), c2, axis=0)
 
     def segn(self, image, n):
+        # this is very very limited to 2-shot trajectories!
         npe = image.data.shape[-2]
         if image.petable_name.find('cen') > 0 or \
            image.petable_name.find('alt') > 0:
-            #return arange(npe/2)+n*npe/2
-            return slice(0,npe/2+n*npe/2)
+            return slice(n*npe/2,npe/(2-n))
         else: return slice(n,npe,2)
     
