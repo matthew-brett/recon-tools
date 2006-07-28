@@ -20,9 +20,10 @@ class UnbalPhaseCorrection (Operation):
         Parameter(name="lin_radius", type="float", default=70.0,
                   description="Radius of the region of greatest linearity "\
                   "within the magnetic field, in mm (normally 70-80mm)"),
+        Parameter(name="thresh", type="float", default=1.0,
+                  description="mask points in the phase means whose "\
+                  "standard deviation exceeds this number.")
         )
-
-
 
     def run(self, image):
         # basic tasks here:
@@ -65,7 +66,14 @@ class UnbalPhaseCorrection (Operation):
         # want to fork the code based on sampling style
         theta = self.iscentric and self.run_centric(ifft(refVol)) or \
                 self.run_linear(ifft(refVol))
-
+        if not theta: 
+            self.log("Could not find enough slices with sufficiently uniform\n"\
+            "phase profiles. Try shortening the lin_radius parameter to\n"\
+            "unwrap a more linear region, or bump up the thresh param.\n"\
+            "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
+                                                           self.lin_radius))
+            return
+        
         from imaging.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = apply_phase_correction(image.data, -theta)
@@ -116,11 +124,7 @@ class UnbalPhaseCorrection (Operation):
         for c in selected:
             s_mask[c] = 1
             if(sum(r_mask[c]) == 0):
-                self.log("Could not find enough slices with sufficiently uniform\n"\
-                "phase profiles. Try shortening the lin_radius parameter to\n"\
-                "unwrap a less noisy region of the image phase.\n"\
-                "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
-                                                               self.lin_radius))
+                # if best slice's means are masked, simply return empty
                 return
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
@@ -179,11 +183,7 @@ class UnbalPhaseCorrection (Operation):
         for c in selected:
             s_mask[c] = 1
             if(sum(r_mask[c]) == 0):
-                self.log("Could not find enough slices with sufficiently uniform\n"\
-                "phase profiles. Try shortening the lin_radius parameter to\n"\
-                "unwrap a less noisy region of the image phase.\n"\
-                "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
-                                                               self.lin_radius))
+                # if best slice's means are masked, simply return empty
                 return
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         # want to correct both segments "separately" (by splicing 2 thetas)
@@ -220,7 +220,7 @@ class UnbalPhaseCorrection (Operation):
 
         E = mean(S)
         std = sqrt(sum((S-E)**2)/nrow)
-        putmask(mask, std>1, 0)
+        putmask(mask, std>self.thresh, 0)
 
 ##         from pylab import show, plot, title
 ##         color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
