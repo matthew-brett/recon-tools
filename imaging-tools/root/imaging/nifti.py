@@ -315,7 +315,7 @@ class NiftiWriter (object):
         return struct_pack(NATIVE, field_formats, fieldvalues)
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"):
+def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single", suffix=None):
     """
     Write the given image to the filesystem as one or more NIFTI 1.1 format
     hdr/img pairs or single file format.
@@ -327,20 +327,27 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
       own pair.
     """
     dimnames = {3:"volume", 2:"slice"}
-    def images_and_names(image, stem, targetdim):
+    def images_and_names(image, stem, targetdim, suffix=None):
         # base case
         if targetdim >= image.ndim: return [(image, stem)]
         
         # recursive case
         subimages = tuple(image.subImages())
-        substems = ["%s_%s%d"%(stem, dimnames[image.ndim-1], i)\
-                    for i in range(len(subimages))]
+        if suffix is not None:
+            substems = ["%s"%(stem,)+suffix%(i,) \
+                        for i in range(len(subimages))]
+        else:
+            substems = ["%s_%s%04d"%(stem, dimnames[image.ndim-1], i)\
+                        for i in range(len(subimages))]
         return _concatenate(
           [images_and_names(subimage, substem, targetdim)\
            for subimage,substem in zip(subimages, substems)])
 
+    # suffix-mode only supports volume-wise naming, so force targetdim to 3
+    if suffix is not None: targetdim = 3
     if targetdim is None: targetdim = image.ndim
-    for subimage, substem in images_and_names(image, filestem, targetdim):
+    for subimage, substem in \
+            images_and_names(image, filestem, targetdim, suffix):
         NiftiWriter(subimage, datatype=datatype, filetype=filetype,
                     params=image._procpar).write(substem)
 

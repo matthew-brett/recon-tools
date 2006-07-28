@@ -52,7 +52,8 @@ class Parameter (object):
         Evaluates valspec (a string) to the appropriate value according to
         the type of self.
         """
-        return self.valuator(valspec)
+        # don't valuate None, especially not as a string
+        return valspec is not None and self.valuator(valspec) or valspec
 
 
 ##############################################################################

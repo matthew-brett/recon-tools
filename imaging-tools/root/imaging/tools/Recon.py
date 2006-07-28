@@ -67,7 +67,14 @@ class Recon (ConsoleTool):
 
       Option("-x", action="store_true", dest="fastArray", default=False,
              help="this may shave off a few seconds from the reconstruction, "\
-             "but expect memory usage to go up by a factor of 4."))
+             "but expect memory usage to go up by a factor of 4."),
+
+      Option("-s", "--suffix", action="store", default=None,
+             help="Over-rides the default naming of output files."),
+
+      Option("-n", "--filedim", action="store", default=3,
+             help="Sets the number of dimensions per output file "\
+             "(defaults to 3"))
       
 
     #-------------------------------------------------------------------------
@@ -222,6 +229,8 @@ class Recon (ConsoleTool):
             options.operations.insert(0,(opclass, op_args))
         if not self._running('WriteImage', options.operations):
             op_args = {'filename': os.path.abspath(args[1]),
+                       'suffix': options.suffix,
+                       'filedim': options.filedim,
                        'format': options.file_format,
                        'datatype': options.output_datatype}
             opclass = self._opmanager.getOperation('WriteImage')

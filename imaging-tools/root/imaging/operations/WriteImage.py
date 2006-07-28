@@ -16,6 +16,10 @@ class WriteImage (Operation):
       Parameter(name="filename", type="str", default="image",
         description="File name prefix for output (extension will be "\
                     "determined by the format)."),
+      Parameter(name="suffix", type="str", default=None,
+        description="Over-rides the default suffix behavior."),
+      Parameter(name="filedim", type="int", default=3,
+        description="Number of dimensions per output file."),
       Parameter(name="format", type="str", default="analyze",
         description="File format to write image in."),
       Parameter(name="datatype", type="str", default="magnitude",
@@ -42,7 +46,8 @@ class WriteImage (Operation):
         if data_code != analyze.typecode2datatype[image.data.typecode()]:
             castData(image.data, data_code)
         
-        analyze.writeImage(image, self.filename, data_code, 3)
+        analyze.writeImage(image, self.filename, data_code,
+                           self.filedim, self.suffix)
     #-------------------------------------------------------------------------
     def writeNifti(self, image):
         from imaging import nifti
@@ -63,7 +68,8 @@ class WriteImage (Operation):
         if data_code != nifti.typecode2datatype[image.data.typecode()]:
             castData(image.data, nifti.datatype2typecode[data_code])      
         
-        nifti.writeImage(image, self.filename, data_code, 3, self.format[6:])
+        nifti.writeImage(image, self.filename, data_code, self.filedim,
+                         self.format[6:], self.suffix)
     #-------------------------------------------------------------------------
     def run(self, image):
         writer = {

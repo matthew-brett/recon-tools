@@ -27,7 +27,9 @@ def get_dims(data):
     Extract ndim, tdim, zdim, ydim, and xdim from data shape.
     @return: (ndim, tdim, zdim, ydim, xdim)
     """
-    shape = data.shape
+    # For consistency, 1-volume images have 4 data dimensions.
+    # Let's not reflect this in the image properties. 
+    shape = data.shape[0] == 1 and data.shape[1:] or data.shape
     ndim = len(shape)
     if ndim < 2 or ndim > 4:
         raise ValueError("data shape %s must be 2, 3, or 4 dimensional"%shape)
