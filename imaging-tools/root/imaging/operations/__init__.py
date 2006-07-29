@@ -1,7 +1,7 @@
 import sys
 from os.path import dirname, basename, join
 from glob import glob
-from types import TypeType, BooleanType
+from types import TypeType, BooleanType, TupleType
 
 
 ##############################################################################
@@ -13,6 +13,17 @@ def bool_valuator(val):
     else: raise ValueError(
       "Invalid boolean specifier '%s'. Must be either 'true' or 'false'."%\
       lowerstr)
+
+def tuple_valuator(val):
+    if not val: return ()
+    if type(val) is TupleType: return tuple(val)
+    # else it is a stringified tuple ill-gotten from an oplist (bah!)
+    def try_int(el):
+        try:
+            return int(el)
+        except ValueError:
+            return
+    return tuple([try_int(el) for el in val if try_int(el)])
 
 
 ##############################################################################
@@ -35,7 +46,7 @@ class Parameter (object):
       "float":float,
       "complex":complex,
       "list":list,
-      "tuple":tuple}
+      "tuple":tuple_valuator}
 
     #-------------------------------------------------------------------------
     def __init__(self, name, type="str", default=None, description=""):
@@ -53,7 +64,10 @@ class Parameter (object):
         the type of self.
         """
         # don't valuate None, especially not as a string
-        return valspec is not None and self.valuator(valspec) or valspec
+        if valspec is None:
+            return valspec
+        else: return self.valuator(valspec)
+
 
 
 ##############################################################################
@@ -146,7 +160,9 @@ class RunLogger (object):
         print >> self.ostream, "#[%s]"%operation.__class__.__name__
         for parameter in operation.params:
             self._format_doc(parameter.description)
-            paramval = getattr(operation, parameter.name)
+            paramval = str(getattr(operation, parameter.name))
+            if paramval.find("%")>0:
+                paramval = paramval.split("%")[0]+"%%"+paramval.split("%")[1]
             print >> self.ostream, "#%s = %s"%(parameter.name, paramval)
         print >> self.ostream
 
