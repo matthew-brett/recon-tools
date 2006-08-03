@@ -47,26 +47,9 @@ class GeometricUndistortionK (Operation):
             print "finding Ks for s = %d"%(s,)
             K = empty((Q1,N2,N2P), Complex)
             for q1 in range(Q1):
-
                 chi = bmask[s,:,q1]
-                # ADD FOR EDGE-SLOPING:
-                #in_chi = find(bmask[s,:,q1+Q1/2])
-                # slope off edges of fmap:
-                #if in_chi:
-                    #chi[in_chi[0]:in_chi[-1]+1] = 1
-                    #sl = slice(in_chi[0],in_chi[0]+4)
-                    #chi[sl] *= rampUp
-                    #sl = slice(in_chi[-1]-3,in_chi[-1]+1)
-                    #chi[sl] *= rampDn
-
                 e2 = exp(outerproduct(n2v,fmap[s,:,q1]*chi))
                 K[q1][:] = asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2)
-
-##                 for n2 in (arange(N2)-N2/2):
-##                     arg1 = 1.j*n2*fmap[s,:,q1]*Tl*chi
-##                     for n2p in (arange(N2P)-N2P/2):
-##                         arg2 = 1.j*2*pi*(n2p-n2)*q2v/float(N2)
-##                         K[q1,n2+N2/2,n2p+N2P/2] = asum(chi*exp(arg1+arg2))/float(Q2)
 
             # now correct with each inverse K'[q1]
             print "correcting volumes at slice %d"%(s,)
