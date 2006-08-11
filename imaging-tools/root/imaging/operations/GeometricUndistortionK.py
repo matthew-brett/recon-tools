@@ -5,7 +5,7 @@ from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, matrixmultiply, Complex32, fromfunction, outerproduct, reshape, svd, transpose, conjugate, identity, Float, swapaxes
 import LinearAlgebra as LA
 from LinearAlgebra import solve_linear_equations as solve
-
+from _kcalc import kCalc
 
 class GeometricUndistortionK (Operation):
     "Use a fieldmap to perform geometric distortion correction in k-space"
@@ -24,10 +24,15 @@ class GeometricUndistortionK (Operation):
         bmaskIm = ReadIm(**{'filename':self.mask_file,
                                'format': 'analyze'}).run()
 
-        fmap = fmapIm.data
+        fmap = fmapIm.data.astype(Float)
         bmask = bmaskIm.data
 
         (nvol, nslice, npe, nfe) = image.data.shape
+
+
+        # timer stuff:
+        import time
+        lag = -time.time() + time.time()
         
         Tl = image.T_pe
         Q1 = nfe
@@ -45,29 +50,29 @@ class GeometricUndistortionK (Operation):
         for s in range(nslice):
             # make matrix K[q1;n2,n2p] slice-by-slice
             print "finding Ks for s = %d"%(s,)
+##             K = kCalc(e1, n2v, fmap[s], bmask[s])
             K = empty((Q1,N2,N2P), Complex)
+            start = time.time()
             for q1 in range(Q1):
                 chi = bmask[s,:,q1]
                 e2 = exp(outerproduct(n2v,fmap[s,:,q1]*chi))
-                K[q1][:] = asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2)
+                K[q1][:] = solve_regularized_eqs(
+                    asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2),
+                    identity(N2, Complex), 2.0)
+                
+                #K[q1] = asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2)
 
-            # now correct with each inverse K'[q1]
-            print "correcting volumes at slice %d"%(s,)
             for dvol in image.data:
-                # two partially transformed matrices
                 invdata = ifft(dvol[s])
-                corr_data = empty((N2,Q1), Complex)
+                corrdata = empty((N2,Q1), Complex)
                 for q1 in range(Q1):
-                    try:
-                        corr_data[:,q1] = solve_regularized_equations(K[q1], invdata[:,q1], 2.0)
-                    except LA.LinAlgError:
-                        print 'no inverse at K[%d]'%(q1,)
-                        corr_data[:,q1] = invdata[:,q1]
-
-                dvol[s][:] = fft(corr_data).astype(Complex32)
+                    corrdata[:,q1] = dot(K[q1],invdata[:,q1])
+                    #corrdata[:,q1] = solve_regularized_eqs(K[q1],invdata[:,q1],2.0)
+                dvol[s][:] = fft(corrdata).astype(Complex32)
+            end = time.time()
+            print "time to process %d slice(s): %fs"%(image.nvol,(end-start-lag))
             
-                        
-def solve_regularized_equations(A, y, lmda):
+def solve_regularized_eqs(A, y, lmda):
     At = conjugate(transpose(A))
     A2 = (lmda**2)*identity(A.shape[0]) + dot(At, A)
     y2 = dot(At, y)
