@@ -5,7 +5,6 @@ from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, matrixmultiply, Complex32, fromfunction, outerproduct, reshape, svd, transpose, conjugate, identity, Float, swapaxes
 import LinearAlgebra as LA
 from LinearAlgebra import solve_linear_equations as solve
-from _kcalc import kCalc
 
 class GeometricUndistortionK (Operation):
     "Use a fieldmap to perform geometric distortion correction in k-space"
