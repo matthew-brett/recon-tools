@@ -2,9 +2,39 @@ from imaging.operations import Operation, Parameter
 from imaging.operations.ReadImage import ReadImage as ReadIm
 from imaging.util import fft, ifft
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
-     find, dot, asum, take, matrixmultiply, Complex32, fromfunction, outerproduct, reshape, svd, transpose, conjugate, identity, Float, swapaxes
-import LinearAlgebra as LA
+     find, dot, asum, take, matrixmultiply, Complex32, fromfunction, outerproduct, reshape, svd, transpose, conjugate, identity, Float, swapaxes, diff, blackman, sign
+#import LinearAlgebra as LA
 from LinearAlgebra import solve_linear_equations as solve
+
+from scipy.signal import fftconvolve, convolve
+
+def gaussianKernel(fwhm, kernsize=3):
+    # assume mu = 0
+    from pylab import power, log
+    sigma = fwhm*power(8. * log(2), -0.5)
+    gax = arange(kernsize) - (kernsize-1)/2.
+    gf = exp(-power(gax,2)/(2*sigma**2))
+    kern = outerproduct(gf, gf)/(2*pi*sigma**2)
+    return kern
+
+def transWin(tw, slope):
+    w = blackman(tw*2)
+    return slope > 0 and w[:tw] or w[tw:]
+    
+def smoothBinVect(v):
+    #for all up/down transitions, overlay transition window up to 6 points
+    chi = v.astype(Float)
+    dv = diff(v)
+    if sum(abs(dv))==0: return chi
+    segs = list(find(dv!=0))
+    segs = [segs[0]+1] + diff(segs).tolist() + [len(v)-segs[-1]-1]
+    for n, jmp in enumerate(find(dv!=0)+1):
+        tw = min(6, min(segs[n], segs[n+1]))
+        chi[jmp + tw/2 - tw: jmp + tw/2] = transWin(tw, sign(dv[jmp-1]))
+    return chi
+        
+
+
 
 class GeometricUndistortionK (Operation):
     "Use a fieldmap to perform geometric distortion correction in k-space"
@@ -46,20 +76,29 @@ class GeometricUndistortionK (Operation):
         # after this multiplication, switch the dimensions back to
         # (N2,N2P,Q2) and sum along q2--leaving a correct N2xN2P grid
         e1 = swapaxes(reshape(exp(outerproduct(df_n,q2v)), (N2,N2P,Q2)), 0, 1)
+        smooth_kernel = gaussianKernel(3,3)
+        from pylab import imshow, show, figure
         for s in range(nslice):
             # make matrix K[q1;n2,n2p] slice-by-slice
             print "finding Ks for s = %d"%(s,)
-##             K = kCalc(e1, n2v, fmap[s], bmask[s])
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
+            e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,Q2,Q1)))
+            for n2 in range(N2):
+                e2[n2][:] = convolve(e2[n2],smooth_kernel,mode='same')
             for q1 in range(Q1):
-                chi = bmask[s,:,q1]
-                e2 = exp(outerproduct(n2v,fmap[s,:,q1]*chi))
-                K[q1][:] = solve_regularized_eqs(
-                    asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2),
-                    identity(N2, Complex), 2.0)
-                
-                #K[q1] = asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2)
+
+                K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(Q2)
+
+                K[q1][:] = solve_regularized_eqs(K[q1],
+                                            identity(N2,Complex), 2.0)
+
+
+##                 K[q1][:] = solve_regularized_eqs(
+##                     fftconvolve(smooth_kernel,
+##                             asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2),
+##                             mode='same'),
+##                     identity(N2, Complex), 2.0)
 
             for dvol in image.data:
                 invdata = ifft(dvol[s])
