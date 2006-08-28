@@ -64,18 +64,21 @@ class GeometricUndistortionK (Operation):
         lag = -time.time() + time.time()
         
         Tl = image.T_pe
+        #Q1 = nfe
+        #Q2 = N2 = N2P = npe
         Q1 = nfe
-        Q2 = N2 = N2P = npe
-        df_n = 2.j*pi*fromfunction(lambda y,x: x-y, (N2,N2P))/float(N2)
+        M = fmap.shape[-2]
+        N2 = N2P = npe
+        df_n = 2.j*pi*fromfunction(lambda y,x: x-y, (N2,N2P))/float(M)
         n2v = 1.j*(arange(N2)-N2/2)*Tl
-        q2v = arange(Q2)-Q2/2
-        # outerproduct of df_n, q2v is effectively outerproduct(df_n.flat, q2v)
-        # I want to shape this differently, so that N2xQ2 is the 1st face of
-        # the 3d matrix. This way, the N2xQ2 plane of the second exponential
+        mv = arange(M)-M/2
+        # outerproduct of df_n, mv is effectively outerproduct(df_n.flat, mv)
+        # I want to shape this differently, so that N2xM is the 1st face of
+        # the 3d matrix. This way, the N2xM plane of the second exponential
         # gets repeatedly multiplied along the N2P dimension correctly.
         # after this multiplication, switch the dimensions back to
-        # (N2,N2P,Q2) and sum along q2--leaving a correct N2xN2P grid
-        e1 = swapaxes(reshape(exp(outerproduct(df_n,q2v)), (N2,N2P,Q2)), 0, 1)
+        # (N2,N2P,M) and sum along m--leaving a correct N2xN2P grid
+        e1 = swapaxes(reshape(exp(outerproduct(df_n,mv)), (N2,N2P,M)), 0, 1)
         smooth_kernel = gaussianKernel(3,3)
         from pylab import imshow, show, figure
         for s in range(nslice):
@@ -83,12 +86,12 @@ class GeometricUndistortionK (Operation):
             print "finding Ks for s = %d"%(s,)
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
-            e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,Q2,Q1)))
+            e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,M,Q1)))
             for n2 in range(N2):
                 e2[n2][:] = convolve(e2[n2],smooth_kernel,mode='same')
             for q1 in range(Q1):
 
-                K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(Q2)
+                K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)
 
                 K[q1][:] = solve_regularized_eqs(K[q1],
                                             identity(N2,Complex), 2.0)
@@ -96,7 +99,7 @@ class GeometricUndistortionK (Operation):
 
 ##                 K[q1][:] = solve_regularized_eqs(
 ##                     fftconvolve(smooth_kernel,
-##                             asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(Q2),
+##                             asum(chi*swapaxes(e1*e2,0,1), axis=-1)/float(M),
 ##                             mode='same'),
 ##                     identity(N2, Complex), 2.0)
 
