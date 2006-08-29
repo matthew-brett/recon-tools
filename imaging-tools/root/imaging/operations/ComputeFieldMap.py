@@ -4,7 +4,7 @@ from Numeric import empty, sum, sort
 from LinearAlgebra import *
 #from imaging.imageio import writeImage
 from imaging.punwrap import unwrap2D
-from imaging.analyze import writeImage
+from imaging.nifti import writeImageDual
 from imaging.operations import Operation, Parameter
 
 def build_3Dmask(vol):
@@ -69,26 +69,8 @@ class ComputeFieldMap (Operation):
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)
         for index in range(fmap_im.tdim):
-            writeImage(fmap_im.subImage(index), self.fmap_file+"-%d"%(index))
-            writeImage(bmask_im.subImage(index), self.mask_file+"-%d"%(index))
+            writeImageDual(fmap_im.subImage(index),
+                           self.fmap_file+"-%d"%(index))
+            writeImageDual(bmask_im.subImage(index),
+                           self.mask_file+"-%d"%(index))
 
-
-## FUTURE DEVELOPMENT HERE
-##         unwrapped = unwrap_phase(image)
-##         unwrapped_vols = list(unwrapped.subImages())
-##         for index, phasevol in enumerate(unwrapped_vols[1:]):
-##             mask1 = unwrapped_vols[index].data.copy()
-##             mask2 = phasevol.data.copy()
-##             putmask(mask1, abs(mask1)<1e-6, 0)
-##             putmask(mask1, mask1!=0, 1)
-##             putmask(mask2, abs(mask2)<1e-6, 0)
-##             putmask(mask2, mask2!=0, 1)
-##             fmask = mask1*mask2
-##             fmap = (phasevol.data - unwrapped_vols[index].data)*fmask
-##             offset = round(sum(fmap.flat)/(sum(fmask.flat)*2*pi))
-##             if offset != 0:
-##                 fmap -= ((2*pi*offset)*fmask).astype(Float32)
-##             fmap = (fmap/asym_time).astype(Float32)
-##             fmap_image = phasevol._subimage(fmap)
-##             writeImage(fmap_image, "fieldmap-%d"%(index))
-            

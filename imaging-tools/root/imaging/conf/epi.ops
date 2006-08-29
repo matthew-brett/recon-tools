@@ -3,10 +3,6 @@ flip_slices=False
 
 [UnbalPhaseCorrection]
 
-[FermiFilter]
-trans_width=0.3
-cutoff=0.95
-
 [InverseFFT]
 
 [ViewImage]

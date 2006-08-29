@@ -150,7 +150,6 @@ class AnalyzeImage (BaseImage):
 
     #-------------------------------------------------------------------------
     def load_image(self, filename, vrange):
-        # REDO THIS TO READ ONLY LEN(VRANGE) CONTIGUOUS VOLUMES
         # bytes per pixel
         bytepix = self.bitpix/8
         numtype = datatype2typecode[self.datatype]

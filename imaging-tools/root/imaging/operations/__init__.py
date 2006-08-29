@@ -3,6 +3,7 @@ from os.path import dirname, basename, join
 from glob import glob
 from types import TypeType, BooleanType, TupleType
 
+from imaging.util import import_from
 
 ##############################################################################
 def bool_valuator(val):
@@ -196,13 +197,12 @@ class OperationManager (object):
         Find and index by classname all Operation subclasses declared in any
         module in the imaging.operations package.
         """
-        for opmodule in self._get_operation_modules():
-            for name, obj in opmodule.__dict__.items():
-                if type(obj)==TypeType and issubclass(obj, Operation) \
-                  and obj is not Operation:
-                    if self._op_index.has_key(name):
-                        raise self.DuplicateOperationName(name)
-                    self._op_index[name] = obj
+        for name, obj in self._get_operation_modules():
+            if type(obj)==TypeType and issubclass(obj, Operation) \
+                   and obj is not Operation:
+                if self._op_index.has_key(name):
+                    raise self.DuplicateOperationName(name)
+                self._op_index[name] = obj
 
     #-------------------------------------------------------------------------
     def _get_operation_modules(self):
@@ -215,7 +215,8 @@ class OperationManager (object):
         for opfile in opfiles:
             opmodname = basename(opfile).split(".")[0]
             full_opmodname = "imaging.operations.%s"%opmodname
-            opmodules.append(__import__(full_opmodname,{},{},[opmodname]))
+            opmodules.append((opmodname,
+                              import_from(full_opmodname, opmodname)))
         return opmodules
 
     #-------------------------------------------------------------------------

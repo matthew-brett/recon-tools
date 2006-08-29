@@ -49,9 +49,9 @@ class GeometricUndistortionK (Operation):
     def run(self, image):
         
         fmapIm = ReadIm(**{'filename': self.fmap_file,
-                              'format': 'analyze'}).run()
+                              'format': 'nifti'}).run()
         bmaskIm = ReadIm(**{'filename':self.mask_file,
-                               'format': 'analyze'}).run()
+                               'format': 'nifti'}).run()
 
         fmap = fmapIm.data.astype(Float)
         bmask = bmaskIm.data
@@ -94,7 +94,7 @@ class GeometricUndistortionK (Operation):
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)
 
                 K[q1][:] = solve_regularized_eqs(K[q1],
-                                            identity(N2,Complex), 2.0)
+                                            identity(N2,Complex), 0.5)
 
 
 ##                 K[q1][:] = solve_regularized_eqs(

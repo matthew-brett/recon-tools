@@ -159,7 +159,6 @@ class NiftiImage (BaseImage):
                   (self.filetype, self.magic)
             
     def load_image(self, filestem, vrange):
-        # REDO THIS TO READ ONLY LEN(VRANGE) CONTIGUOUS VOLUMES
         if self.filetype == 'single':
             fp = open(filestem+".nii", 'r')
             fp.seek(self.vox_offset)
@@ -260,7 +259,9 @@ class NiftiWriter (object):
         image = self.image
         pdict = self.params
         phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
-                            (pdict['phi'][0], pdict['theta'][0], pdict['psi'][0]))
+                            (pdict.get('phi',[0.0])[0],
+                             pdict.get('theta',[0.0])[0],
+                             pdict.get('psi',[0.0])[0]))
         #print "phi=%f, theta=%f, psi=%f"%(pdict.phi[0],pdict.theta[0],
         #                                  pdict.psi[0])
 
@@ -346,10 +347,11 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
     # suffix-mode only supports volume-wise naming, so force targetdim to 3
     if suffix is not None: targetdim = 3
     if targetdim is None: targetdim = image.ndim
+    im_dict = hasattr(image, '_procpar') and image._procpar or dict()
     for subimage, substem in \
             images_and_names(image, filestem, targetdim, suffix):
         NiftiWriter(subimage, datatype=datatype, filetype=filetype,
-                    params=image._procpar).write(substem)
+                    params=im_dict).write(substem)
 
 #-----------------------------------------------------------------------------
 def writeImageDual(image, filestem, datatype=None, targetdim=None):
