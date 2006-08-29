@@ -103,6 +103,10 @@ class BaseImage (object):
         return self._subimage(newdata)
 
     #-------------------------------------------------------------------------
+    def __getitem__(self, slicer): return self.data[slicer]
+    #-------------------------------------------------------------------------
+    def __setitem__(self, slicer, newdata): self.data[slicer] = newdata
+    #-------------------------------------------------------------------------
     def _subimage(self, data):
         return BaseImage(data,
           self.xsize, self.ysize, self.zsize, self.tsize,

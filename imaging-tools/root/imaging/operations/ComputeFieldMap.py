@@ -4,7 +4,7 @@ from Numeric import empty, sum, sort
 from LinearAlgebra import *
 #from imaging.imageio import writeImage
 from imaging.punwrap import unwrap2D
-from imaging.nifti import writeImageDual
+from imaging.nifti import writeImage
 from imaging.operations import Operation, Parameter
 
 def build_3Dmask(vol):
@@ -69,8 +69,6 @@ class ComputeFieldMap (Operation):
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)
         for index in range(fmap_im.tdim):
-            writeImageDual(fmap_im.subImage(index),
-                           self.fmap_file+"-%d"%(index))
-            writeImageDual(bmask_im.subImage(index),
-                           self.mask_file+"-%d"%(index))
+            writeImage(fmap_im.subImage(index), self.fmap_file+"-%d"%(index))
+            writeImage(bmask_im.subImage(index), self.mask_file+"-%d"%(index))
 
