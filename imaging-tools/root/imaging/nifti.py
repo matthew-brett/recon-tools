@@ -193,7 +193,8 @@ class NiftiWriter (object):
     """
 
     #[STATIC]
-    _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE, 'scale_factor':1.}
+    _defaults_for_fieldname = {'sizeof_hdr': HEADER_SIZE,
+                               'scl_slope':1.}
     #[STATIC]
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
                                 'c': '\0', 's': '', 'B': 0}
