@@ -24,7 +24,7 @@ def getWindow(winName, xSize, ySize):
 
 class Window (Operation):
     params = (
-      Parameter(name="win_name", type="str", default=None,
+      Parameter(name="win_name", type="str", default="hanning",
         description="Type of window.  Can be blackman, hamming, or hanning."),)
 
     def run(self, image):
