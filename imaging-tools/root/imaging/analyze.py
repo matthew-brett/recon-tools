@@ -190,8 +190,9 @@ class AnalyzeWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
 
     #-------------------------------------------------------------------------
-    def __init__(self, image, datatype=None):
+    def __init__(self, image, datatype=None, scale=1.0):
         self.image = image
+        self.scaling = scale
         self.datatype = datatype or typecode2datatype[image.data.typecode()]
 
     #-------------------------------------------------------------------------
@@ -224,6 +225,7 @@ class AnalyzeWriter (object):
           'ysize': image.ysize,
           'zsize': image.zsize,
           'tsize': image.tsize,
+          'scale_factor': self.scaling,
           'glmin': amin(data_magnitude.flat),
           'glmax': amax(data_magnitude.flat),
           'orient': '\0'}   # kludge alert!  this must be fixed!
@@ -254,7 +256,8 @@ def _concatenate(listoflists):
     return finallist
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=None, suffix=None):
+def writeImage(image, filestem, datatype=None, targetdim=None,
+               suffix=None, scale=1.0):
     """
     Write the given image to the filesystem as one or more Analyze7.5 format
     hdr/img pairs.
@@ -287,7 +290,7 @@ def writeImage(image, filestem, datatype=None, targetdim=None, suffix=None):
     if targetdim is None: targetdim = image.ndim
     for subimage, substem in \
             images_and_names(image, filestem, targetdim, suffix):
-        AnalyzeWriter(subimage, datatype=datatype).write(substem)
+        AnalyzeWriter(subimage, datatype=datatype, scale=scale).write(substem)
 
 #-----------------------------------------------------------------------------
 def readImage(filename, **kwargs): return AnalyzeImage(filename, **kwargs)

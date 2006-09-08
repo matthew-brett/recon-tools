@@ -1,19 +1,19 @@
 import sys
 import string 
 import os
-from Numeric import *
 import struct
-from Numeric import empty
+# I will ditch this massive import in favor of a Numeric.foo style
 from FFT import fft as _fft, inverse_fft as _ifft
-from pylab import pi, mlab, fliplr, zeros, fromstring, angle, frange,\
-  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, norm,\
-  matrixmultiply, trace, putmask
+from pylab import pi, zeros, frange, array, \
+  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
+  norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, \
+  putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32
 from punwrap import unwrap2D
 
 
 # maximum numeric range for some smaller data types
 maxranges = {
-  Int8:  255.,
+  Int8:  127.,
   Int16: 32767.,
   Int32: 2147483648.}
 
@@ -43,14 +43,18 @@ def import_from(modulename, objectname):
 def castData(data, data_code):
     "casts numbers in data to desired typecode in data_code"
     # if casting to an integer type, check the data range
+    # if it clips, then scale down
+    # if it has poor integral resolution, then scale up
     if data_code in (Int8, Int16, Int32):
         maxval = amax(abs(data).flat)
         if maxval == 0.: maxval = 1.e20
         maxrange = maxranges[data_code]
-        if maxval > maxrange: data *= (maxrange/maxval)
+        if maxval > maxrange: scl = maxrange/maxval
+        else: scl = maxval/maxrange
     # make the cast
-    data = data.astype(data_code)
-    
+    data[:] = (data/scl).astype(data_code)
+    return scl
+
 #-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
     """
@@ -148,13 +152,16 @@ def complex_checkerboard(rows, cols):
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     "apply a phase correction to k-space"
-    corrector = cos(phase) + 1.j*sin(phase)
+    corrector = exp(1.j*phase)
     return fft(ifft(image)*corrector).astype(image.typecode())
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
     "@return the given angle between -pi and pi"
-    return a + where(a<-pi, 2.*pi, 0) + where(a>pi, -2.*pi, 0)
+    if max(abs(a)) <= pi:
+        return a
+    return normalize_angle(a + where(a<-pi, 2.*pi, 0) + \
+                           where(a>pi, -2.*pi, 0))
 
 #-----------------------------------------------------------------------------
 def fermi_filter(rows, cols, cutoff, trans_width):
@@ -198,10 +205,11 @@ def median_filter(image, N):
     return reshape(img, (tdim, zdim, ydim, xdim))
 
 #-----------------------------------------------------------------------------
-def linReg(X, Y, yvar=None): 
+def linReg(Y, X=None, yvar=None): 
     # find best linear line through data:
     # solve for (b,m) = (crossing, slope)
     # let sigma = 1, may use yvar for variance in the future
+    if X == None: X = arange(len(Y))
     N = len(X)
     Sx = sum(X)
     Sy = sum(Y)
@@ -395,7 +403,7 @@ def eulerRot(theta=0, psi=0, phi=0):
     aboutZ[0,0] = aboutZ[1,1] = cos(phi)
     aboutZ[0,1] = sin(phi)
     aboutZ[1,0] = -sin(phi)
-    M = matrixmultiply(aboutX, matrixmultiply(aboutY, aboutZ))
+    M = dot(aboutX, dot(aboutY, aboutZ))
     # make sure no rounding error proprogates from here
     putmask(M, abs(M)<1e-5, 0)
     return M

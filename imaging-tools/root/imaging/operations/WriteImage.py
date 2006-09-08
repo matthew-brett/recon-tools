@@ -43,11 +43,15 @@ class WriteImage (Operation):
 
         # if the image data isn't of the desired type (analyze.FLOAT, or
         # analyze.COMPLEX), then cast it there.
+        scl = 1.0
         if data_code != analyze.typecode2datatype[image.data.typecode()]:
-            castData(image.data, data_code)
+            scl = castData(image.data, analyze.datatype2typecode[data_code])
         
-        analyze.writeImage(image, self.filename, data_code,
-                           self.filedim, self.suffix)
+        analyze.writeImage(image, self.filename,
+                           datatype=data_code,
+                           targetdim=self.filedim,
+                           suffix=self.suffix,
+                           scale=scl)
     #-------------------------------------------------------------------------
     def writeNifti(self, image):
         from imaging import nifti
@@ -65,11 +69,16 @@ class WriteImage (Operation):
 
         # if the image data isn't of the desired type (nifti.FLOAT, or
         # nifti.COMPLEX), then cast it there.
+        scl = 1.0
         if data_code != nifti.typecode2datatype[image.data.typecode()]:
-            castData(image.data, nifti.datatype2typecode[data_code])      
-        
-        nifti.writeImage(image, self.filename, data_code, self.filedim,
-                         self.format[6:], self.suffix)
+            scl = castData(image.data, nifti.datatype2typecode[data_code])
+            
+        nifti.writeImage(image, self.filename,
+                         datatype=data_code,
+                         targetdim=self.filedim,
+                         filetype=self.format[6:],
+                         suffix=self.suffix,
+                         scale=scl)
     #-------------------------------------------------------------------------
     def run(self, image):
         writer = {

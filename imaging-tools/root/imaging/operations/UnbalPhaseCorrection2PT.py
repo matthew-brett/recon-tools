@@ -52,7 +52,7 @@ class UnbalPhaseCorrection2PT (Operation):
         x_ax = find(mask)
         if sum(mask)>2:
             for r in range(nr):
-                (_, _, res[r]) = linReg(x_ax, take(S[r], x_ax))
+                (_, _, res[r]) = linReg(take(S[r], x_ax), X=x_ax)
         else: res = 1e10*ones(nr)
 
         return E, mask, sum(res)

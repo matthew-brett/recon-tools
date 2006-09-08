@@ -185,7 +185,7 @@ class BalPhaseCorrection (Operation):
         res = zeros((n_slice,), Float)
         for s in range(n_slice):
             for row in phs_vol[s]:
-                (_, _, r) = linReg(arange(self.lin_fe), row)
+                (_, _, r) = linReg(arange(row, X=self.lin_fe))
                 res[s] += r
                 #plot(row)
             #show()

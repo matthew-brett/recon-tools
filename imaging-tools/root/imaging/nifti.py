@@ -199,8 +199,10 @@ class NiftiWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
                                 'c': '\0', 's': '', 'B': 0}
 
-    def __init__(self, image, datatype=None, filetype="single", params=dict()):
+    def __init__(self, image, datatype=None, filetype="single",
+                 params=dict(), scale=1.0):
         self.image = image
+        self.scaling = scale
         self.params = params
         self.filetype = filetype
         self.datatype = datatype or typecode2datatype[image.data.typecode()]
@@ -292,6 +294,7 @@ class NiftiWriter (object):
           'ysize': image.ysize,
           'zsize': image.zsize,
           'tsize': image.tsize,
+          'scl_slope': self.scaling,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
           'qfac': -1.0,
           'qform_code': NIFTI_XFORM_SCANNER_ANAT,
@@ -317,7 +320,8 @@ class NiftiWriter (object):
         return struct_pack(NATIVE, field_formats, fieldvalues)
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single", suffix=None):
+def writeImage(image, filestem, datatype=None, targetdim=None,
+               filetype="single", suffix=None, scale=1.0):
     """
     Write the given image to the filesystem as one or more NIFTI 1.1 format
     hdr/img pairs or single file format.
@@ -352,11 +356,11 @@ def writeImage(image, filestem, datatype=None, targetdim=None, filetype="single"
     for subimage, substem in \
             images_and_names(image, filestem, targetdim, suffix):
         NiftiWriter(subimage, datatype=datatype, filetype=filetype,
-                    params=im_dict).write(substem)
+                    params=im_dict, scale=scale).write(substem)
 
 #-----------------------------------------------------------------------------
-def writeImageDual(image, filestem, datatype=None, targetdim=None):
-    writeImage(image, filestem, datatype, targetdim, filetype="dual")
+def writeImageDual(image, filestem, **kwargs):
+    writeImage(image, filestem, filetype="dual", **kwargs)
 
 #-----------------------------------------------------------------------------
 def readImage(filestem, **kwargs): return NiftiImage(filestem, **kwargs)
