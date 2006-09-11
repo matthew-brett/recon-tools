@@ -1,10 +1,10 @@
 from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
-     pi, sqrt, ones, sum, find, Int, resize, matrixmultiply, svd, transpose, \
+     pi, sqrt, ones, sum, find, Int, resize, dot, svd, transpose, \
      diag, putmask, sign, asarray
 from imaging.operations import Operation, Parameter
 from imaging.util import ifft, apply_phase_correction, mod, linReg, shift, \
-     unwrap_ref_volume
+     unwrap_ref_volume, epi_trajectory
 
 class UnbalPhaseCorrection (Operation):
     """Unbalanced Phase Correction tries to determine six parameters which
@@ -63,6 +63,8 @@ class UnbalPhaseCorrection (Operation):
         self.iscentric = image.petable_name.find('cen') > 0 or \
                          image.petable_name.find('alt') > 0
         self.xleave = self.iscentric and 1 or image.nseg
+        self.alpha, self.beta = epi_trajectory(image.nseg, image.petable_name,
+                                               n_pe)
         # want to fork the code based on sampling style
         theta = self.iscentric and self.run_centric(ifft(refVol)) or \
                 self.run_linear(ifft(refVol))
@@ -89,11 +91,8 @@ class UnbalPhaseCorrection (Operation):
         inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = zeros(n_pe/2)
-        neg_order = zeros(n_pe/2)
-        for n in range(self.xleave):
-            pos_order[n:n_pe/2:self.xleave] = arange(n,n_pe,2*self.xleave)
-            neg_order[n:n_pe/2:self.xleave] = arange(self.xleave+n,n_pe,2*self.xleave)
+        pos_order = find(self.alpha > 0)
+        neg_order = find(self.alpha < 0)
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape and self.lin1)
@@ -103,7 +102,6 @@ class UnbalPhaseCorrection (Operation):
         s_mask = zeros(n_slice)
         r_mask = zeros((n_slice, self.lin_fe))
         res = zeros((n_slice,), Float)
-
         ### FIND THE MEANS FOR EACH SLICE
         for s in range(n_slice):
             # for pos_order, skip 1st 2 for xleave=2
@@ -129,7 +127,7 @@ class UnbalPhaseCorrection (Operation):
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
         print self.coefs
-        return self.correction_volume(pos_order, neg_order) 
+        return self.correction_volume() 
 
     def run_centric(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
@@ -140,10 +138,8 @@ class UnbalPhaseCorrection (Operation):
         inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = arange(0,n_pe,2)
-        pos_order[:n_pe/4] += 1
-        neg_order = arange(1,n_pe,2)
-        neg_order[:n_pe/4] -= 1
+        pos_order = find(self.alpha > 0)
+        neg_order = find(self.alpha < 0)
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape, self.lin1, etc)
@@ -159,9 +155,6 @@ class UnbalPhaseCorrection (Operation):
         for s in range(n_slice):
             # seems that for upper, skip 1st pos and last neg; 
             #            for lower, skip 1st pos and last neg
-            # pos_order, neg_order naming scheme breaks down here!
-            # for mu < 0 rows, ODD rows go "positive"
-            # try to fix this some time
             phs_pos_upper[s], mask_pu, res_pu = \
                         self.masked_avg(take(phs_vol[s], \
                                              pos_order[n_pe/4+1:]))            
@@ -190,12 +183,12 @@ class UnbalPhaseCorrection (Operation):
         v = self.solve_phase(phs_pos_upper, phs_neg_upper, r_mask, s_mask)
         self.coefs = v
         print self.coefs
-        theta_upper = self.correction_volume(pos_order, neg_order)
+        theta_upper = self.correction_volume()
         
         v = self.solve_phase(phs_pos_lower, phs_neg_lower, r_mask, s_mask)
         self.coefs = v
         print self.coefs        
-        theta_lower = self.correction_volume(pos_order, neg_order)
+        theta_lower = self.correction_volume()
         
         theta_vol = empty(theta_lower.shape, theta_lower.typecode())
         theta_vol[:,:n_pe/2,:] = theta_lower[:,:n_pe/2,:]
@@ -282,14 +275,13 @@ class UnbalPhaseCorrection (Operation):
                 A[row_start:row_end,A5] = b*2
                 A[row_start:row_end,A6] = -1
 
-        # take the SVD of A, and left-multiply its inverse with P              
+        # take the SVD of A, and left-multiply its inverse to P              
         [u,s,vt] = svd(A)
-        V = matrixmultiply(transpose(vt), matrixmultiply(diag(1/s), \
-                                          matrixmultiply(transpose(u), P)))
+        V = dot(transpose(vt), dot(diag(1/s), dot(transpose(u), P)))
 
         return tuple(V) 
 
-    def correction_volume(self, m_pos, m_neg):
+    def correction_volume(self):
         """
         build the volume of phase correction lines with::
             theta(s,m,r) = m*[r*A2 + s*A4 + A6] + (-1)^m*[r*A1 + s*A3 + A5]
@@ -315,25 +307,8 @@ class UnbalPhaseCorrection (Operation):
         # m_line & zigzag define how the correction changes per PE line
         # m_line is usually {-32,-31,...,30, 31}, but changes in multishot
         # zigzag[m] defines which rows goes negative or positive (is [-1,1])
-        # it should follow from "pos_order"/"neg_order" groupings
-        # this sets up for linear sampling:
-        zigzag = empty(M)
-        for r in range(M/2):
-            zigzag[m_pos[r]] = 1
-            zigzag[m_neg[r]] = -1
-        m_line = empty(M)
-        for r in range(self.xleave):
-            m_line[r:M:self.xleave] = arange(M/self.xleave)-M/(2*self.xleave)
-
-        # if data is 2-shot centric, must count mu=0 twice AND mu-negative is
-        # made positive. ie m_line is:
-        # [-M/2 + 1 ... 0] M [0 ... M/2 - 1],
-        #
-        # zigzag should already be [-1,1,...,1,1,...,1,-1]
-        # this fixes for centric sampling
-        if self.iscentric:
-            m_line[0:M/2] = -1*(m_line[0:M/2]+1)
-            
+        (zigzag, m_line) = (self.alpha, self.beta)
+        
         # build B matrix, always stays the same
 ##         # ADD THIS PART TO CHANGE r->f(r)
 ##         from pylab import power
@@ -357,6 +332,6 @@ class UnbalPhaseCorrection (Operation):
             # these are the slice-dependent columns
             A[:,2] = s*zigzag
             A[:,3] = s*m_line
-            theta[s] = matrixmultiply(A,B)
+            theta[s] = dot(A,B)
             
         return theta

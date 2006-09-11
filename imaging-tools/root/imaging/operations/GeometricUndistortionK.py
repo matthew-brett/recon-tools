@@ -1,7 +1,7 @@
 from imaging.operations import Operation, Parameter
 from imaging.operations.ReadImage import ReadImage as ReadIm
 from imaging.operations.GaussianSmooth import gaussian_smooth
-from imaging.util import fft, ifft, checkerline
+from imaging.util import fft, ifft, epi_trajectory
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, Complex32, fromfunction, \
      outerproduct, reshape, svd, transpose, conjugate, identity, Float, \
@@ -60,7 +60,8 @@ class GeometricUndistortionK (Operation):
         N2 = N2P = npe
         delT = 1./image._procpar.sw[0]
         df_n = 2.j*pi*fromfunction(lambda y,x: x-y, (N2,N2P))/float(M)
-        n2v = 1.j*(arange(N2)-N2/2)*Tl + checkerline(N2)*delT/2.
+        a, b = epi_trajectory(image.nseg, image.petable_name, M)
+        n2v = 1.j*(a*delT/2. + b*Tl)
         mv = arange(M)-M/2
         # outerproduct of df_n, mv is effectively outerproduct(df_n.flat, mv)
         # I want to shape this differently, so that N2xM is the 1st face of
@@ -82,7 +83,7 @@ class GeometricUndistortionK (Operation):
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)
 
                 K[q1][:] = solve_regularized_eqs(K[q1],
-                                            identity(N2,Complex), 0.5)
+                                            identity(N2,Complex), 0.25)
 
             for dvol in image.data:
                 invdata = ifft(dvol[s])

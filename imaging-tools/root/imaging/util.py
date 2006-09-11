@@ -6,7 +6,7 @@ import struct
 from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, zeros, frange, array, \
   meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
-  norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, \
+  norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
   putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32
 from punwrap import unwrap2D
 
@@ -149,6 +149,22 @@ def checkercube(slices, rows, cols):
 def complex_checkerboard(rows, cols):
     return checkerboard(rows, cols) - 1.j*checkerboard(rows, cols)
  
+#-----------------------------------------------------------------------------
+def epi_trajectory(nseg, pseq, M):
+    if pseq.find('cen') > 0 or pseq.find('alt') > 0:
+        if nseg > 2:
+            raise NotImplementedError("centric sampling not implemented for nseg > 2")
+        a = checkerline(M)
+        a[:M/2] *= -1
+        b = arange(M)-M/2
+        b[:M/2] = abs(b[:M/2] + 1)
+    else:
+        a = empty(M, Int32)
+        for n in range(nseg):
+            a[n:M:2*nseg] = 1
+            a[n+nseg:M:2*nseg] = -1
+        b = floor((arange(float(M))-M/2)/float(nseg)).astype(Int32)
+    return (a, b)
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     "apply a phase correction to k-space"

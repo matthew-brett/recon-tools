@@ -1,5 +1,5 @@
 from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
-     angle, conjugate, putmask, Int8
+     angle, conjugate, putmask, Int8, power
 from Numeric import empty, sum, sort
 from LinearAlgebra import *
 #from imaging.imageio import writeImage
@@ -12,7 +12,8 @@ def build_3Dmask(vol):
     p = sort(abs(vol.flat))
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
-    thresh = 0.1*(t98 - t2) + t2
+    thresh = 0.075*(t98 - t2) + t2
+    print t2, t98, thresh
     putmask(mask, abs(vol)<thresh, 0)
     return mask
 
@@ -21,7 +22,7 @@ def unwrap_phase(vols):
     uw_phase = empty(shape, Float32)
     masks = empty(shape, Int8)
     for t in range(shape[0]):
-        masks[t] = build_3Dmask(vols[t])
+        masks[t] = build_3Dmask(power(vols[t], 0.5))
         for z in range(shape[1]):
             uw_phase[t,z] = unwrap2D(angle(vols[t,z]), mask=masks[t,z])
     return uw_phase, masks
