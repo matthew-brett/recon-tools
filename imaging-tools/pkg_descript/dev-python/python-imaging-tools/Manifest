@@ -1,8 +1,8 @@
-DIST python-imaging-tools-0.3.tar.gz 74720 RMD160 46cc4e705a9ddf297fe985d9ec2929593cc8d0c9 SHA1 46c359db7fbca2922c56ed94e68a4b024f552ece SHA256 6e471d8ffbb2842fab51362d205a329a42bd6076a6d3a9bce533eb32a511de07
+DIST python-imaging-tools-0.3.tar.gz 120029 RMD160 f0ad98098191d4d177839f6a13184db7bb74087e SHA1 fff7460fb2a9fb393b3b020595ff2f4897ce4f2d SHA256 458bf6cce17fc47a05f9b00df24a11be594eb36a73062890d9efed4f1a645bbf
 EBUILD python-imaging-tools-0.3.ebuild 648 RMD160 184d3836281c974183fe88acfd39b765c8bd8b0f SHA1 ba4759be43591d4ee269fced60f94c45f723bd55 SHA256 74423182131034b3b1dec4cabe0446781cbac890a063e50a441d0b51e0d4fc61
 MD5 d182e5ef9b41d6858fdf2923c34cf83e python-imaging-tools-0.3.ebuild 648
 RMD160 184d3836281c974183fe88acfd39b765c8bd8b0f python-imaging-tools-0.3.ebuild 648
 SHA256 74423182131034b3b1dec4cabe0446781cbac890a063e50a441d0b51e0d4fc61 python-imaging-tools-0.3.ebuild 648
-MD5 fc1eb6f13a11c1da611cd2c58200b3e6 files/digest-python-imaging-tools-0.3 271
-RMD160 e479f99a51c0a1f98e365ef3d11610f4f231c0a3 files/digest-python-imaging-tools-0.3 271
-SHA256 cbd252fc5c80777fa26e450cc11418b0b0b6c3d533ee413057c1e15da30d6c3f files/digest-python-imaging-tools-0.3 271
+MD5 58974f0ee18be286c2cb139b97a3db43 files/digest-python-imaging-tools-0.3 274
+RMD160 cd10519540c6eb0f1b105f682a69c70fa0703a5f files/digest-python-imaging-tools-0.3 274
+SHA256 06b30f03292761734af072646264dd782b335ed92e72be1f8ef66ba8b298e5f9 files/digest-python-imaging-tools-0.3 274
