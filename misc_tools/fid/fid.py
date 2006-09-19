@@ -72,7 +72,7 @@ def writeFid(m, name, newtype=Int16, biases=None, format='uncompressed'):
         nblocks = T*nslice
         ntraces = ny
         m = reshape(m, (T*nslice,ny*nx))
-    else raise ValueError("%s: not an available format"%format)
+    else: raise ValueError("%s: not an available format"%format)
 
     # put biases back into raw data, allows us to truncate
     if biases is None: biases = zeros((nblocks,),Complex32)

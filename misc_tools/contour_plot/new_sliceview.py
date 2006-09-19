@@ -108,14 +108,13 @@ class sliceview (gtk.Window):
           self.control_panel.getRowIndex(),
           self.control_panel.getColIndex(),
           cmap=cmap, norm=self.norm)
-        self.sliceplot.set_size_request(64*4+50, 64*4+50)
-        #self.sliceplot.set_size_request(140, 140)
         self.sliceplot.mpl_connect(
           'motion_notify_event', self.sliceMouseMotionHandler)
         self.sliceplot.mpl_connect(
           'button_press_event', self.sliceMouseDownHandler)
         self.sliceplot.mpl_connect(
           'button_release_event', self.sliceMouseUpHandler)
+        self.scale_image(6)
         scrollwin.add_with_viewport(self.sliceplot)
         #table.attach(self.sliceplot, 1, 2, 2, 3)
         table.attach(scrollwin, 1, 2, 2, 3)
@@ -313,23 +312,30 @@ class sliceview (gtk.Window):
             dialog.connect("response", lambda d, r: d.destroy())
             dialog.show()
 
-    def scale_image(self, action, current):
-        max_size = 8.0
-        base_panel_size = min(self.control_panel.getRowDim().size,
-                              self.control_panel.getColDim().size)
-        scale_factor = current.get_current_value()
+    def scale_handler(self, action, current):
+        self.scale_image(current.get_current_value())
+
+    def scale_image(self, scale_factor):
+        base_panel_size = min(min(self.control_panel.getRowDim().size,
+                                  self.control_panel.getColDim().size),
+                              350)
+        #scale_factor = current.get_current_value()
         new_panel_size = scale_factor*base_panel_size
         ax = self.sliceplot.getAxes()
-        l = b = 0.5*(1 - scale_factor/max_size)
-        w = h = scale_factor/max_size
-        if scale_factor == max_size:
-            l = .02
-            b = .05
-            w -= .09
-            h -= .09
-            new_panel_size += 50
+        w = h = new_panel_size/float(new_panel_size + 50)
+        l = 15./(new_panel_size + 50)
+        b = 35./(new_panel_size + 50)
+        #l = b = 0.5*(1 - scale_factor/max_size)
+        #w = h = scale_factor/max_size
+        #if scale_factor == max_size:
+        #    l = .02
+        #    b = .05
+        #    w -= .09
+        #    h -= .09
+        #    new_panel_size += 50
         ax.set_position([l,b,w,h])
-        self.sliceplot.set_size_request(new_panel_size, new_panel_size)
+        #self.sliceplot.set_size_request(new_panel_size+50, new_panel_size+50)
+        self.sliceplot.resize(new_panel_size+50, new_panel_size+50)
         self.sliceplot.draw()
 
     def _create_action_group(self):
@@ -366,7 +372,7 @@ class sliceview (gtk.Window):
         action_group = gtk.ActionGroup("WindowActions")
         action_group.add_actions(entries)
         action_group.add_radio_actions(size_toggles, 6,
-                                       self.scale_image)
+                                       self.scale_handler)
         return action_group
             
 
@@ -668,8 +674,9 @@ class SlicePlot (FigureCanvas):
         self.hasContours = False
         self.contourLevels = 7
         #fig = p.Figure(figsize=p.figaspect(data), dpi=80)
-        fig = p.Figure(figsize=(28,28))
-        ax  = fig.add_axes([.5*(1-4/8.)+.02, .5*(1-4/8.)+.02, 4/8., 4/8.])
+        fig = p.Figure()
+        #ax  = fig.add_axes([.5*(1-4/8.)+.02, .5*(1-4/8.)+.02, 4/8., 4/8.])
+        ax = fig.add_subplot(111)
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
         FigureCanvas.__init__(self, fig)
@@ -933,5 +940,5 @@ if __name__ == "__main__":
     from pylab import randn
     import pdb
     #pdb.run('sliceview(randn(6,6))', globals=globals(), locals=locals())
-    pdb.run('sliceview(fmap.data)', globals=globals(), locals=locals())
-    #sliceview(fmap.data)
+    pdb.run('sliceview(img.data)', globals=globals(), locals=locals())
+    #sliceview(img.data.data)
