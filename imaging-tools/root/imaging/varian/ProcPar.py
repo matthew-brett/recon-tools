@@ -208,6 +208,7 @@ class ProcParImageMixin (object):
         elif hasattr(procpar, "image") and len(procpar.image) == self.nvol_true:
             return procpar.image
         else: return [1]*self.nvol_true
+
     is_imagevol = CachedReadOnlyProperty(_get_is_imagevol, "")
 
     ref_vols = CachedReadOnlyProperty(
@@ -260,7 +261,8 @@ class ProcParImageMixin (object):
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
             return self._procpar.nseg[0]
-        elif self.pulse_sequence in ('gems', 'mp_flash3d', 'box3d_v2', 'asems'): return 1
+        elif self.pulse_sequence in ('gems','mp_flash3d','box3d_v2','asems'):
+            return 1
         else: raise ValueError(
               "Could not identify sequence: %s" % (self.pulse_sequence))
     nseg = CachedReadOnlyProperty(_get_nseg, "")

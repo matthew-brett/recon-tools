@@ -1,5 +1,5 @@
 from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
-     angle, conjugate, putmask, Int8, power
+     angle, conjugate, putmask, Int8, power, diff
 from Numeric import empty, sum, sort
 from LinearAlgebra import *
 #from imaging.imageio import writeImage
@@ -12,7 +12,7 @@ def build_3Dmask(vol):
     p = sort(abs(vol.flat))
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
-    thresh = 0.075*(t98 - t2) + t2
+    thresh = 0.1*(t98 - t2) + t2
     print t2, t98, thresh
     putmask(mask, abs(vol)<thresh, 0)
     return mask
@@ -47,11 +47,13 @@ class ComputeFieldMap (Operation):
     def run(self, image):
 
         # Make sure it's an asems image
-        if not hasattr(image._procpar, "asym_time"):
+        if not hasattr(image._procpar, "asym_time") and \
+               not hasattr(image._procpar, "te"):
             self.log("No asym_time, can't compute field map.")
             return
-        asym_times = image._procpar.asym_time
-
+        asym_times = image._procpar.get('asym_time', False) or \
+                     image._procpar.get('te', False)
+        print diff(asym_times)
         # Make sure there are at least two volumes
         if image.tdim < 2:
             self.log("Cannot calculate field map from only a single volume."\

@@ -10,7 +10,7 @@ from imaging.imageio import BaseImage
 class Rot90 (Operation):
     """
     This class operatates slice-by-slice to rotate the images so that they are
-    in radiological or neurological format.
+    in radiological, neurological, or recon_epi format.
     """
 
     params = (Parameter(name="orient", type="str", default="radiological",
@@ -23,12 +23,12 @@ class Rot90 (Operation):
     def run(self, image):
         data = image.data
         dshape = data.shape
-        if self.orient.lower()=='radiological':
-            # psi = 90
-            xform = lambda x: rot90(x)
-        else:
-            # psi = 90 * theta = 180
+        if self.orient.lower()=='neurological':
             xform = lambda x: rot90(flipud(x))
+        else if self.orient.lower()=='recon_epi':
+            xform = lambda x: rot90(flipud(x), k=-1)
+        else:
+            xform = lambda x: rot90(x)
         for vol in data:
             for slice in vol:
                 rotated = xform(slice)

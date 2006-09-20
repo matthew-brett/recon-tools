@@ -1,10 +1,8 @@
 from FFT import fft, inverse_fft
-from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32, \
+from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32,\
      swapaxes, product, NewAxis, reshape, squeeze
 from imaging.operations import Operation
 from imaging.util import reverse
-
-# NOTE: 2-shot not yet set
 
 def subsampInterp(ts, c, axis=-1):
     # convert arbitrarily shaped ts into a 2d array
@@ -40,14 +38,14 @@ class FixTimeSkew (Operation):
             for s in range(nslice):
                 # want to shift seg1 forward temporally and seg2 backwards--
                 # have them meet halfway (??)
-                c1 = -(S-s-0.5)/float(nslice)
+                c1 = -(nslice-s-0.5)/float(nslice)
                 c2 = (s+0.5)/float(nslice)
                 # get the appropriate slicing for sampling type
                 sl1 = self.segn(image,0)
                 sl2 = self.segn(image,1)
-                # interpolate for each segment
-                subsampInterp(squeeze(image.data[:,s,sl1,:]), c1, axis=0)
-                subsampInterp(squeeze(image.data[:,s,sl2,:]), c2, axis=0)
+                # interpolate for each segment        
+                subsampInterp(image.data[:,s,sl1,:], c1, axis=0)
+                subsampInterp(image.data[:,s,sl2,:], c2, axis=0)
 
     def segn(self, image, n):
         # this is very very limited to 2-shot trajectories!

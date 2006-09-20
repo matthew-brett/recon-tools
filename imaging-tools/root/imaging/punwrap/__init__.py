@@ -24,6 +24,6 @@ def unwrap2D(matrix, mask=None):
     
     in_phase = len(dims) < 2 and reshape(matrix,(1,dims[0])) or matrix
     in_phase = (in_phase*mask).astype(dtype)
-    ret = (lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
+    ret = (mask*lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
     return ret
 

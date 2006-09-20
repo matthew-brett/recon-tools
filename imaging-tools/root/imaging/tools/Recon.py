@@ -277,7 +277,7 @@ class Recon (ConsoleTool):
         runlogger.logop(reader)        
         
         # Log some parameter info to the console.
-        image.logParams()
+        if hasattr(image, 'logParams'): image.logParams()
 
         # Instantiate the operations declared in oplist file.
         operations = [opclass(**args)

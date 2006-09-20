@@ -33,7 +33,9 @@ class GeometricUndistortionK (Operation):
         Parameter(name="fmap_file", type="str", default="fieldmap-0",
                   description="Name of the field map file"),
         Parameter(name="mask_file", type="str", default="volmask-0",
-                  description="Name of the volume mask file")
+                  description="Name of the volume mask file"),
+        Parameter(name="lmbda", type="float", default=2.0,
+                  description="Inverse regularization factor")
         )
 
     def run(self, image):
@@ -51,7 +53,6 @@ class GeometricUndistortionK (Operation):
         # timer stuff:
         import time
         lag = -time.time() + time.time()
-        
         Tl = image.T_pe
         #Q1 = nfe
         #Q2 = N2 = N2P = npe
@@ -83,7 +84,7 @@ class GeometricUndistortionK (Operation):
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)
 
                 K[q1][:] = solve_regularized_eqs(K[q1],
-                                            identity(N2,Complex), 0.25)
+                                            identity(N2,Complex), self.lmbda)
 
             for dvol in image.data:
                 invdata = ifft(dvol[s])
