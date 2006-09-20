@@ -25,8 +25,9 @@ class Rot90 (Operation):
         dshape = data.shape
         if self.orient.lower()=='neurological':
             xform = lambda x: rot90(flipud(x))
-        else if self.orient.lower()=='recon_epi':
-            xform = lambda x: rot90(flipud(x), k=-1)
+        elif self.orient.lower()=='recon_epi':
+            #xform = lambda x: rot90(flipud(x), k=-1)
+            xform = lambda x: flipud(rot90(x))
         else:
             xform = lambda x: rot90(x)
         for vol in data:

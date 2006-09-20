@@ -1,6 +1,6 @@
 from imaging.operations import Operation, Parameter
 from imaging.operations.ReadImage import ReadImage as ReadIm
-from imaging.operations.GaussianSmooth import gaussian_smooth
+#from imaging.operations.GaussianSmooth import gaussian_smooth
 from imaging.util import fft, ifft, epi_trajectory
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, Complex32, fromfunction, \
@@ -9,21 +9,21 @@ from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
 
 from LinearAlgebra import solve_linear_equations as solve
 
-def transWin(tw, slope):
-    w = blackman(tw*2)
-    return slope > 0 and w[:tw] or w[tw:]
+## def transWin(tw, slope):
+##     w = blackman(tw*2)
+##     return slope > 0 and w[:tw] or w[tw:]
     
-def smoothBinVect(v):
-    #for all up/down transitions, overlay transition window up to 6 points
-    chi = v.astype(Float)
-    dv = diff(v)
-    if sum(abs(dv))==0: return chi
-    segs = list(find(dv!=0))
-    segs = [segs[0]+1] + diff(segs).tolist() + [len(v)-segs[-1]-1]
-    for n, jmp in enumerate(find(dv!=0)+1):
-        tw = min(6, min(segs[n], segs[n+1]))
-        chi[jmp + tw/2 - tw: jmp + tw/2] = transWin(tw, sign(dv[jmp-1]))
-    return chi
+## def smoothBinVect(v):
+##     #for all up/down transitions, overlay transition window up to 6 points
+##     chi = v.astype(Float)
+##     dv = diff(v)
+##     if sum(abs(dv))==0: return chi
+##     segs = list(find(dv!=0))
+##     segs = [segs[0]+1] + diff(segs).tolist() + [len(v)-segs[-1]-1]
+##     for n, jmp in enumerate(find(dv!=0)+1):
+##         tw = min(6, min(segs[n], segs[n+1]))
+##         chi[jmp + tw/2 - tw: jmp + tw/2] = transWin(tw, sign(dv[jmp-1]))
+##     return chi
 
 
 class GeometricUndistortionK (Operation):
@@ -77,14 +77,15 @@ class GeometricUndistortionK (Operation):
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
             e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,M,Q1)))
-            for n2 in range(N2):
-                e2[n2][:] = gaussian_smooth(e2[n2], 3, 3)
+##             for n2 in range(N2):
+##                 e2[n2][:] = gaussian_smooth(e2[n2], 3, 3)
             for q1 in range(Q1):
 
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)
 
                 K[q1][:] = solve_regularized_eqs(K[q1],
-                                            identity(N2,Complex), self.lmbda)
+                                                 identity(N2,Complex),
+                                                 self.lmbda)
 
             for dvol in image.data:
                 invdata = ifft(dvol[s])
