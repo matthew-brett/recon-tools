@@ -8,6 +8,6 @@ categories	python
 maintainers	mtrumpis@gmail.com
 description	mri reconstruction tools
 long_description    ditto
-homepage	https://cirl.berkeley.edu/view/BIC/ImagingTools
-master_sites	https://cirl.berkeley.edu/twiki/pub/BIC/ImagingTools/
-checksums	md5 bb658c82584d2c5d08aa2432af413586
+homepage	https://cirl.berkeley.edu/view/BIC/ReconTools
+master_sites	https://cirl.berkeley.edu/twiki/pub/BIC/ReconTools/
+checksums	md5 ee0debd5f30d42ed4453f982361081db

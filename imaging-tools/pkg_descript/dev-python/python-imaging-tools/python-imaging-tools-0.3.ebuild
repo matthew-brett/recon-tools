@@ -8,8 +8,8 @@ inherit distutils eutils
 #S=${WORKDIR}/${MY_P}
 
 DESCRIPTION="MRI reconstruction tools"
-HOMEPAGE="https://cirl.berkeley.edu/view/BIC/ImagingTools"
-SRC_URI="https://cirl.berkeley.edu/twiki/pub/BIC/ImagingTools/${P}.tar.gz"
+HOMEPAGE="https://cirl.berkeley.edu/view/BIC/ReconTools"
+SRC_URI="https://cirl.berkeley.edu/twiki/pub/BIC/ReconTools/${P}.tar.gz"
 
 LICENSE="as-is"
 SLOT="0"
