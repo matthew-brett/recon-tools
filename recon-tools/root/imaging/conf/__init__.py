@@ -1,5 +1,5 @@
 """
-The imaging.conf package exists to contain configuration data files.  It does
+The recon.conf package exists to contain configuration data files.  It does
 not contain any python modules.  The package defines a single function which
 can retrieve these config files by name.
 """

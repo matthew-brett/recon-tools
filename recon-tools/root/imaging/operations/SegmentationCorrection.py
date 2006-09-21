@@ -1,7 +1,7 @@
 from Numeric import empty, NewAxis
 from pylab import mlab, pi, floor, angle, where, amax, cos, sin, Float, Complex32
-from imaging.operations import Operation
-from imaging.util import normalize_angle, ifft, apply_phase_correction
+from recon.operations import Operation
+from recon.util import normalize_angle, ifft, apply_phase_correction
 
 
 ##############################################################################

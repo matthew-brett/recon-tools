@@ -1,7 +1,7 @@
 from FFT import inverse_fftnd
 from pylab import Complex32
-from imaging.util import checkercube
-from imaging.operations import Operation
+from recon.util import checkercube
+from recon.operations import Operation
 
 ##############################################################################
 class InverseFFT3D (Operation):
@@ -19,7 +19,7 @@ class InverseFFT3D (Operation):
     def run(self, image):
         nslice, n_pe, n_fe = image.data.shape[-3:]
         mask = checkercube(nslice, n_pe, n_fe)
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = (mask*inverse_fftnd(mask*image.data,
                                                 axes=[1,2,3])).astype(Complex32)

@@ -1,7 +1,7 @@
 from FFT import fft2d
 from pylab import Complex32
-from imaging.util import checkerboard
-from imaging.operations import Operation
+from recon.util import checkerboard
+from recon.operations import Operation
 
 ##############################################################################
 class ForwardFFT (Operation):
@@ -17,7 +17,7 @@ class ForwardFFT (Operation):
     def run(self, image):
         ydim, xdim = image.data.shape[-2:]
         mask = checkerboard(ydim, xdim)
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = (mask * fft2d(mask * image.data)).astype(Complex32)
         else:

@@ -1,6 +1,6 @@
 from pylab import Float32
-from imaging.operations import Operation, Parameter
-from imaging.util import fermi_filter
+from recon.operations import Operation, Parameter
+from recon.util import fermi_filter
 
 
 ##############################################################################

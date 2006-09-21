@@ -1,5 +1,5 @@
-from imaging.operations import Operation, Parameter
-from imaging.util import shift
+from recon.operations import Operation, Parameter
+from recon.util import shift
 
 class Shift (Operation):
     "Allows a user to make arbitrary shifts of the data"

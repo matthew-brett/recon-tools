@@ -1,7 +1,7 @@
 from Numeric import empty
 from pylab import mlab, zeros, arange, take, array, find
-from imaging.operations import Operation, Parameter
-from imaging.util import reverse
+from recon.operations import Operation, Parameter
+from recon.util import reverse
 
 ##############################################################################
 class ReorderSlices (Operation):

@@ -1,9 +1,9 @@
 import sys
 from os.path import join, basename, dirname, split
 from optparse import OptionParser, Option
-from imaging.tools import ConsoleTool
-from imaging.imageio import readImage
-from imaging.operations.ViewImage import ViewImage
+from recon.tools import ConsoleTool
+from recon.imageio import readImage
+from recon.operations.ViewImage import ViewImage
 
 ##############################################################################
 class ViewImageTool (ConsoleTool):

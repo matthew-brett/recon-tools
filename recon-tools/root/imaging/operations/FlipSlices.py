@@ -1,5 +1,5 @@
 from pylab import flipud, fliplr
-from imaging.operations import Operation, Parameter
+from recon.operations import Operation, Parameter
 
 ##############################################################################
 class FlipSlices (Operation):

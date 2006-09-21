@@ -6,11 +6,11 @@ import sys
 from Numeric import empty
 from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr,\
   zeros, fromstring, reshape, arange, take, floor, argmax, multiply, asarray
-from imaging.util import shift
-from imaging.imageio import BaseImage
-from imaging.varian import tablib
-from imaging.varian.ProcPar import ProcPar, ProcParImageMixin
-from imaging.varian.FidFile import FidFile
+from recon.util import shift
+from recon.imageio import BaseImage
+from recon.varian import tablib
+from recon.varian.ProcPar import ProcPar, ProcParImageMixin
+from recon.varian.FidFile import FidFile
 
 
 #-----------------------------------------------------------------------------

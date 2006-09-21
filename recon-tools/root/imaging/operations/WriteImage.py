@@ -1,6 +1,6 @@
-from imaging.imageio import writeImage
-from imaging.util import castData
-from imaging.operations import Operation, Parameter
+from recon.imageio import writeImage
+from recon.util import castData
+from recon.operations import Operation, Parameter
 
 ANALYZE_FORMAT = "analyze"
 NIFTI_DUAL = "nifti-dual"
@@ -28,7 +28,7 @@ class WriteImage (Operation):
 
     #-------------------------------------------------------------------------
     def writeAnalyze(self, image):
-        from imaging import analyze
+        from recon import analyze
         # convert to format-specific datatype constant
         if self.datatype == COMPLEX_TYPE:
             # misunderstanding, default to
@@ -54,7 +54,7 @@ class WriteImage (Operation):
                            scale=scl)
     #-------------------------------------------------------------------------
     def writeNifti(self, image):
-        from imaging import nifti
+        from recon import nifti
          # convert to format-specific datatype constant
         if self.datatype == COMPLEX_TYPE:
             # misunderstanding, default to

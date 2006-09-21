@@ -2,9 +2,9 @@
 import os
 from StringIO import StringIO
 from optparse import OptionParser
-from imaging.tools.Recon import Recon
-from imaging.tools import OrderedConfigParser
-from imaging.operations import OperationManager, RunLogger
+from recon.tools.Recon import Recon
+from recon.tools import OrderedConfigParser
+from recon.operations import OperationManager, RunLogger
 
 class Rerun (Recon):
 

@@ -1,5 +1,5 @@
 from sliceview import sliceview
-from imaging.operations import Operation
+from recon.operations import Operation
 
 ##############################################################################
 class ViewImage (Operation):

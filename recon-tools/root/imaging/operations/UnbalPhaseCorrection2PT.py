@@ -2,8 +2,8 @@ from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, \
      pi, sqrt, ones, sum, find, Int, matrixmultiply, svd, transpose, \
      diag, putmask, asarray
-from imaging.operations import Operation, Parameter
-from imaging.util import ifft, apply_phase_correction, mod, linReg, shift, \
+from recon.operations import Operation, Parameter
+from recon.util import ifft, apply_phase_correction, mod, linReg, shift, \
      unwrap_ref_volume
 
 class UnbalPhaseCorrection2PT (Operation):
@@ -272,7 +272,7 @@ class UnbalPhaseCorrection2PT (Operation):
                 (a1[r], b1[r]) = \
                         self.solve_phase2(phs_pos[:,r], phs_neg[:,r], s_mask)
 
-            from imaging.util import checkerline
+            from recon.util import checkerline
             theta_vol = empty(self.volShape, Float)
             m_line = arange(n_pe)-n_pe/2
             s_line = arange(n_slice)
@@ -284,7 +284,7 @@ class UnbalPhaseCorrection2PT (Operation):
 ##                                            zigzag[m]*(a1[r]+s*a2[r])
                         theta_vol[s,m,r] = m_line[m]*(b1[r]) + \
                                            zigzag[m]*(a1[r])
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = apply_phase_correction(image.data, -theta_vol)
         else:

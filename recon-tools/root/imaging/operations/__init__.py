@@ -3,7 +3,7 @@ from os.path import dirname, basename, join
 from glob import glob
 from types import TypeType, BooleanType, TupleType
 
-from imaging.util import import_from
+from recon.util import import_from
 
 ##############################################################################
 def bool_valuator(val):
@@ -133,7 +133,7 @@ class RunLogger (object):
 
     # what command is used to run the executable log
     _magic_string = "#!/usr/bin/env python\n"\
-                    "from imaging.tools.Rerun import Rerun\n"\
+                    "from recon.tools.Rerun import Rerun\n"\
                     "if __name__==\"__main__\": Rerun(__file__).run()\n"
 
     _start_string = "## BEGIN OPS LOG\n"
@@ -195,7 +195,7 @@ class OperationManager (object):
     def _load_operation_index(self):
         """
         Find and index by classname all Operation subclasses declared in any
-        module in the imaging.operations package.
+        module in the recon.operations package.
         """
         for name, obj in self._get_operation_modules():
             if type(obj)==TypeType and issubclass(obj, Operation) \
@@ -207,14 +207,14 @@ class OperationManager (object):
     #-------------------------------------------------------------------------
     def _get_operation_modules(self):
         """
-        Find and import all modules in the imaging.operation package.
+        Find and import all modules in the recon.operation package.
         Return a list of the found module objects.
         """
         opfiles = glob(join(dirname(__file__), "*.py"))
         opmodules = []
         for opfile in opfiles:
             opmodname = basename(opfile).split(".")[0]
-            full_opmodname = "imaging.operations.%s"%opmodname
+            full_opmodname = "recon.operations.%s"%opmodname
             opmodules.append((opmodname,
                               import_from(full_opmodname, opmodname)))
         return opmodules

@@ -2,8 +2,8 @@
 import sys
 import os.path
 
-from imaging.tools import ConsoleTool
-from imaging.varian.ProcPar import ProcPar
+from recon.tools import ConsoleTool
+from recon.varian.ProcPar import ProcPar
 
 ##############################################################################
 class GetParam (ConsoleTool):

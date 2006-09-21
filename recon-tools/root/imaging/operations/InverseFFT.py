@@ -1,7 +1,7 @@
 from FFT import inverse_fft2d
 from pylab import Complex32
-from imaging.util import checkerboard
-from imaging.operations import Operation
+from recon.util import checkerboard
+from recon.operations import Operation
 
 ##############################################################################
 class InverseFFT (Operation):
@@ -20,7 +20,7 @@ class InverseFFT (Operation):
 
         # 2D checkerboard the shape of one image slice
         mask = checkerboard(*(image.data.shape[-2:]))
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = (mask * \
                              inverse_fft2d(mask * image.data)).astype(Complex32)

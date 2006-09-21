@@ -1,6 +1,6 @@
 python := /bin/env python
 version := $(PYTHONPATH=./root && scripts/imaging-doc --version)
-package_name := python-imaging-tools
+package_name := python-recon-tools
 rpm_name := $(package_name)-$(version)
 checkinstall := /usr/sbin/checkinstall
 docs_dir := $(shell pwd)/docs

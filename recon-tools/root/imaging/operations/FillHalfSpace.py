@@ -1,10 +1,10 @@
 import sys
-from imaging.operations import Operation, Parameter
+from recon.operations import Operation, Parameter
 from pylab import zeros, Complex32, Float, arange, reshape, rot90, conjugate, angle, sum_flat, exp, Complex, NewAxis, cos, pi
-from imaging.util import embedIm, checkerboard
+from recon.util import embedIm, checkerboard
 from FFT import inverse_fft2d, fft2d
-from imaging.operations.ForwardFFT import ForwardFFT as FwdFFT
-from imaging.operations.InverseFFT import InverseFFT as InvFFT
+from recon.operations.ForwardFFT import ForwardFFT as FwdFFT
+from recon.operations.InverseFFT import InverseFFT as InvFFT
 
 
 

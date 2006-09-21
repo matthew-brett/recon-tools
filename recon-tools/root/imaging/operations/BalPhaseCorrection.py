@@ -3,8 +3,8 @@
 #from FFT import inverse_fft
 from Numeric import sort
 from pylab import angle, conjugate, sin, cos, Complex32, Complex, fft, arange, reshape, ones, sqrt, plot, mean, take, pi, zeros, Float, show, floor, median, NewAxis, transpose, dot, svd, exp, Int, diag, title, asarray, legend, empty, sign, putmask, find, sum
-from imaging.operations import Operation, Parameter
-from imaging.util import shift, fft, ifft, apply_phase_correction, unwrap1D, linReg, mod, checkerline, unwrap_ref_volume
+from recon.operations import Operation, Parameter
+from recon.util import shift, fft, ifft, apply_phase_correction, unwrap1D, linReg, mod, checkerline, unwrap_ref_volume
 
 def shift_columns_left(matrix):
 
@@ -79,7 +79,7 @@ class BalPhaseCorrection (Operation):
         print "Tl = %f; delT = %f"%(Tl,delT,)
         theta_vol = self.correction_volume(Tl, delT)
 
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = apply_phase_correction(image.data, -theta_vol)
         else:

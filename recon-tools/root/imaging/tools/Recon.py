@@ -1,12 +1,12 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
 import os
-import imaging.conf
-from imaging.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
+import recon.conf
+from recon.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
-from imaging.tools import OrderedConfigParser, ConsoleTool
-from imaging.operations import OperationManager, RunLogger, WriteImage
-from imaging.varian.FidImage import getPulseSeq
+from recon.tools import OrderedConfigParser, ConsoleTool
+from recon.operations import OperationManager, RunLogger, WriteImage
+from recon.varian.FidImage import getPulseSeq
 
 # here is a global flag to control fast/slow array logic
 _FAST_ARRAY = False
@@ -119,7 +119,7 @@ class Recon (ConsoleTool):
               "No default operations found for pulse sequence '%s'"%key)
         opfilename = oplistBySeq[key]
         print "Using default oplist %s."%opfilename
-        return imaging.conf.getOplistFileName(opfilename)
+        return recon.conf.getOplistFileName(opfilename)
         
     #-------------------------------------------------------------------------
     def configureOperations(self, opfileptr):

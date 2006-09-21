@@ -1,9 +1,9 @@
 "This is a template module, which can be copied to build new operations"
 
-#This file name is Template.py, found under root/imaging/operations
+#This file name is Template.py, found under root/recon/operations
 
 #here I'm importing various definitions from outside of Python:	
-from imaging.operations import Operation, Parameter
+from recon.operations import Operation, Parameter
 from pylab import reshape, arange, identity, matrixmultiply, inverse
 
 #I can define a helper function outside of run(image) if it makes

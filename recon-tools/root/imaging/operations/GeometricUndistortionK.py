@@ -1,7 +1,7 @@
-from imaging.operations import Operation, Parameter
-from imaging.operations.ReadImage import ReadImage as ReadIm
-#from imaging.operations.GaussianSmooth import gaussian_smooth
-from imaging.util import fft, ifft, epi_trajectory
+from recon.operations import Operation, Parameter
+from recon.operations.ReadImage import ReadImage as ReadIm
+#from recon.operations.GaussianSmooth import gaussian_smooth
+from recon.util import fft, ifft, epi_trajectory
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, Complex32, fromfunction, \
      outerproduct, reshape, svd, transpose, conjugate, identity, Float, \

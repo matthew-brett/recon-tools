@@ -2,10 +2,10 @@ from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
      angle, conjugate, putmask, Int8, power, diff
 from Numeric import empty, sum, sort
 from LinearAlgebra import *
-#from imaging.imageio import writeImage
-from imaging.punwrap import unwrap2D
-from imaging.nifti import writeImage
-from imaging.operations import Operation, Parameter
+#from recon.imageio import writeImage
+from recon.punwrap import unwrap2D
+from recon.nifti import writeImage
+from recon.operations import Operation, Parameter
 
 def build_3Dmask(vol):
     mask = ones(vol.shape, Int8)

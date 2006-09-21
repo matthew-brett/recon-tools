@@ -5,9 +5,9 @@ import struct
 import exceptions
 import sys
 from odict import odict
-from imaging.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult
-from imaging.imageio import BaseImage
-from imaging.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
+from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult
+from recon.imageio import BaseImage
+from recon.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
      typecode2datatype, byteorders
 
 # datatype is a bit flag into the datatype identification byte of the NIFTI

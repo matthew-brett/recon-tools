@@ -1,10 +1,10 @@
 import os
 import sys
 
-from imaging.tools import ConsoleTool
-from imaging.varian.FDFImage import FDFImage
-from imaging.operations.ReorderSlices import ReorderSlices
-from imaging.operations.FlipSlices import FlipSlices
+from recon.tools import ConsoleTool
+from recon.varian.FDFImage import FDFImage
+from recon.operations.ReorderSlices import ReorderSlices
+from recon.operations.FlipSlices import FlipSlices
 
 ##############################################################################
 class Fdf2Img (ConsoleTool):

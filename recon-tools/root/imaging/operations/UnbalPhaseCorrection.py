@@ -2,8 +2,8 @@ from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
      pi, sqrt, ones, sum, find, Int, resize, dot, svd, transpose, \
      diag, putmask, sign, asarray
-from imaging.operations import Operation, Parameter
-from imaging.util import ifft, apply_phase_correction, mod, linReg, shift, \
+from recon.operations import Operation, Parameter
+from recon.util import ifft, apply_phase_correction, mod, linReg, shift, \
      unwrap_ref_volume, epi_trajectory
 
 class UnbalPhaseCorrection (Operation):
@@ -76,7 +76,7 @@ class UnbalPhaseCorrection (Operation):
                                                            self.lin_radius))
             return
         
-        from imaging.tools import Recon
+        from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image.data[:] = apply_phase_correction(image.data, -theta)
         else:

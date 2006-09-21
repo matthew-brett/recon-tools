@@ -1,14 +1,14 @@
 #!/usr/bin/env python
 import sys
 sys.path = ["./root"]+sys.path
-import imaging
-import imaging.varian
+import recon
+import recon.varian
 import os, glob
 from distutils.core import setup, Extension
 
 # a little help to make setup go smoothly
 # grab extra file names to include in varian.tablib package
-psfiles = glob.glob(imaging.varian.tablib+'/*')
+psfiles = glob.glob(recon.varian.tablib+'/*')
 psfiles = ['tablib/'+os.path.split(file)[1] for file in psfiles]
 # with RPM builds, TODOs is already pruned from MANIFEST.in
 if 'tablib/TODOs' in psfiles:
@@ -19,8 +19,8 @@ punwrap_src = glob.glob(os.path.join("src/punwrap","*.c"))
 
 setup(
 
-  name='python-imaging-tools',
-  version=imaging.__version__,
+  name='python-recon-tools',
+  version=recon.__version__,
   description=\
    'Tools for manipulating MRI data, specializing in k-space reconstruction.',
   author='Mike Trumpis',
@@ -29,7 +29,7 @@ setup(
 
   long_description = """
   An all-in-one tool for reconstructing MR images from sampled k-space data.
-  imaging-tools can reconstruct EPI, GEMS, and MPFLASH3D data, perform a
+  recon-tools can reconstruct EPI, GEMS, and MPFLASH3D data, perform a
   series of artifact reduction operations, and write the image data to
   Analyze or NIFTI file formats.
 
@@ -43,12 +43,12 @@ setup(
 
   packages=[
     '',
-    'imaging',
-    'imaging.conf',
-    'imaging.operations',
-    'imaging.punwrap',
-    'imaging.tools',
-    'imaging.varian'],
+    'recon',
+    'recon.conf',
+    'recon.operations',
+    'recon.punwrap',
+    'recon.tools',
+    'recon.varian'],
 
   scripts=[
     'scripts/dumpheader',
@@ -57,10 +57,10 @@ setup(
     'scripts/viewimage',
     'scripts/recon'],
 
-  package_data = {'imaging.conf':['*.ops'],
-                  'imaging.varian': psfiles},
+  package_data = {'recon.conf':['*.ops'],
+                  'recon.varian': psfiles},
   
-  ext_modules=[Extension('imaging.punwrap._punwrap',
+  ext_modules=[Extension('recon.punwrap._punwrap',
                punwrap_src)],
     
 )

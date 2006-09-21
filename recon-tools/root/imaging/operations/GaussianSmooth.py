@@ -1,4 +1,4 @@
-from imaging.operations import Operation, Parameter
+from recon.operations import Operation, Parameter
 from Numeric import exp, power, log, arange, outerproduct, pi
 from scipy.signal import convolve
 

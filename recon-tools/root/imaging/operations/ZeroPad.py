@@ -1,7 +1,7 @@
 "Zero-pads k-space by embedding each NxM slice into a 2Nx2M slice"
-from imaging.operations import Operation
+from recon.operations import Operation
 from pylab import zeros, Complex32, arange, reshape
-from imaging.util import embedIm
+from recon.util import embedIm
 
 class ZeroPad (Operation):
     """

@@ -1,7 +1,7 @@
 from FFT import inverse_fft
 from Numeric import empty
 from pylab import reshape, Complex32
-from imaging.operations import Operation
+from recon.operations import Operation
 
 ##############################################################################
 class TimeInterpolate (Operation):

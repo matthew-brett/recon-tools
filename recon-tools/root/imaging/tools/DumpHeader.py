@@ -1,8 +1,8 @@
 import sys
 from optparse import Option
 
-from imaging.tools import ConsoleTool
-from imaging.varian.FidFile import FidFile
+from recon.tools import ConsoleTool
+from recon.varian.FidFile import FidFile
 
 
 ##############################################################################

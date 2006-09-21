@@ -1,5 +1,5 @@
-from imaging.imageio import readImage, available_readers
-from imaging.operations import Operation, Parameter
+from recon.imageio import readImage, available_readers
+from recon.operations import Operation, Parameter
 
 
 ##############################################################################

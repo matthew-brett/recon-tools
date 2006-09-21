@@ -1,5 +1,5 @@
 "Applies a 2D Window (blackman, hamming, or hanning) to the k-space data"
-from imaging.operations import Operation, Parameter
+from recon.operations import Operation, Parameter
 from pylab import hanning, hamming, blackman, outerproduct, Complex32
 
 window_types = {

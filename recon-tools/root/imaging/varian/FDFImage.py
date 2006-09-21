@@ -3,8 +3,8 @@ from os.path import join as pjoin
 from pylab import asarray
 from FDFFile import FDFFile, FDFHeader
 from ProcPar import ProcPar, ProcParImageMixin
-from imaging.imageio import BaseImage
-from imaging.analyze import writeImage
+from recon.imageio import BaseImage
+from recon.analyze import writeImage
 
 
 #-----------------------------------------------------------------------------

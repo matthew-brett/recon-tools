@@ -3,21 +3,21 @@ from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
      Complex32, asarray, arange, outerproduct, ones
 
 from odict import odict
-from imaging.util import import_from
+from recon.util import import_from
 
 # module-private dict specifying available image readers
 _readers = odict((
-    ("analyze", ("imaging.analyze","readImage")),
-    ("nifti", ("imaging.nifti","readImage")),
-    ("fid", ("imaging.varian.FidImage","FidImage")),
-    ("fdf", ("imaging.varian.FDFImage","FDFImage"))))
+    ("analyze", ("recon.analyze","readImage")),
+    ("nifti", ("recon.nifti","readImage")),
+    ("fid", ("recon.varian.FidImage","FidImage")),
+    ("fdf", ("recon.varian.FDFImage","FDFImage"))))
 available_readers = _readers.keys()
 
 # module-private dict specifying available image writers
 _writers = odict((
-    ("analyze", ("imaging.analyze","writeImage")),
-    ("nifti", ("imaging.nifti","writeImage")),
-    ("nifti_dual", ("imaging.nifti","writeImageDual"))))
+    ("analyze", ("recon.analyze","writeImage")),
+    ("nifti", ("recon.nifti","writeImage")),
+    ("nifti_dual", ("recon.nifti","writeImageDual"))))
 available_writers = _writers.keys()
 
 

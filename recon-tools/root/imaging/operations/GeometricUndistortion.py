@@ -1,6 +1,6 @@
-from imaging.operations import Operation, Parameter
-from imaging.analyze import readImage
-from imaging.util import resample_phase_axis
+from recon.operations import Operation, Parameter
+from recon.analyze import readImage
+from recon.util import resample_phase_axis
 from pylab import pi, arange, outerproduct, ones
 
 

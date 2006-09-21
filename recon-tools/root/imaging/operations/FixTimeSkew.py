@@ -1,8 +1,8 @@
 from FFT import fft, inverse_fft
 from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32,\
      swapaxes, product, NewAxis, reshape, squeeze
-from imaging.operations import Operation
-from imaging.util import reverse
+from recon.operations import Operation
+from recon.util import reverse
 
 def subsampInterp(ts, c, axis=-1):
     # convert arbitrarily shaped ts into a 2d array
