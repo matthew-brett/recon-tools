@@ -4,12 +4,12 @@ from distutils.util import get_platform
 import os, sys
 if __name__=="__main__":
     os.system("python setup.py build --force")
-    oldext = "root/imaging/punwrap/_punwrap.so"
-    extname = "./build/lib.%s-%s/imaging/punwrap/_punwrap.so"%(get_platform(),
+    oldext = "root/recon/punwrap/_punwrap.so"
+    extname = "./build/lib.%s-%s/recon/punwrap/_punwrap.so"%(get_platform(),
                                                                sys.version[:3])
     os.system("[ -f %s ] && mv %s %s.old"%(oldext,oldext,oldext))
-    os.system("[ -f %s ] && cp %s root/imaging/punwrap || echo \>\>Extension "\
+    os.system("[ -f %s ] && cp %s root/recon/punwrap || echo \>\>Extension "\
               "not found, check GCC output"%(extname, extname))
-    os.system("[ -f root/imaging/punwrap/_punwrap.so ] && echo "\
-              "\>\>C-extension installed as root/imaging/punwrap/_punwrap.so")
+    os.system("[ -f root/recon/punwrap/_punwrap.so ] && echo "\
+              "\>\>C-extension installed as root/recon/punwrap/_punwrap.so")
     print ">>Previous extension backed up as %s.old"%(os.path.split(oldext)[1])

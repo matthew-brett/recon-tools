@@ -12,7 +12,7 @@ If you do not already have it, the testdata can be checked out from svn at
     https://cirl.berkeley.edu/svn/bic/trunk/testdata.
 
 The test scripts expect the test data to be found as a sibling to the
-imaging-tools directory, but may of course be edited to look in a different
+recon-tools directory, but may of course be edited to look in a different
 location.
 
 RUNNING THE TESTS:

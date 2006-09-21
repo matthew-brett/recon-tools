@@ -25,7 +25,7 @@ setup(
    'Tools for manipulating MRI data, specializing in k-space reconstruction.',
   author='Mike Trumpis',
   author_email='mtrumpis@gmail.com',
-  url='http://cirl.berkeley.edu/view/BIC/ImagingTools',
+  url='http://cirl.berkeley.edu/view/BIC/ReconTools',
 
   long_description = """
   An all-in-one tool for reconstructing MR images from sampled k-space data.
