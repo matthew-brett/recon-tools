@@ -1,6 +1,6 @@
 from recon.operations import Operation, Parameter
 from recon.operations.ReadImage import ReadImage as ReadIm
-#from recon.operations.GaussianSmooth import gaussian_smooth
+from recon.operations.GaussianSmooth import gaussian_smooth
 from recon.util import fft, ifft, epi_trajectory
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      find, dot, asum, take, Complex32, fromfunction, \
@@ -9,31 +9,12 @@ from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
 
 from LinearAlgebra import solve_linear_equations as solve
 
-## def transWin(tw, slope):
-##     w = blackman(tw*2)
-##     return slope > 0 and w[:tw] or w[tw:]
-    
-## def smoothBinVect(v):
-##     #for all up/down transitions, overlay transition window up to 6 points
-##     chi = v.astype(Float)
-##     dv = diff(v)
-##     if sum(abs(dv))==0: return chi
-##     segs = list(find(dv!=0))
-##     segs = [segs[0]+1] + diff(segs).tolist() + [len(v)-segs[-1]-1]
-##     for n, jmp in enumerate(find(dv!=0)+1):
-##         tw = min(6, min(segs[n], segs[n+1]))
-##         chi[jmp + tw/2 - tw: jmp + tw/2] = transWin(tw, sign(dv[jmp-1]))
-##     return chi
-
-
 class GeometricUndistortionK (Operation):
     "Use a fieldmap to perform geometric distortion correction in k-space"
 
     params=(
         Parameter(name="fmap_file", type="str", default="fieldmap-0",
                   description="Name of the field map file"),
-        Parameter(name="mask_file", type="str", default="volmask-0",
-                  description="Name of the volume mask file"),
         Parameter(name="lmbda", type="float", default=2.0,
                   description="Inverse regularization factor")
         )
@@ -42,11 +23,9 @@ class GeometricUndistortionK (Operation):
         
         fmapIm = ReadIm(**{'filename': self.fmap_file,
                               'format': 'nifti'}).run()
-        bmaskIm = ReadIm(**{'filename':self.mask_file,
-                               'format': 'nifti'}).run()
 
-        fmap = fmapIm.data.astype(Float)
-        bmask = bmaskIm.data
+        fmap = fmapIm[0].astype(Float)
+        bmask = fmapIm[1]
 
         (nvol, nslice, npe, nfe) = image.data.shape
 
@@ -77,8 +56,8 @@ class GeometricUndistortionK (Operation):
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
             e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,M,Q1)))
-##             for n2 in range(N2):
-##                 e2[n2][:] = gaussian_smooth(e2[n2], 3, 3)
+            for n2 in range(N2):
+                e2[n2][:] = gaussian_smooth(e2[n2], 3, 3)
             for q1 in range(Q1):
 
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)

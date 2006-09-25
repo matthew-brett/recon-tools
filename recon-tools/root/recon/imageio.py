@@ -146,12 +146,19 @@ def get_writer(format):
     return import_from(*writerspec)
 
 #-----------------------------------------------------------------------------
+def clean_name(fname):
+    pruned_exts = ['nii', 'hdr', 'img']
+    if fname.rsplit('.')[-1] in pruned_exts:
+        return fname.rsplit('.',1)[0]
+    return fname
+    
+#-----------------------------------------------------------------------------
 def readImage(filename, format, **kwargs):
     "Load an image in the specified format from the given filename."
-    return get_reader(format)(filename, **kwargs)
+    return get_reader(format)(clean_name(filename), **kwargs)
 
 #-----------------------------------------------------------------------------
 def writeImage(image, filename, format, **kwargs):
     "Write the given image to the filesystem in the given format."
-    return get_writer(format)(image, filename, **kwargs)
+    return get_writer(format)(image, clean_name(filename), **kwargs)
 

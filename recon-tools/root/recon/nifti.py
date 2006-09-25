@@ -131,14 +131,14 @@ class NiftiImage (BaseImage):
 
     def load_header(self, filestem):
         try:
-            fp = open(filestem+".hdr", 'r')
+            fp = open(filestem+".nii", 'r')
         except exceptions.IOError:
             try:
-                fp = open(filestem+".nii", 'r')
+                fp = open(filestem+".hdr", 'r')
             except exceptions.IOError:
                 raise "no NIFTI file found with this name: %s"%filestem
-            self.filetype = 'single'
-        else: self.filetype = 'dual'
+            self.filetype = 'dual'
+        else: self.filetype = 'single'
 
         byte_order = byteorders[sys.byteorder]
         self.swapped = False
@@ -155,8 +155,8 @@ class NiftiImage (BaseImage):
         # sanity check? why not
         if (self.filetype == 'single' and self.magic != 'n+1\x00') \
            or (self.filetype == 'dual' and self.magic != 'ni1\x00'):
-            print "Got %s NIFTI file, but read %s magic string"%\
-                  (self.filetype, self.magic)
+            raise ValueError("Got file %s, but magic string is incorrect: %s"%\
+                  (filestem, self.magic))
             
     def load_image(self, filestem, vrange):
         if self.filetype == 'single':

@@ -11,14 +11,15 @@ def subsampInterp(ts, c, axis=-1):
     dimlist = list(ts.shape)
     dimlist.remove(To)
     if axis != -1: ts = swapaxes(ts, axis, -1)
-    T = 3*To
+    T = 3*To + To%2
     Fn = int(T/2.) + 1
     ts_buf = empty((dimlist[-1],)+tuple(dimlist[:-1])+ (T,), Complex)
     ts_buf[...,To:2*To] = ts
     ts_buf[...,:To] = -reverse(ts) + \
                       (2*ts[...,0] - (ts[...,1]-ts[...,0]))[...,NewAxis]
-    ts_buf[...,2*To:] = -reverse(ts) + \
+    ts_buf[...,2*To:3*To] = -reverse(ts) + \
                         (2*ts[...,-1] - (ts[...,-2]-ts[...,-1]))[...,NewAxis]
+    if To%2: ts_buf[...,-1] = ts_buf[...,-2]
     phs_shift = empty((T,), Complex)
     phs_shift[:Fn] = exp(-2.j*pi*c*arange(Fn)/float(T))
     phs_shift[Fn:] = conjugate(reverse(phs_shift[1:Fn-1]))

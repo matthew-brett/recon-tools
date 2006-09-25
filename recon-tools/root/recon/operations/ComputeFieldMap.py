@@ -2,7 +2,6 @@ from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
      angle, conjugate, putmask, Int8, power, diff
 from Numeric import empty, sum, sort
 from LinearAlgebra import *
-#from recon.imageio import writeImage
 from recon.punwrap import unwrap2D
 from recon.nifti import writeImage
 from recon.operations import Operation, Parameter
@@ -39,8 +38,6 @@ class ComputeFieldMap (Operation):
     params=(
         Parameter(name="fmap_file", type="str", default="fieldmap",
                   description="Name of the field map file to store"),
-        Parameter(name="mask_file", type="str", default="volmask",
-                  description="Name of the volume mask file to store")
         )
     
     #-------------------------------------------------------------------------
@@ -71,7 +68,8 @@ class ComputeFieldMap (Operation):
             phase_map[vol] = (phase_map[vol]/asym_time).astype(Float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)
+        # for each diff vol, write a file with vol0 = fmap, vol1 = mask
         for index in range(fmap_im.tdim):
-            writeImage(fmap_im.subImage(index), self.fmap_file+"-%d"%(index))
-            writeImage(bmask_im.subImage(index), self.mask_file+"-%d"%(index))
-
+            catIm = fmap_im.subImage(index).concatenate(
+                bmask_im.subImage(index), newdim=True)
+            writeImage(catIm, self.fmap_file+"-%d"%index)

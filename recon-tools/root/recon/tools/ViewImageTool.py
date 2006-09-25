@@ -7,7 +7,7 @@ from recon.operations.ViewImage import ViewImage
 
 ##############################################################################
 class ViewImageTool (ConsoleTool):
-    "View the specified Analyze7.5 formatted image."
+    "View the specified image in the sliceviewer."
 
     usage= "usage: %prog [options] image\n ", __doc__
 
@@ -30,13 +30,6 @@ class ViewImageTool (ConsoleTool):
             self.print_help()
             sys.exit(0)
         filetype = opts.file_format
-        # remove extension if present
-        pruned_exts = ['nii', 'hdr', 'img']
-        (impath, imfile) = split(args[0])
-        file_ext = imfile.rfind(".") > 0 and imfile.rsplit(".",1)[1] or ""
-        filestem = file_ext in pruned_exts and \
-                   join(impath, imfile.rsplit(".",1)[0]) or \
-                   join(impath, imfile)
-        image = readImage(filestem, filetype)
+        image = readImage(args[0], filetype)
         image.info()
         ViewImage().run(image)
