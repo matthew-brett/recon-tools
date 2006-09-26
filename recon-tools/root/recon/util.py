@@ -7,15 +7,18 @@ from FFT import fft as _fft, inverse_fft as _ifft
 from pylab import pi, zeros, frange, array, \
   meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
   norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
-  putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32
+  putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32, \
+  UInt8, UInt16
 from punwrap import unwrap2D
 
 
 # maximum numeric range for some smaller data types
-maxranges = {
+integer_ranges = {
   Int8:  127.,
+  UInt8: 255.,
   Int16: 32767.,
-  Int32: 2147483648.}
+  UInt16: 65535.,
+  Int32: 2147483647.}
 
 # struct byte order constants
 NATIVE = "="
@@ -45,14 +48,11 @@ def castData(data, data_code):
     # if casting to an integer type, check the data range
     # if it clips, then scale down
     # if it has poor integral resolution, then scale up
-    if data_code in (Int8, Int16, Int32):
+    if data_code in integer_ranges.keys():
         maxval = amax(abs(data).flat)
-        if maxval == 0.: maxval = 1.e20
-        maxrange = maxranges[data_code]
-        if maxval > maxrange: scl = maxrange/maxval
-        else: scl = maxval/maxrange
-    # make the cast
-    data[:] = (data/scl).astype(data_code)
+        maxrange = integer_ranges[data_code]
+        scl = maxval/maxrange or 1.
+        data[:] = (data/scl).astype(data_code)
     return scl
 
 #-----------------------------------------------------------------------------

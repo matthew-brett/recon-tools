@@ -236,7 +236,6 @@ class AnalyzeWriter (object):
             return self._default_field_value(fieldname, fieldformat)
 
         fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
-        #for f,v in zip(struct_fields.keys(),fieldvalues): print f,"=",`v`
         header = struct_pack(NATIVE, field_formats, fieldvalues)
         file(filename,'w').write(header)
 
