@@ -56,20 +56,7 @@ class sliceview (gtk.Window):
         self.transform = iscomplex(data) and abs_xform or ident_xform
 
         # widget layout table
-        table = gtk.Table(4, 2)
-
-        # tool-bar
-        merge = gtk.UIManager()
-        merge.insert_action_group(self._create_action_group(), 0)
-
-        try:
-            mergeid = merge.add_ui_from_string(ui_info)
-        except gobject.GError, msg:
-            print "building menus failed: %s" % msg
-        self.menubar = merge.get_widget("/MenuBar")
-        #self.menubar.show()
-        table.attach(self.menubar, 0, 2, 0, 1, yoptions=0)
-        
+        table = gtk.Table(4, 2)        
 
         # control panel
         self.control_panel = \
@@ -100,31 +87,43 @@ class sliceview (gtk.Window):
         self.setNorm()
 
         # slice image
-        scrollwin = gtk.ScrolledWindow()
-        scrollwin.set_border_width(0)
-        scrollwin.set_policy(hscrollbar_policy=gtk.POLICY_AUTOMATIC,
+        self.scrollwin = gtk.ScrolledWindow()
+        self.scrollwin.set_border_width(0)
+        self.scrollwin.set_policy(hscrollbar_policy=gtk.POLICY_AUTOMATIC,
                              vscrollbar_policy=gtk.POLICY_AUTOMATIC)
-        scrollwin.set_size_request(400,400)
+        self.scrollwin.set_size_request(400,400)
         self.sliceplot = SlicePlot(self.getSlice(),
           self.control_panel.getRowIndex(),
           self.control_panel.getColIndex(),
           cmap=cmap, norm=self.norm)
-        #self.sliceplot.figure.canvas.resize(300,300)
+        #self.sliceplot.set_size_request(350,350)
         self.sliceplot.mpl_connect(
           'motion_notify_event', self.sliceMouseMotionHandler)
         self.sliceplot.mpl_connect(
           'button_press_event', self.sliceMouseDownHandler)
         self.sliceplot.mpl_connect(
           'button_release_event', self.sliceMouseUpHandler)
-        self.scale_image(6)
-        scrollwin.add_with_viewport(self.sliceplot)
+        def_scale = self.auto_scale_image()
+        self.scrollwin.add_with_viewport(self.sliceplot)
         #table.attach(self.sliceplot, 1, 2, 2, 3)
-        table.attach(scrollwin, 1, 2, 2, 3)
+        table.attach(self.scrollwin, 1, 2, 2, 3)
 
         # status
         self.status = StatusBar(self.sliceDataRange(), cmap)
         self.status.set_size_request(600,40)
         table.attach(self.status, 0, 2, 3, 4, xoptions=0, yoptions=0)
+
+        # tool-bar
+        merge = gtk.UIManager()
+        merge.insert_action_group(self._create_action_group(def_scale), 0)
+
+        try:
+            mergeid = merge.add_ui_from_string(ui_info)
+        except gobject.GError, msg:
+            print "building menus failed: %s" % msg
+        self.menubar = merge.get_widget("/MenuBar")
+        #self.menubar.show()
+        table.attach(self.menubar, 0, 2, 0, 1, yoptions=0)
 
         self.updateDataRange()
 
@@ -308,8 +307,6 @@ class sliceview (gtk.Window):
             buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
                      gtk.STOCK_OK,gtk.RESPONSE_OK)
             )
-        #dialog.connect("response", lambda d,r: d.destroy())
-        #dialog.show()
         response = dialog.run()
         if response == gtk.RESPONSE_CANCEL:
             dialog.destroy()
@@ -317,16 +314,8 @@ class sliceview (gtk.Window):
         fname = dialog.get_filename()
         dialog.destroy()
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"        
-        print fname
-        
-        fig = P.Figure()
         im = self.sliceplot.getImage().make_image(1.0)
         im.write_png(fname)
-        #fig.images.append(im)
-        #fig.set_canvas(FigureCanvas(fig))
-        #fig.savefig(fname, format='png')
-        #self.sliceplot.figure.savefig(fname, format='png')
-        #self.sliceplot.getImage().write_png(fname)
 
     def activate_radio_action(self, action, current):
         active = current.get_active()
@@ -348,21 +337,42 @@ class sliceview (gtk.Window):
     def scale_image(self, scale):
         base_img_size = min(self.control_panel.getRowDim().size,
                             self.control_panel.getColDim().size)
-        canvas_size = self.sliceplot.get_width_height()[0]
+        canvas_size = self.sliceplot.get_size_request()[0]
+        canvas_size_real = self.sliceplot.get_width_height()[0]
         new_img_size = base_img_size*scale
-        if canvas_size < new_img_size:
-            canvas_size = int(new_img_size + 50)
-            self.sliceplot.resize(canvas_size, canvas_size)
+        # If the new image requires a larger canvas, resize it.
+        # Otherwise, make sure the canvas is at the default size
+        if canvas_size < new_img_size+50:
+            canvas_size_real = canvas_size = int(new_img_size + 50)
+        elif canvas_size > 400 and new_img_size < 350:
+            canvas_size = 350
+            canvas_size_real = 396
         ax = self.sliceplot.getAxes()
-        w = h = new_img_size/float(canvas_size)
+        w = h = new_img_size/float(canvas_size_real)
         l = 15./canvas_size
-        b = 1.0 - (new_img_size + 25.)/canvas_size
+        b = 1.0 - (new_img_size + 25.)/canvas_size_real
         ax.set_position([l,b,w,h])
-##         self.sliceplot.figure.canvas.resize(new_panel_size+50,
-##                                             new_panel_size+50)
+        self.sliceplot.set_size_request(canvas_size,canvas_size)
         self.sliceplot.draw()
 
-    def _create_action_group(self):
+    def auto_scale_image(self):
+        # try to find some scale that gets ~ 256x256 pixels
+        base_img_size = min(self.control_panel.getRowDim().size,
+                            self.control_panel.getColDim().size)
+        P = round(256./base_img_size)
+        new_img_size =  P*base_img_size
+        canvas_size = 350
+        canvas_size_real = 396
+        ax = self.sliceplot.getAxes()
+        w = h = new_img_size/float(canvas_size_real)
+        l = 15./canvas_size
+        b = 1.0 - (new_img_size + 25.)/canvas_size_real
+        ax.set_position([l,b,w,h])
+        self.sliceplot.set_size_request(canvas_size,canvas_size)
+        #self.sliceplot.draw()
+        return P
+        
+    def _create_action_group(self, default_scale):
         entries = (
             ( "FileMenu", None, "_File" ),
             ( "ToolsMenu", None, "_Tools" ),
@@ -395,7 +405,7 @@ class sliceview (gtk.Window):
 
         action_group = gtk.ActionGroup("WindowActions")
         action_group.add_actions(entries)
-        action_group.add_radio_actions(size_toggles, 6,
+        action_group.add_radio_actions(size_toggles, int(default_scale),
                                        self.scale_handler)
         return action_group
             
