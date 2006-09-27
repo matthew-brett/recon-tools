@@ -388,7 +388,7 @@ class sliceview (gtk.Window):
             ( "Quit", gtk.STOCK_QUIT,
               "_Quit", "<control>Q",
               "Quits",
-              self.activate_action ),
+              lambda action: self.destroy() ),
             ( "Contour Plot", None,
               "_Contour Plot", None,
               "Opens contour plot controls",
