@@ -299,9 +299,10 @@ class sliceview (gtk.Window):
         self.dialog.connect ("response", lambda d, r: d.destroy())
         self.dialog.show()
 
-    def save_png(self, action):
+    
+    def ask_fname(self, prompt):
         dialog = gtk.FileChooserDialog(
-            title="Save image as...",
+            title=prompt,
             action=gtk.FILE_CHOOSER_ACTION_SAVE,
             parent=self,
             buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
@@ -313,9 +314,58 @@ class sliceview (gtk.Window):
             return
         fname = dialog.get_filename()
         dialog.destroy()
-        fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"        
+        fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"  
+        return fname
+
+    def save_png(self, action):
+        # save a PNG of the current image and the current scaling
+        fname = self.ask_fname("Save image as...")
+        if fname is None:
+            return
         im = self.sliceplot.getImage().make_image()
         im.write_png(fname)
+
+    def save_png_montage(self, action):
+        # make a montage PNG, for now make 5 slices to a row
+        # make images 128x128 pix
+        fname = self.ask_fname("Save montage as...")
+        if fname is None:
+            return
+        #dshape = p.array(self.data.shape)
+        nslice = self.data.shape[-3]
+        sdim = 128
+        col_buf = 20
+        row_buf = 50
+        lr_buf = 20
+        b_buf = 20
+        #title_buf = 50
+        ncol = 5 # hardwired for now
+        nrow = int(nslice/ncol) + (nslice % ncol and 1 or 0)
+        # get required height and width in pixels
+        _ht = float(10 + nrow*(sdim + row_buf) + b_buf)
+        _wd = float(2*lr_buf + ncol*sdim + (ncol-1)*col_buf)
+        figdpi = 100
+        # inches = _ht/dpi, _wd/dpi
+        figsize = (_wd/figdpi, _ht/figdpi)
+        fig = p.Figure(figsize=figsize, dpi=figdpi)
+        fig.set_canvas(FigureCanvas(fig))
+        for row in range(nrow):
+            for col in range(ncol):
+                s = col + row*ncol
+                if s >= nslice:
+                    continue
+                Loff = (lr_buf + (col)*(sdim + col_buf))/_wd
+                Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
+                Xpct, Ypct = (sdim/_wd, sdim/_ht)
+                ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
+                ax.imshow(self.data[s], cmap=p.cm.bone, origin='lower',
+                          interpolation='nearest')
+                ax.yaxis.set_visible(False)
+                ax.xaxis.set_visible(False)
+                ax.set_frame_on(False)
+                t = ax.set_title('Slice %d'%s)
+                t.set_size(12)
+        fig.savefig(fname, dpi=figdpi)
 
     def activate_radio_action(self, action, current):
         active = current.get_active()
@@ -384,7 +434,7 @@ class sliceview (gtk.Window):
             ( "Save Montage", gtk.STOCK_SAVE,
               "_Save Montage", "<control><shift>S",
               "Saves all slices as a montage",
-              self.activate_action ),
+              self.save_png_montage ),
             ( "Quit", gtk.STOCK_QUIT,
               "_Quit", "<control>Q",
               "Quits",
@@ -776,7 +826,8 @@ class SlicePlot (FigureCanvas):
         intv = matplotlib.transforms.Interval(
             matplotlib.transforms.Value(mn),
             matplotlib.transforms.Value(mx))
-        locator = matplotlib.ticker.MaxNLocator(levels+1)
+        #locator = matplotlib.ticker.MaxNLocator(levels+1)
+        locator = matplotlib.ticker.LinearLocator(levels+1)
         locator.set_view_interval(intv)
         locator.set_data_interval(intv)
         clevels = locator()[:levels]
