@@ -1,8 +1,7 @@
-#!/usr/bin/env python
 import gtk
-from pylab import Figure, figaspect, gci, show, amax, amin, squeeze, asarray,\
-    cm, angle, normalize, pi, arange, ravel, ones, outerproduct, floor,\
-    fromfunction, zeros
+import gobject
+import os
+import pylab as p
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import \
@@ -15,10 +14,503 @@ def iscomplex(a): return hasattr(a, "imag")
 # Transforms for viewing different aspects of complex data
 def ident_xform(data): return data
 def abs_xform(data): return abs(data)
-def phs_xform(data): return angle(data)
+def phs_xform(data): return p.angle(data)
 def real_xform(data): return data.real
 def imag_xform(data): return data.imag
 
+ui_info = \
+'''<ui>
+  <menubar name='MenuBar'>
+    <menu action='FileMenu'>
+      <menuitem action='Save Image'/>
+      <menuitem action='Save Montage'/>
+      <separator/>
+      <menuitem action='Quit'/>
+    </menu>
+    <menu action='ToolsMenu'>
+      <menu action='SizeMenu'>
+        <menuitem action='1x'/>
+        <menuitem action='2x'/>
+        <menuitem action='4x'/>
+        <menuitem action='6x'/>        
+        <menuitem action='8x'/>
+      </menu>  
+      <menuitem action='Contour Plot'/>
+    </menu>
+  </menubar>
+</ui>'''
+
+
+##############################################################################
+class sliceview (gtk.Window):
+    #mag_norm = normalize()
+    #phs_norm = normalize(-pi, pi)
+    _mouse_x = _mouse_y = None
+    _dragging = False
+
+    #-------------------------------------------------------------------------
+    def __init__(self, data, dim_names=[], title="sliceview", cmap=p.cm.bone):
+        self.data = p.asarray(data)
+
+        # if data is complex, show the magnitude by default
+        self.transform = iscomplex(data) and abs_xform or ident_xform
+
+        # widget layout table
+        table = gtk.Table(4, 2)        
+
+        # control panel
+        self.control_panel = \
+          ControlPanel(data.shape, dim_names, iscomplex(data))
+        self.control_panel.connect(
+            self.spinnerHandler,
+            self.radioHandler,
+            self.sliderHandler,
+            self.contrastHandler)
+        self.control_panel.set_size_request(200, 200)
+        table.attach(self.control_panel, 0, 1, 1, 2, xoptions=0, yoptions=0)
+
+        # row plot
+        self.rowplot = RowPlot(self.getRow())
+        self.rowplot.set_size_request(400, 200)
+        table.attach(self.rowplot, 1, 2, 1, 2, xoptions=0, yoptions=0)
+
+        # column plot
+        self.colplot = ColPlot(self.getCol())
+        self.colplot.set_size_request(200, 400)
+        table.attach(self.colplot, 0, 1, 2, 3, xoptions=0, yoptions=0)
+        
+        # Set up normalization BEFORE plotting images.
+        # Contrast level of 1.0 gives default normalization (changed by
+        # contrast slider).
+        self.conLevel = 1.0
+        self.norm = None
+        self.setNorm()
+
+        # slice image
+        self.scrollwin = gtk.ScrolledWindow()
+        self.scrollwin.set_border_width(0)
+        self.scrollwin.set_policy(hscrollbar_policy=gtk.POLICY_AUTOMATIC,
+                             vscrollbar_policy=gtk.POLICY_AUTOMATIC)
+        self.scrollwin.set_size_request(400,400)
+        self.sliceplot = SlicePlot(self.getSlice(),
+          self.control_panel.getRowIndex(),
+          self.control_panel.getColIndex(),
+          cmap=cmap, norm=self.norm)
+        #self.sliceplot.set_size_request(350,350)
+        self.sliceplot.mpl_connect(
+          'motion_notify_event', self.sliceMouseMotionHandler)
+        self.sliceplot.mpl_connect(
+          'button_press_event', self.sliceMouseDownHandler)
+        self.sliceplot.mpl_connect(
+          'button_release_event', self.sliceMouseUpHandler)
+        def_scale = self.auto_scale_image()
+        self.scrollwin.add_with_viewport(self.sliceplot)
+        #table.attach(self.sliceplot, 1, 2, 2, 3)
+        table.attach(self.scrollwin, 1, 2, 2, 3)
+
+        # status
+        self.status = StatusBar(self.sliceDataRange(), cmap)
+        self.status.set_size_request(600,40)
+        table.attach(self.status, 0, 2, 3, 4, xoptions=0, yoptions=0)
+
+        # tool-bar
+        merge = gtk.UIManager()
+        merge.insert_action_group(self._create_action_group(def_scale), 0)
+
+        try:
+            mergeid = merge.add_ui_from_string(ui_info)
+        except gobject.GError, msg:
+            print "building menus failed: %s" % msg
+        self.menubar = merge.get_widget("/MenuBar")
+        #self.menubar.show()
+        table.attach(self.menubar, 0, 2, 0, 1, yoptions=0)
+
+        self.updateDataRange()
+
+        # initialize contour tools
+        self.contour_tools = None
+        
+        # main window
+        gtk.Window.__init__(self)
+        self.connect("destroy", lambda x: gtk.main_quit())
+        self.set_data("ui-manager", merge)
+        self.add_accel_group(merge.get_accel_group())        
+        # sum of widget height:
+        # 27 for menu bar
+        # 200 for row-plot, control panel
+        # 400 for col-plot, scroll window
+        # 40 for status bar
+        # = 670
+        self.set_default_size(600,670)
+        self.set_title(title)
+        self.set_border_width(3)
+        self.add(table)
+        self.show_all()
+        p.show()
+
+    #-------------------------------------------------------------------------
+    def getRow(self):
+        return self.getSlice()[self.control_panel.getRowIndex(),:]
+
+    #-------------------------------------------------------------------------
+    def getCol(self):
+        return self.getSlice()[:,self.control_panel.getColIndex()]
+
+    #-------------------------------------------------------------------------
+    def getSlice(self):
+        return self.transform(
+          p.squeeze(self.data[self.control_panel.getIndexSlices()]))
+
+    #-------------------------------------------------------------------------
+    def updateRow(self):
+        self.updateCrosshairs()
+        self.rowplot.setData(self.getRow())
+
+    #-------------------------------------------------------------------------
+    def updateCol(self):
+        self.updateCrosshairs()
+        self.colplot.setData(self.getCol())
+
+    #-------------------------------------------------------------------------
+    def updateSlice(self):
+        self.setNorm()
+        cset = self.sliceplot.setData(self.getSlice(), norm=self.norm)
+        self.rowplot.setData(self.getRow())
+        self.colplot.setData(self.getCol())
+        self.status.cbar.setRange(self.sliceDataRange(), norm=self.norm)
+        if self.contour_tools is not None:
+            self.contour_tools.draw_bar(cset)
+
+    #-------------------------------------------------------------------------
+    def sliceDataRange(self):
+        flatSlice = p.ravel(self.getSlice())
+        return p.amin(flatSlice), p.amax(flatSlice)
+
+    #------------------------------------------------------------------------- 
+    def updateDataRange(self):
+        flat_data = self.transform(self.data.flat)
+        data_min = p.amin(flat_data)
+        data_max = p.amax(flat_data)
+        self.rowplot.setDataRange(data_min, data_max)
+        self.colplot.setDataRange(data_max, data_min)
+
+    #-------------------------------------------------------------------------
+    def spinnerHandler(self, adj):
+        print "sliceview::spinnerHandler slice_dims", \
+               self.control_panel.slice_dims
+
+    #-------------------------------------------------------------------------
+    def radioHandler(self, button, transform):
+        if not button.get_active(): return
+        self.transform = transform
+        self.updateDataRange()
+        self.updateSlice()
+
+    #-------------------------------------------------------------------------
+    def sliderHandler(self, adj):
+        row_dim, col_dim= self.control_panel.slice_dims
+        if adj.dim.index == row_dim: self.updateRow()
+        elif adj.dim.index == col_dim: self.updateCol()
+        else: self.updateSlice()
+
+    #-------------------------------------------------------------------------
+    def contrastHandler(self, adj):
+        self.conLevel = self.control_panel.getContrastLevel()
+        self.updateSlice()
+
+    #-------------------------------------------------------------------------
+    def sliceMouseDownHandler(self, event):
+        y, x = self.sliceplot.getEventCoords(event)
+        self._dragging = True
+        # make sure this registers as a "new" position
+        self._mouse_x = self._mouse_y = None
+        self.updateCoords(y,x)
+
+    #-------------------------------------------------------------------------
+    def sliceMouseUpHandler(self, event):
+        y, x = self.sliceplot.getEventCoords(event)
+        self._dragging = False
+
+    #-------------------------------------------------------------------------
+    def sliceMouseMotionHandler(self, event):
+        y, x = self.sliceplot.getEventCoords(event)
+        self.updateCoords(y,x)
+
+    #-------------------------------------------------------------------------
+    def updateCoords(self, y, x):
+
+        # do nothing if coords haven't changed
+        if x == self._mouse_x and y == self._mouse_y: return
+        self._mouse_x, self._mouse_y = x, y
+
+        # update statusbar element value label
+        self.updateStatusLabel(y, x)
+
+        # update crosshairs and projection plots if button down
+        if self._dragging: self.updateProjections(y,x)
+
+    #------------------------------------------------------------------------- 
+    def updateStatusLabel(self, y, x):
+        if x != None and y != None:
+            text = "[%d,%d] = %.4f"%(y, x, self.getSlice()[y,x])
+        else: text = ""
+        self.status.setLabel(text)
+
+    #------------------------------------------------------------------------- 
+    def updateProjections(self, y, x):
+        "Update crosshairs and row and column plots."
+        if x != None and y != None:
+            self.control_panel.setRowIndex(y)
+            self.control_panel.setColIndex(x)
+            self.updateCrosshairs()
+
+    #------------------------------------------------------------------------- 
+    def updateCrosshairs(self):
+        self.sliceplot.setCrosshairs(
+          self.control_panel.getColIndex(),
+          self.control_panel.getRowIndex())
+        
+    #------------------------------------------------------------------------- 
+    def setNorm(self):
+        scale = -0.75*(self.conLevel-1.0) + 1.0
+        dMin, dMax = self.sliceDataRange()
+
+        # only scale the minimum value if it is below zero (?)
+        sdMin = dMin < 0 and dMin * scale or dMin
+
+        # if the norm scalings haven't changed, don't change norm
+        if self.norm and\
+           (sdMin, dMax*scale) == (self.norm.vmin, self.norm.vmax): return
+
+        # else set it to an appropriate scaling
+        self.norm = self.transform == phs_xform and\
+          p.normalize(-p.pi*scale, p.pi*scale) or p.normalize(sdMin, scale*dMax)
+   
+    #-------------------------------------------------------------------------
+
+    def launch_contour_tool(self, action):
+        self.contour_tools = ContourToolWin(self.sliceplot, self)
+
+    def activate_action(self, action):
+        self.dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
+            gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
+            'You activated action: "%s" of type "%s"' % (action.get_name(), type(action)))
+        # Close dialog on user response
+        self.dialog.connect ("response", lambda d, r: d.destroy())
+        self.dialog.show()
+
+    
+    def ask_fname(self, prompt):
+        dialog = gtk.FileChooserDialog(
+            title=prompt,
+            action=gtk.FILE_CHOOSER_ACTION_SAVE,
+            parent=self,
+            buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
+                     gtk.STOCK_OK,gtk.RESPONSE_OK)
+            )
+        response = dialog.run()
+        if response == gtk.RESPONSE_CANCEL:
+            dialog.destroy()
+            return
+        fname = dialog.get_filename()
+        dialog.destroy()
+        fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"  
+        return fname
+
+    def save_png(self, action):
+        # save a PNG of the current image and the current scaling
+        fname = self.ask_fname("Save image as...")
+        if fname is None:
+            return
+        im = self.sliceplot.getImage().make_image()
+        im.write_png(fname)
+
+    def save_png_montage(self, action):
+        # make a montage PNG, for now make 5 slices to a row
+        # make images 128x128 pix
+        fname = self.ask_fname("Save montage as...")
+        if fname is None:
+            return
+        #dshape = p.array(self.data.shape)
+        nslice = self.data.shape[-3]
+        sdim = 128
+        col_buf = 20
+        row_buf = 50
+        lr_buf = 20
+        b_buf = 20
+        #title_buf = 50
+        ncol = 5 # hardwired for now
+        nrow = int(nslice/ncol) + (nslice % ncol and 1 or 0)
+        # get required height and width in pixels
+        _ht = float(10 + nrow*(sdim + row_buf) + b_buf)
+        _wd = float(2*lr_buf + ncol*sdim + (ncol-1)*col_buf)
+        figdpi = 100
+        # inches = _ht/dpi, _wd/dpi
+        figsize = (_wd/figdpi, _ht/figdpi)
+        fig = p.Figure(figsize=figsize, dpi=figdpi)
+        fig.set_canvas(FigureCanvas(fig))
+        plane_slice = list(self.control_panel.getIndexSlices())
+        for row in range(nrow):
+            for col in range(ncol):
+                s = col + row*ncol
+                if s >= nslice:
+                    continue
+                plane_slice[-3] = s
+                Loff = (lr_buf + (col)*(sdim + col_buf))/_wd
+                Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
+                Xpct, Ypct = (sdim/_wd, sdim/_ht)
+                ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
+                ax.imshow(p.squeeze(self.transform(self.data[plane_slice])),
+                          cmap=p.cm.bone,
+                          origin='lower',
+                          interpolation='nearest')
+                
+                ax.yaxis.set_visible(False)
+                ax.xaxis.set_visible(False)
+                ax.set_frame_on(False)
+                t = ax.set_title('Slice %d'%s)
+                t.set_size(12)
+        fig.savefig(fname, dpi=figdpi)
+
+    def activate_radio_action(self, action, current):
+        active = current.get_active()
+        value = current.get_current_value()
+
+        if active:
+            dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
+                gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
+                "You activated radio action: \"%s\" of type \"%s\".\nCurrent value: %d" %
+                (current.get_name(), type(current), value))
+
+            # Close dialog on user response
+            dialog.connect("response", lambda d, r: d.destroy())
+            dialog.show()
+
+    def scale_handler(self, action, current):
+        self.scale_image(current.get_current_value())
+
+    def scale_image(self, scale):
+        base_img_size = min(self.control_panel.getRowDim().size,
+                            self.control_panel.getColDim().size)
+        canvas_size = self.sliceplot.get_size_request()[0]
+        canvas_size_real = self.sliceplot.get_width_height()[0]
+        new_img_size = base_img_size*scale
+        # If the new image requires a larger canvas, resize it.
+        # Otherwise, make sure the canvas is at the default size
+        if canvas_size < new_img_size+50:
+            canvas_size_real = canvas_size = int(new_img_size + 50)
+        elif canvas_size > 400 and new_img_size < 350:
+            canvas_size = 350
+            canvas_size_real = 396
+        ax = self.sliceplot.getAxes()
+        w = h = new_img_size/float(canvas_size_real)
+        l = 15./canvas_size
+        b = 1.0 - (new_img_size + 25.)/canvas_size_real
+        ax.set_position([l,b,w,h])
+        self.sliceplot.set_size_request(canvas_size,canvas_size)
+        self.sliceplot.draw()
+
+    def auto_scale_image(self):
+        # try to find some scale that gets ~ 256x256 pixels
+        base_img_size = min(self.control_panel.getRowDim().size,
+                            self.control_panel.getColDim().size)
+        P = round(256./base_img_size)
+        new_img_size =  P*base_img_size
+        canvas_size = 350
+        canvas_size_real = 396
+        ax = self.sliceplot.getAxes()
+        w = h = new_img_size/float(canvas_size_real)
+        l = 15./canvas_size
+        b = 1.0 - (new_img_size + 25.)/canvas_size_real
+        ax.set_position([l,b,w,h])
+        self.sliceplot.set_size_request(canvas_size,canvas_size)
+        #self.sliceplot.draw()
+        return P
+        
+    def _create_action_group(self, default_scale):
+        entries = (
+            ( "FileMenu", None, "_File" ),
+            ( "ToolsMenu", None, "_Tools" ),
+            ( "SizeMenu", None, "_Image Size" ),
+            ( "Save Image", gtk.STOCK_SAVE,
+              "_Save Image", "<control>S",
+              "Saves current slice as PNG",
+              self.save_png ),
+            ( "Save Montage", gtk.STOCK_SAVE,
+              "_Save Montage", "<control><shift>S",
+              "Saves all slices as a montage",
+              self.save_png_montage ),
+            ( "Quit", gtk.STOCK_QUIT,
+              "_Quit", "<control>Q",
+              "Quits",
+              lambda action: self.destroy() ),
+            ( "Contour Plot", None,
+              "_Contour Plot", None,
+              "Opens contour plot controls",
+              self.launch_contour_tool )
+        )
+
+        size_toggles = (
+            ( "1x", None, "_1x", None, "", 1 ),
+            ( "2x", None, "_2x", None, "", 2 ),
+            ( "4x", None, "_4x", None, "", 4 ),
+            ( "6x", None, "_6x", None, "", 6 ),
+            ( "8x", None, "_8x", None, "", 8 )
+        )
+
+        action_group = gtk.ActionGroup("WindowActions")
+        action_group.add_actions(entries)
+        action_group.add_radio_actions(size_toggles, int(default_scale),
+                                       self.scale_handler)
+        return action_group
+            
+
+##############################################################################
+class ContourToolWin (gtk.Window):
+
+    def __init__(self, obs_slice, parent):
+        self.padre = parent
+        self.sliceplot = obs_slice
+        self.hbox = gtk.HBox(spacing=4)
+        self.levSlider = gtk.VScale(gtk.Adjustment(7, 2, 20, 1, 1))
+        self.levSlider.set_digits(0)
+        self.levSlider.set_value_pos(gtk.POS_TOP)
+        self.levSlider.get_adjustment().connect("value-changed",
+                                                self.clevel_handler)
+        self.hbox.pack_start(self.levSlider)
+        self.fig = p.Figure(figsize=(1,4), dpi=80)
+        self.cbar_ax = self.fig.add_axes([.1, .04, .55, .9])
+        self.figcanvas = FigureCanvas(self.fig)
+        self.figcanvas.set_size_request(100,50*4)
+        self.hbox.pack_start(self.figcanvas)
+        self.setContours(int(self.levSlider.get_value()))
+        gtk.Window.__init__(self)
+        self.set_destroy_with_parent(True)
+        self.connect("destroy", self._takedown)
+        self.set_default_size(150,400)
+        self.set_title("Contour Plot Controls")
+        self.set_border_width(3)
+        self.add(self.hbox)
+        self.show_all()
+        p.show()
+        #gtk.main()
+
+    def _takedown(self, foo):
+        self.sliceplot.killContour()
+        self.padre.contour_tools = None
+        foo.destroy()
+
+    def setContours(self, levels):
+        cset = self.sliceplot.doContours(levels)
+        self.draw_bar(cset)
+
+    def draw_bar(self, cset):
+        self.cbar_ax.clear()
+        self.fig.colorbar(cset, self.cbar_ax)
+        self.figcanvas.draw()        
+
+    def clevel_handler(self, adj):
+        self.setContours(int(self.levSlider.get_value()))
 
 ##############################################################################
 class Dimension (object):
@@ -215,7 +707,7 @@ class RowPlot (FigureCanvas):
 
     #-------------------------------------------------------------------------
     def __init__(self, data):
-        fig = Figure(figsize=(3., 6.))
+        fig = p.Figure(figsize=(3., 6.))
         ax  = fig.add_axes([0.05, 0.05, 0.85, 0.85])
         ax.xaxis.tick_top()
         ax.yaxis.tick_right()
@@ -242,7 +734,7 @@ class ColPlot (FigureCanvas):
 
     #-------------------------------------------------------------------------
     def __init__(self, data):
-        fig = Figure(figsize=(6., 3.))
+        fig = p.Figure(figsize=(6., 3.))
         fig.add_axes([0.1, 0.1, 0.85, 0.85])
         FigureCanvas.__init__(self, fig)
         self.setData(data)
@@ -264,12 +756,14 @@ class ColPlot (FigureCanvas):
 
 ##############################################################################
 class SlicePlot (FigureCanvas):
-
+    
     #-------------------------------------------------------------------------
-    def __init__(self, data, x, y, cmap=cm.bone, norm=None):
+    def __init__(self, data, x, y, cmap=p.cm.bone, norm=None):
         self.norm = None
-        fig = Figure(figsize=figaspect(data))
-        ax  = fig.add_axes([0.05, 0.1, 0.85, 0.85])
+        self.hasContours = False
+        self.contourLevels = 7
+        fig = p.Figure(figsize=p.figaspect(data), dpi=80)
+        ax = fig.add_subplot(111)
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
         FigureCanvas.__init__(self, fig)
@@ -322,8 +816,37 @@ class SlicePlot (FigureCanvas):
         ax.set_xlim((0,ncols))
         ax.set_ylim((0,nrows))
         self.data = data
-        self.draw()
+        if self.hasContours: return self.doContours(self.contourLevels)
+        else:
+            self.draw()
+            return None
 
+    def doContours(self, levels):
+        self.hasContours = True
+        self.contourLevels = levels
+        ax = self.getAxes()
+        ax.collections = []
+        mn, mx = p.amin(self.data.flat), p.amax(self.data.flat)
+        mx = mx + (mx-mn)*.001
+        intv = matplotlib.transforms.Interval(
+            matplotlib.transforms.Value(mn),
+            matplotlib.transforms.Value(mx))
+        #locator = matplotlib.ticker.MaxNLocator(levels+1)
+        locator = matplotlib.ticker.LinearLocator(levels+1)
+        locator.set_view_interval(intv)
+        locator.set_data_interval(intv)
+        clevels = locator()[:levels]
+        if 0 in clevels: clevels[p.find(clevels==0)[0]] = 10.0
+        cset = ax.contour(self.data, clevels, origin='lower', cmap=p.cm.hot)
+        self.draw()
+        return cset
+
+    def killContour(self):
+        ax = self.getAxes()
+        ax.collections = []
+        self.hasContours = False
+        self.draw()
+    
     #------------------------------------------------------------------------- 
     def setCrosshairs(self, x, y):
         row_data, col_data = self._crosshairs_data(x, y)
@@ -347,9 +870,9 @@ class SlicePlot (FigureCanvas):
 class ColorBar (FigureCanvas):
 
     #-------------------------------------------------------------------------
-    def __init__(self, range, cmap=cm.bone, norm=None):
-        fig = Figure(figsize = (5,0.5))
-        fig.add_axes((0.05, 0.55, 0.9, 0.3))
+    def __init__(self, range, cmap=p.cm.bone, norm=None):
+        fig = p.Figure(figsize = (5,0.5))
+        fig.add_axes((0.05, 0.4, 0.9, 0.3))
         FigureCanvas.__init__(self, fig)
         self.figure.axes[0].yaxis.set_visible(False)
         self.cmap = cmap
@@ -363,31 +886,31 @@ class ColorBar (FigureCanvas):
         ax = self.figure.axes[0]
 
         if dMin == dMax:
-            r_pts = zeros((128,))
-            tx = asarray([0])
+            r_pts = p.zeros((128,))
+            tx = p.asarray([0])
         else:
             # make decently smooth gradient, try to include end-point
             delta = (dMax-dMin)/127
-            r_pts = arange(dMin, dMax+delta, delta)
+            r_pts = p.arange(dMin, dMax+delta, delta)
             # sometimes forcing the end-point breaks
-            if len(r_pts) > 128: r_pts = arange(dMin, dMax, delta)
+            if len(r_pts) > 128: r_pts = p.arange(dMin, dMax, delta)
 
             # set up tick marks
             delta = (r_pts[-1] - r_pts[0])/7
             eps = 0.1 * delta
-            tx = arange(r_pts[0], r_pts[-1], delta)
+            tx = p.arange(r_pts[0], r_pts[-1], delta)
             # if the last tick point is very far away from the end,
             # add one more at the end
             if (r_pts[-1] - tx[-1]) > .75*delta:
                 #there MUST be an easier way!
                 a = tx.tolist()
                 a.append(r_pts[-1])
-                tx = asarray(a)
+                tx = p.asarray(a)
             # else if the last tick point is misleadingly close,
             # replace it with the true endpoint
             elif (r_pts[-1] - tx[-1]) > eps: tx[-1] = r_pts[-1]
 
-        data = outerproduct(ones(5),r_pts)
+        data = p.outerproduct(p.ones(5),r_pts)
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
         ax.imshow(data, interpolation="nearest",
@@ -473,7 +996,7 @@ class StatusBar (gtk.Frame):
            x+xLim >= data.shape[1]:
             return (yLim, xLim, "outOfRange")
 
-        indices = fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim),
+        indices = p.fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim),
                                (yLim*2+1, xLim*2+1))
         scale = indices.shape[0]*indices.shape[1]
         av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale,
@@ -501,219 +1024,9 @@ class StatusBar (gtk.Frame):
 
 
 ##############################################################################
-class sliceview (gtk.Window):
-    #mag_norm = normalize()
-    #phs_norm = normalize(-pi, pi)
-    _mouse_x = _mouse_y = None
-    _dragging = False
-
-    #-------------------------------------------------------------------------
-    def __init__(self, data, dim_names=[], title="sliceview", cmap=cm.bone):
-        self.data = asarray(data)
-
-        # if data is complex, show the magnitude by default
-        self.transform = iscomplex(data) and abs_xform or ident_xform
-
-        # widget layout table
-        table = gtk.Table(3, 2)
-
-        # control panel
-        self.control_panel = \
-          ControlPanel(data.shape, dim_names, iscomplex(data))
-        self.control_panel.connect(
-            self.spinnerHandler,
-            self.radioHandler,
-            self.sliderHandler,
-            self.contrastHandler)
-        self.control_panel.set_size_request(200, 200)
-        table.attach(self.control_panel, 0, 1, 0, 1)
-
-        # row plot
-        self.rowplot = RowPlot(self.getRow())
-        self.rowplot.set_size_request(400, 200)
-        table.attach(self.rowplot, 1, 2, 0, 1)
-
-        # column plot
-        self.colplot = ColPlot(self.getCol())
-        self.colplot.set_size_request(200, 400)
-        table.attach(self.colplot, 0, 1, 1, 2)
-        
-        # Set up normalization BEFORE plotting images.
-        # Contrast level of 1.0 gives default normalization (changed by
-        # contrast slider).
-        self.conLevel = 1.0
-        self.norm = None
-        self.setNorm()
-
-        # slice image
-        self.sliceplot = SlicePlot(self.getSlice(),
-          self.control_panel.getRowIndex(),
-          self.control_panel.getColIndex(),
-          cmap=cmap, norm=self.norm)
-        self.sliceplot.set_size_request(400, 400)
-        self.sliceplot.mpl_connect(
-          'motion_notify_event', self.sliceMouseMotionHandler)
-        self.sliceplot.mpl_connect(
-          'button_press_event', self.sliceMouseDownHandler)
-        self.sliceplot.mpl_connect(
-          'button_release_event', self.sliceMouseUpHandler)
-        table.attach(self.sliceplot, 1, 2, 1, 2)
-
-        # status
-        self.status = StatusBar(self.sliceDataRange(), cmap)
-        self.status.set_size_request(200,30)
-        table.attach(self.status, 0, 2, 2, 3)
-
-        self.updateDataRange()
-
-        # main window
-        gtk.Window.__init__(self)
-        self.connect("destroy", lambda x: gtk.main_quit())
-        self.set_default_size(400,300)
-        self.set_title(title)
-        self.set_border_width(3)
-        self.add(table)
-        self.show_all()
-        show()
-
-    #-------------------------------------------------------------------------
-    def getRow(self):
-        return self.getSlice()[self.control_panel.getRowIndex(),:]
-
-    #-------------------------------------------------------------------------
-    def getCol(self):
-        return self.getSlice()[:,self.control_panel.getColIndex()]
-
-    #-------------------------------------------------------------------------
-    def getSlice(self):
-        return self.transform(
-          squeeze(self.data[self.control_panel.getIndexSlices()]))
-
-    #-------------------------------------------------------------------------
-    def updateRow(self):
-        self.updateCrosshairs()
-        self.rowplot.setData(self.getRow())
-
-    #-------------------------------------------------------------------------
-    def updateCol(self):
-        self.updateCrosshairs()
-        self.colplot.setData(self.getCol())
-
-    #-------------------------------------------------------------------------
-    def updateSlice(self):
-        self.setNorm()
-        self.sliceplot.setData(self.getSlice(), norm=self.norm)
-        self.rowplot.setData(self.getRow())
-        self.colplot.setData(self.getCol())
-        self.status.cbar.setRange(self.sliceDataRange(), norm=self.norm)
-
-    #-------------------------------------------------------------------------
-    def sliceDataRange(self):
-        flatSlice = ravel(self.getSlice())
-        return amin(flatSlice), amax(flatSlice)
-
-    #------------------------------------------------------------------------- 
-    def updateDataRange(self):
-        flat_data = self.transform(self.data.flat)
-        data_min = amin(flat_data)
-        data_max = amax(flat_data)
-        self.rowplot.setDataRange(data_min, data_max)
-        self.colplot.setDataRange(data_max, data_min)
-
-    #-------------------------------------------------------------------------
-    def spinnerHandler(self, adj):
-        print "sliceview::spinnerHandler slice_dims", \
-               self.control_panel.slice_dims
-
-    #-------------------------------------------------------------------------
-    def radioHandler(self, button, transform):
-        if not button.get_active(): return
-        self.transform = transform
-        self.updateDataRange()
-        self.updateSlice()
-
-    #-------------------------------------------------------------------------
-    def sliderHandler(self, adj):
-        row_dim, col_dim= self.control_panel.slice_dims
-        if adj.dim.index == row_dim: self.updateRow()
-        elif adj.dim.index == col_dim: self.updateCol()
-        else: self.updateSlice()
-
-    #-------------------------------------------------------------------------
-    def contrastHandler(self, adj):
-        self.conLevel = self.control_panel.getContrastLevel()
-        self.updateSlice()
-
-    #-------------------------------------------------------------------------
-    def sliceMouseDownHandler(self, event):
-        y, x = self.sliceplot.getEventCoords(event)
-        self._dragging = True
-        # make sure this registers as a "new" position
-        self._mouse_x = self._mouse_y = None
-        self.updateCoords(y,x)
-
-    #-------------------------------------------------------------------------
-    def sliceMouseUpHandler(self, event):
-        y, x = self.sliceplot.getEventCoords(event)
-        self._dragging = False
-
-    #-------------------------------------------------------------------------
-    def sliceMouseMotionHandler(self, event):
-        y, x = self.sliceplot.getEventCoords(event)
-        self.updateCoords(y,x)
-
-    #-------------------------------------------------------------------------
-    def updateCoords(self, y, x):
-
-        # do nothing if coords haven't changed
-        if x == self._mouse_x and y == self._mouse_y: return
-        self._mouse_x, self._mouse_y = x, y
-
-        # update statusbar element value label
-        self.updateStatusLabel(y, x)
-
-        # update crosshairs and projection plots if button down
-        if self._dragging: self.updateProjections(y,x)
-
-    #------------------------------------------------------------------------- 
-    def updateStatusLabel(self, y, x):
-        if x != None and y != None:
-            text = "[%d,%d] = %.4f"%(y, x, self.getSlice()[y,x])
-        else: text = ""
-        self.status.setLabel(text)
-
-    #------------------------------------------------------------------------- 
-    def updateProjections(self, y, x):
-        "Update crosshairs and row and column plots."
-        if x != None and y != None:
-            self.control_panel.setRowIndex(y)
-            self.control_panel.setColIndex(x)
-            self.updateCrosshairs()
-
-    #------------------------------------------------------------------------- 
-    def updateCrosshairs(self):
-        self.sliceplot.setCrosshairs(
-          self.control_panel.getColIndex(),
-          self.control_panel.getRowIndex())
-        
-    #------------------------------------------------------------------------- 
-    def setNorm(self):
-        scale = -0.75*(self.conLevel-1.0) + 1.0
-        dMin, dMax = self.sliceDataRange()
-
-        # only scale the minimum value if it is below zero (?)
-        sdMin = dMin < 0 and dMin * scale or dMin
-
-        # if the norm scalings haven't changed, don't change norm
-        if self.norm and\
-           (sdMin, dMin*scale) == (self.norm.vmin, self.norm.vmax): return
-
-        # else set it to an appropriate scaling
-        self.norm = self.transform == phs_xform and\
-          normalize(-pi*scale, pi*scale) or normalize(sdMin, scale*dMax)
-   
-
-##############################################################################
 if __name__ == "__main__":
     from pylab import randn
-    sliceview(randn(6,6))
+    import pdb
+    #pdb.run('sliceview(randn(6,6))', globals=globals(), locals=locals())
+    pdb.run('sliceview(img.data)', globals=globals(), locals=locals())
+    #sliceview(img.data.data)
