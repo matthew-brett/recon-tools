@@ -314,7 +314,7 @@ class sliceview (gtk.Window):
         fname = dialog.get_filename()
         dialog.destroy()
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"        
-        im = self.sliceplot.getImage().make_image(1.0)
+        im = self.sliceplot.getImage().make_image()
         im.write_png(fname)
 
     def activate_radio_action(self, action, current):
