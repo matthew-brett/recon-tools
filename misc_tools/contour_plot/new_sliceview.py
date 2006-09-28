@@ -349,17 +349,22 @@ class sliceview (gtk.Window):
         figsize = (_wd/figdpi, _ht/figdpi)
         fig = p.Figure(figsize=figsize, dpi=figdpi)
         fig.set_canvas(FigureCanvas(fig))
+        plane_slice = list(self.control_panel.getIndexSlices())
         for row in range(nrow):
             for col in range(ncol):
                 s = col + row*ncol
                 if s >= nslice:
                     continue
+                plane_slice[-3] = s
                 Loff = (lr_buf + (col)*(sdim + col_buf))/_wd
                 Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
                 Xpct, Ypct = (sdim/_wd, sdim/_ht)
                 ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
-                ax.imshow(self.data[s], cmap=p.cm.bone, origin='lower',
+                ax.imshow(p.squeeze(self.transform(self.data[plane_slice])),
+                          cmap=p.cm.bone,
+                          origin='lower',
                           interpolation='nearest')
+                
                 ax.yaxis.set_visible(False)
                 ax.xaxis.set_visible(False)
                 ax.set_frame_on(False)
