@@ -9,7 +9,7 @@ from recon.operations import OperationManager
 
 
 ##############################################################################
-class ImagingDoc (ConsoleTool):
+class ReconDoc (ConsoleTool):
     "Command-line documentation for the recon-tools package."
 
     usage= "usage: %prog [options]\n ", __doc__
