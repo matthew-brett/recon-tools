@@ -3,12 +3,12 @@ import string
 import os
 import struct
 # I will ditch this massive import in favor of a Numeric.foo style
-from FFT import fft as _fft, inverse_fft as _ifft
+from FFT import fft as _fft, inverse_fft as _ifft, fftnd, inverse_fftnd
 from pylab import pi, zeros, frange, array, \
   meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
   norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
   putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32, \
-  UInt8, UInt16
+  UInt8, UInt16, product
 from punwrap import unwrap2D
 
 
@@ -48,6 +48,7 @@ def castData(data, data_code):
     # if casting to an integer type, check the data range
     # if it clips, then scale down
     # if it has poor integral resolution, then scale up
+    scl = 1.0
     if data_code in integer_ranges.keys():
         maxval = amax(abs(data).flat)
         maxrange = integer_ranges[data_code]
@@ -289,6 +290,41 @@ def unwrap1D(p,discont=pi,axis=-1):
     up = array(p,copy=1,typecode='d')
     up[slice1] = p[slice1] + cumsum(ph_correct,axis)
     return up
+
+#-----------------------------------------------------------------------------
+def fftconvolve(in1, in2, mode="full", axes=None):
+    """Convolve two N-dimensional arrays using FFT. See convolve.
+    """
+    s1 = array(in1.shape)
+    s2 = array(in2.shape)
+    if (in1.typecode() in ['D','F']) or (in1.typecode() in ['D', 'F']):
+        cmplx=1
+    else: cmplx=0
+    fft_size = axes and (s1[-len(axes):]+s2[-len(axes):]-1) or (s1 + s2 - 1)
+    #size = s1 > s2 and s1 or s2
+    IN1 = fftnd(in1, s=fft_size, axes=axes)
+    IN1 *= fftnd(in2, s=fft_size, axes=axes)
+    ret = inverse_fftnd(IN1, axes=axes)
+    del IN1
+    if not cmplx:
+        ret = ret.real
+    if mode == "full":
+        return ret
+    elif mode == "same":
+        osize = product(s1,axis=0) > product(s2,axis=0) and s1 or s2
+        return _centered(ret,osize)
+    elif mode == "valid":
+        return _centered(ret,abs(s2-s1)+1)
+
+#-----------------------------------------------------------------------------
+def _centered(arr, newsize):
+    # Return the center newsize portion of the array.
+    newsize = asarray(newsize)
+    currsize = array(arr.shape)
+    startind = (currsize - newsize) / 2
+    endind = startind + newsize
+    myslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
+    return arr[tuple(myslice)]
 
 #-----------------------------------------------------------------------------
 ### alternate definition of unwrap1D

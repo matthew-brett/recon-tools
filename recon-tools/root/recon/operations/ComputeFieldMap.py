@@ -50,7 +50,7 @@ class ComputeFieldMap (Operation):
             return
         asym_times = image._procpar.get('asym_time', False) or \
                      image._procpar.get('te', False)
-        print diff(asym_times)
+
         # Make sure there are at least two volumes
         if image.tdim < 2:
             self.log("Cannot calculate field map from only a single volume."\

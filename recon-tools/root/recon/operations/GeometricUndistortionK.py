@@ -10,7 +10,12 @@ from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
 from LinearAlgebra import solve_linear_equations as solve
 
 class GeometricUndistortionK (Operation):
-    "Use a fieldmap to perform geometric distortion correction in k-space"
+    """
+    Use a fieldmap to perform geometric distortion correction in k-space.
+    Specify:
+    @param fmap_file: Name of the field map file
+    @param lmbda: Inverse regularization factor
+    """
 
     params=(
         Parameter(name="fmap_file", type="str", default="fieldmap-0",
@@ -56,8 +61,7 @@ class GeometricUndistortionK (Operation):
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
             e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,M,Q1)))
-            for n2 in range(N2):
-                e2[n2][:] = gaussian_smooth(e2[n2], 3, 3)
+            e2[:] = gaussian_smooth(e2, 3, 3)
             for q1 in range(Q1):
 
                 K[q1][:] = asum(swapaxes(e1*e2[:,:,q1],0,1), axis=-1)/float(M)

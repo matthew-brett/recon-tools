@@ -15,7 +15,7 @@ class Rot90 (Operation):
 
     params = (Parameter(name="orient", type="str", default="radiological",
                         description="determines data orientation, can be "\
-                        "radiological or neurological"),
+                        "radiological, neurological, or recon_epi"),
               )
 
     # x-size/y-size swap is not yet reflected
