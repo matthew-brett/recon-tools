@@ -328,9 +328,15 @@ class ProcParImageMixin (object):
         if vrange:
             skip = len(self.ref_vols)
             # if vrange[1] is -1 or too big, set it to nvol_true
+            # if it is 0 (for unknown reason), will go to img vol 1
             vend = vrange[1] in range(self.nvol_true-skip) \
                    and vrange[1]+1+skip or self.nvol_true
-            vstart = vrange[0] in range(vend-skip) and vrange[0]+skip or vend-1
+            # if it is past the last volume, make it one spot less
+            # else, make it vrange[0]+skip (even if that == 0)
+            if vrange[0] in range(vend-skip):
+                vstart = vrange[0] + skip
+            else:
+                vstart = vend - 1
             self.vrange = range(vstart,vend)
         else: self.vrange = range(len(self.ref_vols), self.nvol_true)
 
