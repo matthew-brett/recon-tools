@@ -87,7 +87,7 @@ class FidImage (BaseImage, ProcParImageMixin):
           (nrefs, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
         self.ref_nav_data = zeros(
           (nrefs, self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
-
+        
     #-------------------------------------------------------------------------
     def _load_petable(self):
         """

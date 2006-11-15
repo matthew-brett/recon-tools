@@ -220,13 +220,15 @@ class ProcParImageMixin (object):
         [i for i, isimage in enumerate(self.is_imagevol) \
                      if (isimage and i in self.vrange)], "")
 
-##     nvol = CachedReadOnlyProperty(
-##         lambda self: self.nvol_true - len(self.ref_vols), "")
-
     nvol = CachedReadOnlyProperty(lambda self: len(self.vrange), "")
 
     slice_positions = CachedReadOnlyProperty(
         lambda self: 10.*asarray(self._procpar.pss), "")
+
+    ### Not exactly in procpar, but useful still
+    acq_order = CachedReadOnlyProperty(
+        lambda self: asarray(range(self.nslice-1,-1,-2) +
+                             range(self.nslice-2,-1,-2)), "")
 
     def _get_slice_gap(self):
         if self.pulse_sequence == "mp_flash3d" or self.nslice < 2: return 0.

@@ -82,6 +82,6 @@ class GeometricUndistortionK (Operation):
             
 def solve_regularized_eqs(A, y, lmda):
     At = conjugate(transpose(A))
-    A2 = (lmda**2)*identity(A.shape[0]) + dot(At, A)
+    A2 = (lmda**2)*identity(At.shape[0]) + dot(At, A)
     y2 = dot(At, y)
     return solve(A2, y2)

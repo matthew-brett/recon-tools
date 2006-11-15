@@ -1,3 +1,5 @@
+"The sliceview module defines classes providing a slice-plotting GUI"
+
 import gtk
 import gobject
 import os
@@ -43,6 +45,8 @@ ui_info = \
 
 ##############################################################################
 class sliceview (gtk.Window):
+    "A Window class containing various plots and widgets"
+    
     #mag_norm = normalize()
     #phs_norm = normalize(-pi, pi)
     _mouse_x = _mouse_y = None
@@ -122,7 +126,7 @@ class sliceview (gtk.Window):
         except gobject.GError, msg:
             print "building menus failed: %s" % msg
         self.menubar = merge.get_widget("/MenuBar")
-        #self.menubar.show()
+
         table.attach(self.menubar, 0, 2, 0, 1, yoptions=0)
 
         self.updateDataRange()
@@ -275,7 +279,7 @@ class sliceview (gtk.Window):
         scale = -0.75*(self.conLevel-1.0) + 1.0
         dMin, dMax = self.sliceDataRange()
 
-        # only scale the minimum value if it is below zero (?)
+        # only scale the minimum value if it is below zero
         sdMin = dMin < 0 and dMin * scale or dMin
 
         # if the norm scalings haven't changed, don't change norm
@@ -467,7 +471,8 @@ class sliceview (gtk.Window):
 
 ##############################################################################
 class ContourToolWin (gtk.Window):
-
+    "A Window class defining a pop-up control widget"
+    
     def __init__(self, obs_slice, parent):
         self.padre = parent
         self.sliceplot = obs_slice
@@ -549,7 +554,7 @@ class ContrastSlider (gtk.HScale):
 
 ##############################################################################
 class ControlPanel (gtk.Frame):
-
+    "A Frame class containing dimension slider widgets and button widgets"
     #-------------------------------------------------------------------------
     def __init__(self, shape, dim_names=[], iscomplex=False):
         self._init_dimensions(shape, dim_names)
@@ -704,7 +709,7 @@ class ControlPanel (gtk.Frame):
 
 ##############################################################################
 class RowPlot (FigureCanvas):
-
+    "A Canvas class containing a matplotlib plot"
     #-------------------------------------------------------------------------
     def __init__(self, data):
         fig = p.Figure(figsize=(3., 6.))
@@ -721,7 +726,7 @@ class RowPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = range(len(data))
+        indices = p.arange(len(data))
         if not hasattr(self, "data"): ax.plot(indices, data)
         else: ax.lines[0].set_data(indices, data)
         ax.set_xlim(-.5, len(data)-.5)
@@ -731,7 +736,7 @@ class RowPlot (FigureCanvas):
 
 ##############################################################################
 class ColPlot (FigureCanvas):
-
+    "A Canvas class containing a matplotlib plot"    
     #-------------------------------------------------------------------------
     def __init__(self, data):
         fig = p.Figure(figsize=(6., 3.))
@@ -746,7 +751,7 @@ class ColPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = range(len(data))
+        indices = p.arange(len(data))
         if not hasattr(self, "data"): ax.plot(data, indices)
         else: ax.lines[0].set_data(data, indices)
         ax.set_ylim(-.5,len(data)-.5)
@@ -756,7 +761,7 @@ class ColPlot (FigureCanvas):
 
 ##############################################################################
 class SlicePlot (FigureCanvas):
-    
+    "A Canvas class containing a 2D matplotlib plot"    
     #-------------------------------------------------------------------------
     def __init__(self, data, x, y, cmap=p.cm.bone, norm=None):
         self.norm = None
@@ -868,7 +873,7 @@ class SlicePlot (FigureCanvas):
 
 ##############################################################################
 class ColorBar (FigureCanvas):
-
+    "A Canvas class showing the constrast scaling"
     #-------------------------------------------------------------------------
     def __init__(self, range, cmap=p.cm.bone, norm=None):
         fig = p.Figure(figsize = (5,0.5))
@@ -925,7 +930,7 @@ class ColorBar (FigureCanvas):
 
 ##############################################################################
 class StatusBar (gtk.Frame):
-
+    
     #-------------------------------------------------------------------------
     def __init__(self, range, cmap):
         gtk.Frame.__init__(self)
