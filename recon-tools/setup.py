@@ -14,7 +14,7 @@ psfiles = ['tablib/'+os.path.split(file)[1] for file in psfiles]
 if 'tablib/TODOs' in psfiles:
     psfiles.remove('tablib/TODOs')
 
-print psfiles
+#print psfiles
 punwrap_src = glob.glob(os.path.join("src/punwrap","*.c"))
 
 setup(

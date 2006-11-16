@@ -2,12 +2,12 @@
 PortSystem	1.0
 PortGroup	python24 1.0
 
-name		python-imaging-tools
-version		0.3
+name		python-recon-tools
+version		0.4
 categories	python
 maintainers	mtrumpis@gmail.com
 description	mri reconstruction tools
 long_description    ditto
 homepage	https://cirl.berkeley.edu/view/BIC/ReconTools
 master_sites	https://cirl.berkeley.edu/twiki/pub/BIC/ReconTools/
-checksums	md5 ee0debd5f30d42ed4453f982361081db
+checksums	md5 bf3bed6167b0312810bc0e2922c54f07

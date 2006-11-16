@@ -80,8 +80,6 @@ directories. The Varian scanner has the phase-encode tables stored in a director
 named tablib. 
 """
 from recon.tools.Recon import Recon
-#if __name__ == "__main__": Recon().run()
-import pdb
-if __name__ == "__main__": pdb.run('Recon().run()')
+if __name__ == "__main__": Recon().run()
 
 

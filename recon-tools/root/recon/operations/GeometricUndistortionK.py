@@ -57,7 +57,7 @@ class GeometricUndistortionK (Operation):
         e1 = swapaxes(reshape(exp(outerproduct(df_n,mv)), (N2,N2P,M)), 0, 1)
         for s in range(nslice):
             # make matrix K[q1;n2,n2p] slice-by-slice
-            print "finding Ks for s = %d"%(s,)
+            print "finding distortion kernel Ks for s = %d"%(s,)
             K = empty((Q1,N2,N2P), Complex)
             start = time.time()
             e2 = bmask[s]*exp(reshape(outerproduct(n2v,fmap[s]),(N2,M,Q1)))
@@ -78,10 +78,10 @@ class GeometricUndistortionK (Operation):
 
                 dvol[s][:] = fft(corrdata).astype(Complex32)
             end = time.time()
-            print "time to process %d slice(s): %fs"%(image.nvol,(end-start-lag))
+            #print "time to process %d slice(s): %fs"%(image.nvol,(end-start-lag))
             
-def solve_regularized_eqs(A, y, lmda):
+def solve_regularized_eqs(A, y, lmbda):
     At = conjugate(transpose(A))
-    A2 = (lmda**2)*identity(At.shape[0]) + dot(At, A)
+    A2 = (lmbda**2)*identity(At.shape[0]) + dot(At, A)
     y2 = dot(At, y)
     return solve(A2, y2)
