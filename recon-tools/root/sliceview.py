@@ -3,7 +3,7 @@
 import gtk
 import gobject
 import os
-import pylab as p
+import pylab as P
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import \
@@ -16,7 +16,7 @@ def iscomplex(a): return hasattr(a, "imag")
 # Transforms for viewing different aspects of complex data
 def ident_xform(data): return data
 def abs_xform(data): return abs(data)
-def phs_xform(data): return p.angle(data)
+def phs_xform(data): return P.angle(data)
 def real_xform(data): return data.real
 def imag_xform(data): return data.imag
 
@@ -36,7 +36,31 @@ ui_info = \
         <menuitem action='4x'/>
         <menuitem action='6x'/>        
         <menuitem action='8x'/>
-      </menu>  
+      </menu>
+      <menu action='ColorMapping'>
+        <menuitem action='Blues'/>
+        <menuitem action='Greens'/>
+        <menuitem action='Greys'/>
+        <menuitem action='Oranges'/>
+        <menuitem action='Purples'/>
+        <menuitem action='Reds'/>
+        <menuitem action='Spectral'/>
+        <menuitem action='autumn'/>
+        <menuitem action='bone'/>
+        <menuitem action='cool'/>
+        <menuitem action='copper'/>
+        <menuitem action='gist_earth'/>
+        <menuitem action='gist_gray'/>
+        <menuitem action='gist_heat'/>
+        <menuitem action='gist_rainbow'/>
+        <menuitem action='gray'/>
+        <menuitem action='hot'/>
+        <menuitem action='hsv'/>
+        <menuitem action='jet'/>
+        <menuitem action='spring'/>
+        <menuitem action='summer'/>
+        <menuitem action='winter'/>
+      </menu>
       <menuitem action='Contour Plot'/>
     </menu>
   </menubar>
@@ -53,8 +77,8 @@ class sliceview (gtk.Window):
     _dragging = False
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, dim_names=[], title="sliceview", cmap=p.cm.bone):
-        self.data = p.asarray(data)
+    def __init__(self, data, dim_names=[], title="sliceview", cmap=P.cm.bone):
+        self.data = P.asarray(data)
 
         # if data is complex, show the magnitude by default
         self.transform = iscomplex(data) and abs_xform or ident_xform
@@ -150,7 +174,7 @@ class sliceview (gtk.Window):
         self.set_border_width(3)
         self.add(table)
         self.show_all()
-        p.show()
+        P.show()
 
     #-------------------------------------------------------------------------
     def getRow(self):
@@ -163,7 +187,7 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def getSlice(self):
         return self.transform(
-          p.squeeze(self.data[self.control_panel.getIndexSlices()]))
+          P.squeeze(self.data[self.control_panel.getIndexSlices()]))
 
     #-------------------------------------------------------------------------
     def updateRow(self):
@@ -187,14 +211,14 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def sliceDataRange(self):
-        flatSlice = p.ravel(self.getSlice())
-        return p.amin(flatSlice), p.amax(flatSlice)
+        flatSlice = P.ravel(self.getSlice())
+        return P.amin(flatSlice), P.amax(flatSlice)
 
     #------------------------------------------------------------------------- 
     def updateDataRange(self):
         flat_data = self.transform(self.data.flat)
-        data_min = p.amin(flat_data)
-        data_max = p.amax(flat_data)
+        data_min = P.amin(flat_data)
+        data_max = P.amax(flat_data)
         self.rowplot.setDataRange(data_min, data_max)
         self.colplot.setDataRange(data_max, data_min)
 
@@ -288,7 +312,7 @@ class sliceview (gtk.Window):
 
         # else set it to an appropriate scaling
         self.norm = self.transform == phs_xform and\
-          p.normalize(-p.pi*scale, p.pi*scale) or p.normalize(sdMin, scale*dMax)
+          P.normalize(-P.pi*scale, P.pi*scale) or P.normalize(sdMin, scale*dMax)
    
     #-------------------------------------------------------------------------
 
@@ -335,8 +359,9 @@ class sliceview (gtk.Window):
         fname = self.ask_fname("Save montage as...")
         if fname is None:
             return
-        #dshape = p.array(self.data.shape)
+        #dshape = P.array(self.data.shape)
         nslice = self.data.shape[-3]
+        cmap = self.sliceplot.getImage().cmap
         sdim = 128
         col_buf = 20
         row_buf = 50
@@ -351,7 +376,7 @@ class sliceview (gtk.Window):
         figdpi = 100
         # inches = _ht/dpi, _wd/dpi
         figsize = (_wd/figdpi, _ht/figdpi)
-        fig = p.Figure(figsize=figsize, dpi=figdpi)
+        fig = P.Figure(figsize=figsize, dpi=figdpi)
         fig.set_canvas(FigureCanvas(fig))
         plane_slice = list(self.control_panel.getIndexSlices())
         for row in range(nrow):
@@ -364,8 +389,8 @@ class sliceview (gtk.Window):
                 Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
                 Xpct, Ypct = (sdim/_wd, sdim/_ht)
                 ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
-                ax.imshow(p.squeeze(self.transform(self.data[plane_slice])),
-                          cmap=p.cm.bone,
+                ax.imshow(P.squeeze(self.transform(self.data[plane_slice])),
+                          cmap=cmap,
                           origin='lower',
                           interpolation='nearest')
                 
@@ -389,6 +414,34 @@ class sliceview (gtk.Window):
             # Close dialog on user response
             dialog.connect("response", lambda d, r: d.destroy())
             dialog.show()
+
+    def cmap_handler(self, action, current):
+        cmap = {
+            0: P.cm.Blues,
+            1: P.cm.Greens,
+            2: P.cm.Greys,
+            3: P.cm.Oranges,
+            4: P.cm.Purples,
+            5: P.cm.Reds,
+            6: P.cm.Spectral,
+            7: P.cm.autumn,
+            8: P.cm.bone,
+            9: P.cm.cool,
+            10: P.cm.copper,
+            11: P.cm.gist_earth,
+            12: P.cm.gist_gray,
+            13: P.cm.gist_heat,
+            14: P.cm.gist_rainbow,
+            15: P.cm.gray,
+            16: P.cm.hot,
+            17: P.cm.hsv,
+            18: P.cm.jet,
+            19: P.cm.spring,
+            20: P.cm.summer,
+            21: P.cm.winter,
+            }[current.get_current_value()]
+        self.sliceplot.setCmap(cmap)
+        self.status.cbar.setCmap(cmap)
 
     def scale_handler(self, action, current):
         self.scale_image(current.get_current_value())
@@ -436,6 +489,7 @@ class sliceview (gtk.Window):
             ( "FileMenu", None, "_File" ),
             ( "ToolsMenu", None, "_Tools" ),
             ( "SizeMenu", None, "_Image Size" ),
+            ( "ColorMapping", None, "_Color Mapping"),
             ( "Save Image", gtk.STOCK_SAVE,
               "_Save Image", "<control>S",
               "Saves current slice as PNG",
@@ -462,12 +516,38 @@ class sliceview (gtk.Window):
             ( "8x", None, "_8x", None, "", 8 )
         )
 
+        cmap_toggles = (
+            ( "Blues", None, "_Blues", None, "", 0 ),
+            ( "Greens", None, "_Greens", None, "", 1 ),
+            ( "Greys", None, "_Greys", None, "", 2 ),
+            ( "Oranges", None, "_Oranges", None, "", 3 ),
+            ( "Purples", None, "_Purples", None, "", 4 ),
+            ( "Reds", None, "_Reds", None, "", 5 ),
+            ( "Spectral", None, "_Spectral", None, "", 6 ),
+            ( "autumn", None, "_autumn", None, "", 7 ),
+            ( "bone", None, "_bone", None, "", 8 ),
+            ( "cool", None, "_cool", None, "", 9 ),
+            ( "copper", None, "_copper", None, "", 10 ),
+            ( "gist_earth", None, "_gist_earth", None, "", 11 ),
+            ( "gist_gray", None, "_gist_gray", None, "", 12 ),
+            ( "gist_heat", None, "_gist_heat", None, "", 13 ),
+            ( "gist_rainbow", None, "_gist_rainbow", None, "", 14 ),
+            ( "gray", None, "_gray", None, "", 15 ),
+            ( "hot", None, "_hot", None, "", 16 ),
+            ( "hsv", None, "_hsv", None, "", 17 ),
+            ( "jet", None, "_jet", None, "", 18 ),
+            ( "spring", None, "_spring", None, "", 19 ),
+            ( "summer", None, "_summer", None, "", 20 ),
+            ( "winter", None, "_winter", None, "", 21 ),
+        )
+
         action_group = gtk.ActionGroup("WindowActions")
         action_group.add_actions(entries)
         action_group.add_radio_actions(size_toggles, int(default_scale),
                                        self.scale_handler)
+        action_group.add_radio_actions(cmap_toggles, 8,
+                                       self.cmap_handler)
         return action_group
-            
 
 ##############################################################################
 class ContourToolWin (gtk.Window):
@@ -483,7 +563,7 @@ class ContourToolWin (gtk.Window):
         self.levSlider.get_adjustment().connect("value-changed",
                                                 self.clevel_handler)
         self.hbox.pack_start(self.levSlider)
-        self.fig = p.Figure(figsize=(1,4), dpi=80)
+        self.fig = P.Figure(figsize=(1,4), dpi=80)
         self.cbar_ax = self.fig.add_axes([.1, .04, .55, .9])
         self.figcanvas = FigureCanvas(self.fig)
         self.figcanvas.set_size_request(100,50*4)
@@ -497,7 +577,7 @@ class ContourToolWin (gtk.Window):
         self.set_border_width(3)
         self.add(self.hbox)
         self.show_all()
-        p.show()
+        P.show()
         #gtk.main()
 
     def _takedown(self, foo):
@@ -712,7 +792,7 @@ class RowPlot (FigureCanvas):
     "A Canvas class containing a matplotlib plot"
     #-------------------------------------------------------------------------
     def __init__(self, data):
-        fig = p.Figure(figsize=(3., 6.))
+        fig = P.Figure(figsize=(3., 6.))
         ax  = fig.add_axes([0.05, 0.05, 0.85, 0.85])
         ax.xaxis.tick_top()
         ax.yaxis.tick_right()
@@ -726,7 +806,7 @@ class RowPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = p.arange(len(data))
+        indices = P.arange(len(data))
         if not hasattr(self, "data"): ax.plot(indices, data)
         else: ax.lines[0].set_data(indices, data)
         ax.set_xlim(-.5, len(data)-.5)
@@ -739,7 +819,7 @@ class ColPlot (FigureCanvas):
     "A Canvas class containing a matplotlib plot"    
     #-------------------------------------------------------------------------
     def __init__(self, data):
-        fig = p.Figure(figsize=(6., 3.))
+        fig = P.Figure(figsize=(6., 3.))
         fig.add_axes([0.1, 0.1, 0.85, 0.85])
         FigureCanvas.__init__(self, fig)
         self.setData(data)
@@ -751,7 +831,7 @@ class ColPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = p.arange(len(data))
+        indices = P.arange(len(data))
         if not hasattr(self, "data"): ax.plot(data, indices)
         else: ax.lines[0].set_data(data, indices)
         ax.set_ylim(-.5,len(data)-.5)
@@ -763,11 +843,11 @@ class ColPlot (FigureCanvas):
 class SlicePlot (FigureCanvas):
     "A Canvas class containing a 2D matplotlib plot"    
     #-------------------------------------------------------------------------
-    def __init__(self, data, x, y, cmap=p.cm.bone, norm=None):
+    def __init__(self, data, x, y, cmap=P.cm.bone, norm=None):
         self.norm = None
         self.hasContours = False
         self.contourLevels = 7
-        fig = p.Figure(figsize=p.figaspect(data), dpi=80)
+        fig = P.Figure(figsize=P.figaspect(data), dpi=80)
         ax = fig.add_subplot(111)
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
@@ -805,6 +885,10 @@ class SlicePlot (FigureCanvas):
     def setImage(self, image): self.getAxes().images[0] = image
 
     #-------------------------------------------------------------------------
+    def setCmap(self, cmapObj):
+        self.cmap = cmapObj
+        self.setData(self.data, self.norm)
+    #-------------------------------------------------------------------------
     def setData(self, data, norm=None):
         ax = self.getAxes()
 
@@ -814,14 +898,16 @@ class SlicePlot (FigureCanvas):
         elif norm != self.norm:
             self.setImage(AxesImage(ax, interpolation="nearest",
               cmap=self.cmap, norm=norm, origin="lower"))
-
+        
         self.getImage().set_data(data)
+        self.getImage().set_cmap(self.cmap)
         self.norm = norm
         nrows, ncols = data.shape[:2]
         ax.set_xlim((0,ncols))
         ax.set_ylim((0,nrows))
         self.data = data
-        if self.hasContours: return self.doContours(self.contourLevels)
+        if self.hasContours:
+            return self.doContours(self.contourLevels)
         else:
             self.draw()
             return None
@@ -831,7 +917,7 @@ class SlicePlot (FigureCanvas):
         self.contourLevels = levels
         ax = self.getAxes()
         ax.collections = []
-        mn, mx = p.amin(self.data.flat), p.amax(self.data.flat)
+        mn, mx = P.amin(self.data.flat), P.amax(self.data.flat)
         mx = mx + (mx-mn)*.001
         intv = matplotlib.transforms.Interval(
             matplotlib.transforms.Value(mn),
@@ -841,8 +927,8 @@ class SlicePlot (FigureCanvas):
         locator.set_view_interval(intv)
         locator.set_data_interval(intv)
         clevels = locator()[:levels]
-        if 0 in clevels: clevels[p.find(clevels==0)[0]] = 10.0
-        cset = ax.contour(self.data, clevels, origin='lower', cmap=p.cm.hot)
+        if 0 in clevels: clevels[P.find(clevels==0)[0]] = 10.0
+        cset = ax.contour(self.data, clevels, origin='lower', cmap=P.cm.hot)
         self.draw()
         return cset
 
@@ -875,8 +961,8 @@ class SlicePlot (FigureCanvas):
 class ColorBar (FigureCanvas):
     "A Canvas class showing the constrast scaling"
     #-------------------------------------------------------------------------
-    def __init__(self, range, cmap=p.cm.bone, norm=None):
-        fig = p.Figure(figsize = (5,0.5))
+    def __init__(self, range, cmap=P.cm.bone, norm=None):
+        fig = P.Figure(figsize = (5,0.5))
         fig.add_axes((0.05, 0.4, 0.9, 0.3))
         FigureCanvas.__init__(self, fig)
         self.figure.axes[0].yaxis.set_visible(False)
@@ -885,37 +971,41 @@ class ColorBar (FigureCanvas):
         self.setRange(range, norm=norm)
 
     #-------------------------------------------------------------------------
+    def setCmap(self, cmapObj):
+        self.cmap = cmapObj
+        self.setRange(self.range, self.norm)
+    #-------------------------------------------------------------------------
     def setRange(self, range, norm=None):
         self.norm = norm
-        dMin, dMax = range
+        self.range = dMin, dMax = range
         ax = self.figure.axes[0]
 
         if dMin == dMax:
-            r_pts = p.zeros((128,))
-            tx = p.asarray([0])
+            r_pts = P.zeros((128,))
+            tx = P.asarray([0])
         else:
             # make decently smooth gradient, try to include end-point
             delta = (dMax-dMin)/127
-            r_pts = p.arange(dMin, dMax+delta, delta)
+            r_pts = P.arange(dMin, dMax+delta, delta)
             # sometimes forcing the end-point breaks
-            if len(r_pts) > 128: r_pts = p.arange(dMin, dMax, delta)
+            if len(r_pts) > 128: r_pts = P.arange(dMin, dMax, delta)
 
             # set up tick marks
             delta = (r_pts[-1] - r_pts[0])/7
             eps = 0.1 * delta
-            tx = p.arange(r_pts[0], r_pts[-1], delta)
+            tx = P.arange(r_pts[0], r_pts[-1], delta)
             # if the last tick point is very far away from the end,
             # add one more at the end
             if (r_pts[-1] - tx[-1]) > .75*delta:
                 #there MUST be an easier way!
                 a = tx.tolist()
                 a.append(r_pts[-1])
-                tx = p.asarray(a)
+                tx = P.asarray(a)
             # else if the last tick point is misleadingly close,
             # replace it with the true endpoint
             elif (r_pts[-1] - tx[-1]) > eps: tx[-1] = r_pts[-1]
 
-        data = p.outerproduct(p.ones(5),r_pts)
+        data = P.outerproduct(P.ones(5),r_pts)
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
         ax.imshow(data, interpolation="nearest",
@@ -1001,7 +1091,7 @@ class StatusBar (gtk.Frame):
            x+xLim >= data.shape[1]:
             return (yLim, xLim, "outOfRange")
 
-        indices = p.fromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim),
+        indices = P.afromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim),
                                (yLim*2+1, xLim*2+1))
         scale = indices.shape[0]*indices.shape[1]
         av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale,

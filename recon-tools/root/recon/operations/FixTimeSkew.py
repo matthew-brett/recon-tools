@@ -10,9 +10,11 @@ def circularize(a):
     #T = 3*To + To%2
     ts_buf = empty(a.shape[:-1]+ (T,), Complex)
 #### point-sharing, no negation or shift
+#### if a = [2, 3, 4, 5, 6], then ts_buf will be:
+#### [6, 5, 4, 3, (2, 3, 4, 5, 6,) 5, 4, 3, 2, ((2))]
     ts_buf[...,To-1:2*To-1] = a
     ts_buf[...,:To-1] = reverse(a[...,1:])
-    ts_buf[...,2*To-1:3*To-1] = reverse(a[...,:To-1])
+    ts_buf[...,2*To-1:3*To-2] = reverse(a[...,:To-1])
 
 ############ OTHER METHODS ##################################    
 #### point-sharing, triple buffered, reversed and negated

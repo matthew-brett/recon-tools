@@ -242,9 +242,10 @@ class ProcParImageMixin (object):
                      self._procpar.nv2[0] or len(self.slice_positions), "")
 
     thk = CachedReadOnlyProperty(
-        lambda self: self.pulse_sequence == "mp_flash3d" and\
-                     10.*self._procpar.lpe2[0] or self._procpar.thk[0], "")
-
+        lambda self: self.pulse_sequence == "mp_flash3d" and \
+        10.*self._procpar.lpe2[0]/self.nslice or \
+        self._procpar.thk[0], "")
+    
     nav_per_seg = CachedReadOnlyProperty(
         lambda self: self.n_pe%32 and 1 or 0, "")
 
