@@ -3,7 +3,8 @@ import string
 import os
 import struct
 # I will ditch this massive import in favor of a Numeric.foo style
-from FFT import fft as _fft, inverse_fft as _ifft, fftnd, inverse_fftnd
+from FFT import fft as _fft, inverse_fft as _ifft, \
+     fftnd as _fftnd, inverse_fftnd as _ifftnd
 from pylab import pi, zeros, frange, array, \
   meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
   norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
@@ -120,6 +121,19 @@ def embedIm(subIm, Im, yOff, xOff):
 def fft(a):
     chk = checkerline(a.shape[-1])
     return chk*_fft(chk*a)
+
+#-----------------------------------------------------------------------------
+# make a 2D transform analogously to the 1D transform:
+# ie, order the rows and columns so that (0,0) lies at (N/2,M/2)
+def fft2d(a):
+    chk = checkerboard(*a.shape[-2:])
+    return chk*_fftnd(chk*a, axes=(-2,-1))
+
+#-----------------------------------------------------------------------------
+# make an inverse 2D transform per method above
+def ifft2d(a):
+    chk = checkerboard(*a.shape[-2:])
+    return chk*_ifftnd(chk*a, axes=(-2,-1))
 
 #-----------------------------------------------------------------------------
 # from k-space to image-space in FE direction (per PE line)
@@ -302,9 +316,9 @@ def fftconvolve(in1, in2, mode="full", axes=None):
     else: cmplx=0
     fft_size = axes and (s1[-len(axes):]+s2[-len(axes):]-1) or (s1 + s2 - 1)
     #size = s1 > s2 and s1 or s2
-    IN1 = fftnd(in1, s=fft_size, axes=axes)
-    IN1 *= fftnd(in2, s=fft_size, axes=axes)
-    ret = inverse_fftnd(IN1, axes=axes)
+    IN1 = _fftnd(in1, s=fft_size, axes=axes)
+    IN1 *= _fftnd(in2, s=fft_size, axes=axes)
+    ret = _ifftnd(IN1, axes=axes)
     del IN1
     if not cmplx:
         ret = ret.real

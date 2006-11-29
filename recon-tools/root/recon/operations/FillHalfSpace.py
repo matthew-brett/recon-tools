@@ -1,12 +1,8 @@
 import sys
 from recon.operations import Operation, Parameter
-from pylab import zeros, Complex32, Float, arange, reshape, rot90, conjugate, angle, sum_flat, exp, Complex, NewAxis, cos, pi
-from recon.util import embedIm, checkerboard
-from FFT import inverse_fft2d, fft2d
-from recon.operations.ForwardFFT import ForwardFFT as FwdFFT
-from recon.operations.InverseFFT import InverseFFT as InvFFT
-
-
+from pylab import zeros, Complex32, Float, arange, reshape, rot90, conjugate, \
+     angle, sum_flat, exp, Complex, NewAxis, cos, pi
+from recon.util import embedIm, fft2d, ifft2d
 
 class FillHalfSpace (Operation):
 
@@ -34,8 +30,7 @@ class FillHalfSpace (Operation):
         fill_slice[y0-self.over_fill:y0+self.over_fill,:] = \
                    slice[0:self.over_fill*2,:]
         
-        #phase_map = angle(self.mask*inverse_fft2d(self.mask*fill_slice))
-        phase_map = self.mask*inverse_fft2d(self.mask*fill_slice)
+        phase_map = ifft2d(fill_slice)
         return phase_map
     
     def imageFromFill2D(self, slice):
@@ -43,8 +38,7 @@ class FillHalfSpace (Operation):
         ny = self.fill_size
         fill_slice = zeros((ny,nx), Complex)
         embedIm(slice, fill_slice, self.fill_rows, 0)
-        #fill_slice[:] = inverse_fft2d(fill_slice)
-        fill_slice[:] = self.mask*inverse_fft2d(self.mask*fill_slice)
+        fill_slice[:] = ifft2d(fill_slice)
         return fill_slice
 
 ##     def HermitianFill(self, Im, n_fill_rows):
@@ -79,50 +73,23 @@ class FillHalfSpace (Operation):
         for s, slice in enumerate(volData):
             out.write("filling slice %d: "%(s,))
             theta = self.phaseMap2D(slice)
-            #mag = abs(theta)*abs(self.imageFromFill2D(slice))
-            #mag = abs(self.imageFromFill2D(slice))
             mag = abs(self.imageFromFill2D(slice))
-            #out.write("starting power: %f\n"%(sum(mag.flat),))
             cooked = zeros((ny, nx), Complex)
             prev_power = 0.
             c = self.criterion[1]=="converge" and 100000. or self.iterations
             while c > self.criterion[0]:
                 prev_image = cooked.copy()
-##                 #imshow(self.mask*fft2d(self.mask*mag))
-##                 imshow(mag)
-##                 colorbar()
-##                 show()
-##                 #imshow(self.mask*fft2d(self.mask*exp(1.j*theta)))
-##                 imshow(theta)
-##                 colorbar()
-##                 show()
                 cooked = mag*exp(1.j*angle(theta))
-                cooked[:] = self.mask*fft2d(self.mask*cooked)
-##                 imshow(cooked)
-##                 colorbar()
-##                 show()
-                cooked[self.fill_rows:,:] = slice[:]
-                ## imshow(abs(cooked[0:18]))
-##                 colorbar()
-                #out.write("filled power: %f, conj power: %f\n"%(sum(abs(cooked[:self.fill_rows].flat)), sum(abs(cooked[-self.fill_rows:].flat))))
-                #fillpower = sum(abs(cooked[:self.fill_rows].flat))
-                #diff = fillpower - prev_power
-                #prev_power = fillpower
-                
-                cooked[:] = self.mask*inverse_fft2d(self.mask*cooked)
+                cooked[:] = fft2d(cooked)
+                cooked[self.fill_rows:,:] = slice[:]                
+                cooked[:] = ifft2d(cooked)
                 diff = sum_flat(abs(cooked-prev_image))
-                ## title("diff = %f"%(diff,))
-##                 show()
                 mag = abs(cooked)
 
                 c = self.criterion[1]=="converge" and diff or c-1
             cooked = mag*exp(1.j*angle(theta))
-            cooked[:] = self.mask*fft2d(self.mask*cooked)
+            cooked[:] = fft2d(cooked)
             self.mergeFill2D(cooked, slice, winsize=self.win_size)
-##             imshow(abs(cooked))
-##             colorbar()
-##             title("merged")
-##             show()
             cooked3D[s][:] = cooked[:]
             #diff = sum(abs(cooked[:self.fill_rows].flat)) - prev_power
             out.write("absolute difference=%f\n"%(diff))
@@ -132,7 +99,7 @@ class FillHalfSpace (Operation):
         (nv, ns, ny, nx) = (image.tdim, image.zdim, image.ydim, image.xdim)
         self.over_fill = ny - self.fill_size/2
         self.fill_rows = self.fill_size - ny
-        self.mask = checkerboard(self.fill_size, nx)
+
         if self.over_fill < 1:
             self.log("not enough measured data: this method needs a few " \
                      "over-scan lines (sampled past the middle of k-space)")

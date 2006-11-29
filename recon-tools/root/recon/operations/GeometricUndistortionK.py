@@ -1,14 +1,13 @@
 from recon.operations import Operation, Parameter
 from recon.operations.ReadImage import ReadImage as ReadIm
 from recon.operations.GaussianSmooth import gaussian_smooth
-from recon.util import fft, ifft, epi_trajectory, checkerboard
+from recon.util import fft, ifft, fft2d, epi_trajectory
 from pylab import pi, arange, exp, zeros, ones, empty, inverse, Complex, \
      nonzero, dot, asum, take, Complex32, fromfunction, squeeze, asarray, \
      outerproduct, reshape, svd, transpose, conjugate, identity, Float, \
      swapaxes, diff, blackman, sign, power, log, floor, where, put
 
 from LinearAlgebra import solve_linear_equations as solve
-from FFT import fft2d as _fft2d
 
 class GeometricUndistortionK (Operation):
     """
@@ -71,15 +70,14 @@ class GeometricUndistortionK (Operation):
 ##             if len(coefs) != power(2,nscales):
 ##                 raise ValueError("not enough coefficients for %d levels"%nscales)
             # first add normalized scaling
-            y = ones((M,), Float)*(coefs[0]/power(M,0.5))
+            y = ones((M,), Complex)*(coefs[0]/power(M,0.5))
             #y = N.zeros((M,), N.complex128)
             for j in range(nscales):
                 y += self.haar_recon(coefs[power(2,j):power(2,j+1)],j=j,M=M)
             return y
-        
-        psi_len = M/power(2,j)
+        ntrans = power(2,j)        
+        psi_len = M/ntrans
         psi_trans = haar_scaling_and_translations(j=j, M=M)
-        ntrans = power(2,j)
 
         if j==0:
             return asarray(coefs)[0] * psi_trans
@@ -198,6 +196,3 @@ def haar_scaling_and_translations(j=0, M=64, normalized=True):
         w[k,k*psi_len:(k+1)*psi_len] = psi
     return squeeze(w)
 
-def fft2d(a):
-    chk = checkerboard(*a.shape[-2:])
-    return chk*_fft2d(a*chk)

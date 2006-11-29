@@ -22,7 +22,7 @@ def unwrap2D(matrix, mask=None):
         if dims != mask.shape:
             raise ValueError("mask dimensions do not match matrix dimensions!")
     
-    in_phase = len(dims) < 2 and reshape(matrix,(1,dims[0])) or matrix
+    in_phase = len(dims) < 2 and Numeric.reshape(matrix,(1,dims[0])) or matrix
     in_phase = (in_phase*mask).astype(dtype)
     ret = (mask*lpUnwrap(in_phase.astype(Numeric.Float32))).astype(dtype)
     return ret

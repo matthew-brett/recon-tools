@@ -15,7 +15,7 @@ class ReorderSlices (Operation):
     def run(self, image):
         S = image.nslice
         img = image.data
-        acq_order = array(range(S-1,-1,-2) + range(S-2,-1,-2))
+        acq_order = image.acq_order
         s_ind = array([find(acq_order==s)[0] for s in range(S)])
         img[:] = self.flip_slices and take(img, reverse(s_ind), axis=1) \
                                   or take(img, s_ind, axis=1)

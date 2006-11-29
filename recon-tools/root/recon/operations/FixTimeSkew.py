@@ -35,7 +35,7 @@ def circularize(a):
 #############################################################
     
     if To%2: ts_buf[...,-1] = ts_buf[...,-2]
-    return T, ts_buf
+    return ts_buf
 
     
 def subsampInterp(ts, c, axis=-1):
@@ -45,8 +45,8 @@ def subsampInterp(ts, c, axis=-1):
     if axis != -1:
         ts = swapaxes(ts, axis, -1)
 
-    T, ts_buf = circularize(ts)
-
+    ts_buf = circularize(ts)
+    T = ts_buf.shape[-1]
     Fn = int(T/2.) + 1
     phs_shift = empty((T,), Complex)
     phs_shift[:Fn] = exp(-2.j*pi*c*arange(Fn)/float(T))

@@ -1,6 +1,4 @@
-from FFT import inverse_fft2d
-from pylab import Complex32
-from recon.util import checkerboard
+from recon.util import ifft2d
 from recon.operations import Operation
 
 ##############################################################################
@@ -17,13 +15,9 @@ class InverseFFT (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-
-        # 2D checkerboard the shape of one image slice
-        mask = checkerboard(*(image.data.shape[-2:]))
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image.data[:] = (mask * \
-                             inverse_fft2d(mask * image.data)).astype(Complex32)
+            image[:] = ifft2d(image[:]).astype(image[:].typecode())
         else:
             for vol in image.data:
-                vol[:] = (mask * inverse_fft2d(mask * vol)).astype(Complex32)
+                vol[:] = ifft2d(vol).astype(vol.typecode())
