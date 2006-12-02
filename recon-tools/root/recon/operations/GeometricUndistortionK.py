@@ -117,7 +117,7 @@ class GeometricUndistortionK (Operation):
         #basis_recon = recon_funcs[self.basis]
         # compute T_n2 vector
         Tl = image.T_pe
-        delT = 1./image._procpar.sw[0]
+        delT = 0. #image.delT
         a, b = epi_trajectory(image.nseg, image.petable_name, N2) 
         T_n2 = (a*delT/2. + b*Tl)
         

@@ -1,9 +1,9 @@
 import glob
 from os.path import join as pjoin
 from pylab import asarray
-from FDFFile import FDFFile, FDFHeader
+from recon.scanners.varian.FDFFile import FDFFile, FDFHeader
 from ProcPar import ProcPar, ProcParImageMixin
-from recon.imageio import BaseImage
+from recon.imageio import ReconImage
 from recon.analyze import writeImage
 
 

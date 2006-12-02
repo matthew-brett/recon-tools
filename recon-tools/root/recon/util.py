@@ -10,6 +10,7 @@ from pylab import pi, zeros, frange, array, \
   norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
   putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32, \
   UInt8, UInt16, product
+import Numeric as N
 from punwrap import unwrap2D
 
 
@@ -399,52 +400,75 @@ def resample_phase_axis(vol_data, pixel_pos):
     return vol_data
 #-----------------------------------------------------------------------------
 # quaternion and euler rotation helpers
+class Quaternion:
+    def __init__(self, w=1., i=0., j=0., k=0., M=None):
+        self.Q = None
+        if M is not None:
+            self.matrix2quat(M)
+        else:
+            self.Q = N.array([w, i, j, k])
+
+    def conj(self):
+        return Quaternion(w=self.Q[0],i=-self.Q[1],j=-self.Q[2],k=-self.Q[3])
+
+    def matrix2quat(self, m):
+        # m should be 3x3
+        m = m[...,-3:,-3:]
+        if trace(m)>0:
+            S = 0.5/sqrt(1+trace(m))
+            w = 0.25/S
+            ii = (m[2,1]-m[1,2])*S
+            jj = (m[0,2]-m[2,0])*S
+            kk = (m[1,0]-m[0,1])*S
+        elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
+            S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
+            w = (m[2,1]-m[1,2])/S
+            ii = S/4
+            jj = (m[0,1] + m[1,0])/S
+            kk = (m[0,2] + m[2,0])/S
+        elif m[1,1] > m[2,2]:
+            S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
+            w = (m[0,2]-m[2,0])/S
+            ii = (m[0,1]+m[1,0])/S
+            jj = S/4
+            kk = (m[1,2]+m[2,1])/S
+        else:
+            S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
+            w = (m[1,0]-m[0,1])/S
+            ii = (m[0,2]+m[2,0])/S
+            jj = (m[1,2]+m[2,1])/S
+            kk = S/4
+        self.Q = N.array([w, ii, jj, kk])
+
+    def tomatrix(self):
+        raise NotImplementedError
+    
+    def mult(self, quat):
+        a = self.Q
+        b = quat.Q
+        # perform quaternion multiplication
+        w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
+        ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
+        jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
+        kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
+        Q = Quaternion(w=w, i=ii, j=jj, k=kk)
+        return Q/norm(N.array([w,ii,jj,kk]))
+
+    def __str__(self):
+        return `self.Q`
+
+    def __div__(self, f):
+        newq = self.Q/f
+        return Quaternion(w=newq[0], i=newq[1], j=newq[2], k=newq[3])
+
 #-----------------------------------------------------------------------------
 def qmult(a, b):
     # perform quaternion multiplication
-    w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
-    ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
-    jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
-    kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
-    Q = asarray([w, ii, jj, kk])
-    return Q/norm(Q)
-
-#-----------------------------------------------------------------------------
-def qconj(Q):
-    return asarray([Q[0], -Q[1], -Q[2], -Q[3]])
+    return a.mult(b)
 
 #-----------------------------------------------------------------------------
 def euler2quat(theta=0, psi=0, phi=0):
-    return matrix2quat(eulerRot(phi=phi,theta=theta,psi=psi))
-
-#-----------------------------------------------------------------------------
-def matrix2quat(m):
-    # m should be 3x3
-    if trace(m)>0:
-        S = 0.5/sqrt(1+trace(m))
-        w = 0.25/S
-        ii = (m[2,1]-m[1,2])*S
-        jj = (m[0,2]-m[2,0])*S
-        kk = (m[1,0]-m[0,1])*S
-    elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
-        S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
-        w = (m[2,1]-m[1,2])/S
-        ii = S/4
-        jj = (m[0,1] + m[1,0])/S
-        kk = (m[0,2] + m[2,0])/S
-    elif m[1,1] > m[2,2]:
-        S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
-        w = (m[0,2]-m[2,0])/S
-        ii = (m[0,1]+m[1,0])/S
-        jj = S/4
-        kk = (m[1,2]+m[2,1])/S
-    else:
-        S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
-        w = (m[1,0]-m[0,1])/S
-        ii = (m[0,2]+m[2,0])/S
-        jj = (m[1,2]+m[2,1])/S
-        kk = S/4
-    return asarray([w, ii, jj, kk])
+    return Quaternion(M=(eulerRot(phi=phi,theta=theta,psi=psi)))
 
 #-----------------------------------------------------------------------------
 def eulerRot(theta=0, psi=0, phi=0):

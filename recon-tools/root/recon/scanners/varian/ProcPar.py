@@ -270,13 +270,26 @@ class ProcParImageMixin (object):
               "Could not identify sequence: %s" % (self.pulse_sequence))
     nseg = CachedReadOnlyProperty(_get_nseg, "")
 
+    sampstyle = CachedReadOnlyProperty(lambda self:
+                                       (self.petable_name.find('cen')>0 or \
+                                        self.petable_name.find('alt')>0) and \
+                                       "centric" or "linear", "")
+
     tr = CachedReadOnlyProperty(lambda self: self.nseg*self._procpar.tr[0], "")
 
-    x0 = CachedReadOnlyProperty(lambda self: 0., "")
+    x0 = CachedReadOnlyProperty(lambda self: self.xsize*self.n_fe_true/2., "")
 
-    y0 = CachedReadOnlyProperty(lambda self: 0., "")
+    y0 = CachedReadOnlyProperty(lambda self: self.ysize*self.n_pe_true/2., "")
 
     z0 = CachedReadOnlyProperty(lambda self: 0., "")
+
+    phi = CachedReadOnlyProperty(lambda self: self._procpar.phi[0], "")
+
+    psi = CachedReadOnlyProperty(lambda self: self._procpar.psi[0], "")
+
+    theta = CachedReadOnlyProperty(lambda self: self._procpar.theta[0], "")
+
+    delT = CachedReadOnlyProperty(lambda self: 1./self._procpar.sw[0], "")
 
     xsize = CachedReadOnlyProperty(
         lambda self: 10.*float(self._procpar.lro[0])/self.n_fe_true, "")

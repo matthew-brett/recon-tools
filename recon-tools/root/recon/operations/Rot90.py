@@ -2,9 +2,9 @@
 This module defines a rotation on all slices, putting them into standard
 radiological format.
 """
-from pylab import reshape, rot90, flipud
+from pylab import reshape, rot90, flipud, transpose
 from recon.operations import Operation, Parameter
-from recon.imageio import BaseImage
+from recon.imageio import ReconImage
 
 ##############################################################################
 class Rot90 (Operation):
@@ -28,6 +28,8 @@ class Rot90 (Operation):
         elif self.orient.lower()=='recon_epi':
             #xform = lambda x: rot90(flipud(x), k=-1)
             xform = lambda x: flipud(rot90(x))
+        elif self.orient.lower()=="scanner":
+            xform = lambda x: transpose(x)
         else:
             xform = lambda x: rot90(x)
         for vol in data:
@@ -38,4 +40,4 @@ class Rot90 (Operation):
         data = reshape(data, (dshape[0],dshape[1],rotated.shape[0],
                               rotated.shape[1]))
         image.setData(data)
-        image.noteRot()
+

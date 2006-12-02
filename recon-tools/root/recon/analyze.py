@@ -6,7 +6,7 @@ import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
   BIG_ENDIAN
-from recon.imageio import BaseImage
+from recon.imageio import ReconImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
 # header. 
@@ -112,7 +112,7 @@ field_formats = struct_fields.values()
 
 
 ##############################################################################
-class AnalyzeImage (BaseImage):
+class AnalyzeImage (ReconImage):
     """
     Image interface conformant Analyze7.5 file reader.
     """

@@ -6,7 +6,7 @@ from recon.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
     NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
 from recon.tools import OrderedConfigParser, ConsoleTool
 from recon.operations import OperationManager, RunLogger, WriteImage
-from recon.varian.FidImage import getPulseSeq
+from recon.scanners.varian.FidImage import getPulseSeq
 
 # here is a global flag to control fast/slow array logic
 _FAST_ARRAY = False

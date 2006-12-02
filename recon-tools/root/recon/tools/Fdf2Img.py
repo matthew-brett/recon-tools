@@ -2,7 +2,7 @@ import os
 import sys
 
 from recon.tools import ConsoleTool
-from recon.varian.FDFImage import FDFImage
+from recon.scanners.varian.FDFImage import FDFImage
 from recon.operations.ReorderSlices import ReorderSlices
 from recon.operations.FlipSlices import FlipSlices
 

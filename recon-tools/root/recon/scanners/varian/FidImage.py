@@ -6,11 +6,12 @@ import sys
 from Numeric import empty
 from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr,\
   zeros, fromstring, reshape, arange, take, floor, argmax, multiply, asarray
-from recon.util import shift
-from recon.imageio import BaseImage
-from recon.varian import tablib
-from recon.varian.ProcPar import ProcPar, ProcParImageMixin
-from recon.varian.FidFile import FidFile
+from recon.util import shift, euler2quat, qmult
+
+from recon.scanners import ScannerImage
+from recon.scanners.varian import tablib
+from recon.scanners.varian.ProcPar import ProcPar, ProcParImageMixin
+from recon.scanners.varian.FidFile import FidFile
 
 
 #-----------------------------------------------------------------------------
@@ -38,7 +39,7 @@ def complex_fromstring(data, numtype):
 	    fromstring(data,numtype).astype(Float32).tostring(), Complex32)
 
 ##############################################################################
-class FidImage (BaseImage, ProcParImageMixin):
+class FidImage (ScannerImage, ProcParImageMixin):
 
     """
     FidImage loads a FID formatted file from a Varian system. It knows how to
@@ -54,6 +55,8 @@ class FidImage (BaseImage, ProcParImageMixin):
         ProcParImageMixin.__init__(self, datadir, vrange=vrange)
         self.initializeData()
         self.loadData(datadir)
+        self.realizeOrientation()
+        ScannerImage.__init__(self)
 
     #-------------------------------------------------------------------------
     def logParams(self):
@@ -76,7 +79,7 @@ class FidImage (BaseImage, ProcParImageMixin):
 
     #-------------------------------------------------------------------------
     def initializeData(self):
-        "Allocate data matrices."
+        "Allocate data matrices." # IF NEEDED! look at petable or something
         nrefs = len(self.ref_vols)
         self.data = zeros(
           (self.nvol, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
@@ -88,6 +91,19 @@ class FidImage (BaseImage, ProcParImageMixin):
         self.ref_nav_data = zeros(
           (nrefs, self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
         
+    #-------------------------------------------------------------------------
+    def realizeOrientation(self):
+        "Set up the orientation transform defined in the procpar"
+        # Varian data is layed out with this rotation from radiological space:
+        # from scanner to image-> flip on y-axis, then rotate z
+        Qscanner = qmult(euler2quat(phi=-pi/2), euler2quat(psi=pi))
+        phi,psi,theta = self.phi, self.psi, self.theta
+        # Y-angle (psi) keeps original sign due to LHS-RHS flip
+        # NIFTI rotations are applied in the reverse order of Varian's,
+        # so don't need to compose them backwards:
+        Qobl = euler2quat(theta=-theta, psi=psi, phi=-phi)
+        self.orientation_xform = qmult(Qobl,Qscanner)
+            
     #-------------------------------------------------------------------------
     def _load_petable(self):
         """
@@ -426,5 +442,5 @@ class FidImage (BaseImage, ProcParImageMixin):
             else:
                 self.data[vnum-numrefs] = ksp_image
                 self.nav_data[vnum-numrefs] = navigators
-        self.zeroRots()
+
         self.setData(self.data)

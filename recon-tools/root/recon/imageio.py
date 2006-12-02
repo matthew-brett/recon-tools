@@ -9,8 +9,8 @@ from recon.util import import_from
 _readers = odict((
     ("analyze", ("recon.analyze","readImage")),
     ("nifti", ("recon.nifti","readImage")),
-    ("fid", ("recon.varian.FidImage","FidImage")),
-    ("fdf", ("recon.varian.FDFImage","FDFImage"))))
+    ("fid", ("recon.scanners.varian.FidImage","FidImage")),
+    ("fdf", ("recon.scanners.varian.FDFImage","FDFImage"))))
 available_readers = _readers.keys()
 
 # module-private dict specifying available image writers
@@ -37,11 +37,15 @@ def get_dims(data):
 
 
 ##############################################################################
-class BaseImage (object):
+class ReconImage (object):
     """
-    Interface definition for an Image.
+    Interface definition for any image in Recon Tools.
+    This class of images will be able to go through many of the available ops.
+
+    This class of images can be exported to some medical imaging formats.
+    
     Attributes:
-      data:  2, 3, or 4 dimensional matrix representing a slice, single
+      _data:  2, 3, or 4 dimensional matrix representing a slice, single
              volume, or a timecourse of volumes.
       ndim:  number of dimensions
       tdim:  number of volumes in a timecourse
@@ -55,16 +59,21 @@ class BaseImage (object):
       x0:  position of first column
       y0:  position of first row
       z0:  position of first slice
-      zRots: how many times in software image has been rotated around Z
+      orientation: name of the orientaion (coronal, axial, etc)
+      orientation_xform: quaternion describing the orientation
+
+    capabilities provided:
+      volume/slice slicing
+      fe/pe slicing
+      data xform (abs, real, imag, etc)
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0, zRots):
+    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0):
         self.setData(data)
         self.xsize, self.ysize, self.zsize, self.tsize = \
           (xsize, ysize, zsize, tsize)
         self.x0, self.y0, self.z0 = (x0, y0, z0)
-        self.zRots = zRots
 
     #-------------------------------------------------------------------------
     def info(self):
@@ -110,7 +119,7 @@ class BaseImage (object):
     def _subimage(self, data):
         return BaseImage(data,
           self.xsize, self.ysize, self.zsize, self.tsize,
-          self.x0, self.y0, self.z0, self.zRots)
+          self.x0, self.y0, self.z0)
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
@@ -120,12 +129,6 @@ class BaseImage (object):
     #-------------------------------------------------------------------------
     def subImages(self):
         for subnum in xrange(len(self.data)): yield self.subImage(subnum)
-    #-------------------------------------------------------------------------
-    def zeroRots(self):
-        self.zRots = 0
-    #-------------------------------------------------------------------------
-    def noteRot(self):
-        self.zRots += 1
 
 #-----------------------------------------------------------------------------
 def get_reader(format):

@@ -96,7 +96,7 @@ class FillHalfSpace (Operation):
         return cooked3D.astype(volData.typecode())
     
     def run(self, image):
-        (nv, ns, ny, nx) = (image.tdim, image.zdim, image.ydim, image.xdim)
+        (nv, ns, ny, nx) = image.data.shape
         self.over_fill = ny - self.fill_size/2
         self.fill_rows = self.fill_size - ny
 

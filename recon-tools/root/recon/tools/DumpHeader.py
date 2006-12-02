@@ -2,7 +2,7 @@ import sys
 from optparse import Option
 
 from recon.tools import ConsoleTool
-from recon.varian.FidFile import FidFile
+from recon.scanners.varian.FidFile import FidFile
 
 
 ##############################################################################

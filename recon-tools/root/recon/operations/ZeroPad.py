@@ -9,7 +9,7 @@ class ZeroPad (Operation):
     avoiding the creation of a duplicate array
     """
     def run(self, image):
-        (nv, ns, ny, nx) = (image.tdim, image.zdim, image.ydim, image.xdim)
+        (nv, ns, ny, nx) = image.data.shape
         image.data.resize((nv,ns,ny*2,nx*2))
         #b points to the "old data" inside the resized array, shaped the old way
         b = reshape(image.data.flat[0:nv*ns*ny*nx], (nv, ns, ny, nx))
@@ -22,7 +22,7 @@ class ZeroPad (Operation):
 
         #do last slice with permanent copy, or else b gets zero'd
         b = reshape(image.data.flat[0:ny*nx], (ny,nx)).copy()
-        embedIm(b, image.data[0,0])
+        embedIm(b, image.data[0,0], ny/2, nx/2)
         image.setData(image.data)
     
     #done

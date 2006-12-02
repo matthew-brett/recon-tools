@@ -60,8 +60,7 @@ class UnbalPhaseCorrection (Operation):
         # iscentric says whether kspace is multishot centric;
         # xleave is the factor to which kspace data has been interleaved
         # (in the case of multishot interleave)
-        self.iscentric = image.petable_name.find('cen') > 0 or \
-                         image.petable_name.find('alt') > 0
+        self.iscentric = image.sampstyle is "centric"
         self.xleave = self.iscentric and 1 or image.nseg
         self.alpha, self.beta = epi_trajectory(image.nseg, image.petable_name,
                                                n_pe)

@@ -6,7 +6,7 @@ import exceptions
 import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult
-from recon.imageio import BaseImage
+from recon.imageio import ReconImage
 from recon.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
      typecode2datatype, byteorders
 
@@ -119,9 +119,9 @@ field_formats = struct_fields.values()
 default_extension = struct.pack('l', 0)
 
 ##############################################################################
-class NiftiImage (BaseImage):
+class NiftiImage (ReconImage):
     """
-    Loads an image from a NIFTI file as a BaseImage
+    Loads an image from a NIFTI file as a ReconImage
     """
     def __init__(self, filestem, vrange=()):
         self.load_header(filestem)
@@ -260,24 +260,7 @@ class NiftiWriter (object):
         # (not working yet)
 
         image = self.image
-        pdict = self.params
-        phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
-                            (pdict.get('phi',[0.0])[0],
-                             pdict.get('theta',[0.0])[0],
-                             pdict.get('psi',[0.0])[0]))
-        #print "phi=%f, theta=%f, psi=%f"%(pdict.phi[0],pdict.theta[0],
-        #                                  pdict.psi[0])
-
-        #Qsoft = euler2quat(psi=pi/2*image.zRots)
-        # from scanner to image-> flip on y-axis, then rotate z
-        Qscanner = qmult(euler2quat(phi=-pi/2),euler2quat(psi=pi))
-        # Y-angle (psi) keeps original sign due to LHS-RHS flip
-        # NIFTI rotations are applied in the reverse order of Varian's,
-        # so don't need to compose them backwards:
-        Qobl = euler2quat(theta=-theta, psi=psi, phi=-phi)
-        Qform = qmult(Qobl,Qscanner)
-        # don't know how to do Qsoft yet
-        #Qform = qmult(Qsoft, qmult(Qobl, Qscanner))
+        Qform = image.orientation_xform.Q
 
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
@@ -301,9 +284,9 @@ class NiftiWriter (object):
           'quatern_b': Qform[1],
           'quatern_c': Qform[2],
           'quatern_d': Qform[3],
-          'qoffset_x': float(image.xsize*image.xdim/2.),
-          'qoffset_y': float(image.ysize*image.ydim/2.),
-          'qoffset_z': 0.0,
+          'qoffset_x': image.x0,
+          'qoffset_y': image.y0,
+          'qoffset_z': image.z0,
           }
         
         if self.filetype=='single':
