@@ -33,18 +33,18 @@ class WriteImage (Operation):
         if self.datatype == COMPLEX_TYPE:
             # misunderstanding, default to
             # magnitude type handled in next case
-            if not hasattr(image.data, "imag"):
+            if not hasattr(image[:], "imag"):
                 self.datatype = MAGNITUDE_TYPE
             data_code = analyze.COMPLEX        
         if self.datatype == MAGNITUDE_TYPE:
-            if hasattr(image.data, "imag"):
-                image.data = abs(image.data)
+            if hasattr(image[:], "imag"):
+                image.data = abs(image[:])
             data_code = analyze.FLOAT
 
         # if the image data isn't of the desired type (analyze.FLOAT, or
         # analyze.COMPLEX), then cast it there.
-        if data_code != analyze.typecode2datatype[image.data.typecode()]:
-            image[:] = image.data.astype(analyze.datatype2typecode[data_code])
+        if data_code != analyze.typecode2datatype[image[:].typecode()]:
+            image.data = image[:].astype(analyze.datatype2typecode[data_code])
                                            
         analyze.writeImage(image, self.filename,
                            datatype=data_code,
@@ -58,18 +58,18 @@ class WriteImage (Operation):
         if self.datatype == COMPLEX_TYPE:
             # misunderstanding, default to
             # magnitude type handled in next case
-            if not hasattr(image.data, "imag"):
+            if not hasattr(image[:], "imag"):
                 self.datatype = MAGNITUDE_TYPE
             data_code = nifti.COMPLEX        
         if self.datatype == MAGNITUDE_TYPE:
-            if hasattr(image.data, "imag"):
-                image.data = abs(image.data)
+            if hasattr(image[:], "imag"):
+                image.data = abs(image[:])
             data_code = nifti.FLOAT
 
         # if the image data isn't of the desired type (nifti.FLOAT, or
         # nifti.COMPLEX), then cast it there.
-        if data_code != nifti.typecode2datatype[image.data.typecode()]:
-            image[:] = image.data.astype(nifti.datatype2typecode[data_code])
+        if data_code != nifti.typecode2datatype[image[:].typecode()]:
+            image.data = image[:].astype(nifti.datatype2typecode[data_code])
             
         nifti.writeImage(image, self.filename,
                          datatype=data_code,

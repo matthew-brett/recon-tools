@@ -1,11 +1,12 @@
 "This module can write NIFTI files."
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
+from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, dot,\
   Complex32, fromstring, reshape, product, array, sin, cos, pi, asarray, sign
 import struct
 import exceptions
 import sys
 from odict import odict
-from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult
+from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
+     Quaternion
 from recon.imageio import ReconImage
 from recon.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
      typecode2datatype, byteorders
@@ -125,10 +126,9 @@ class NiftiImage (ReconImage):
     """
     def __init__(self, filestem, vrange=()):
         self.load_header(filestem)
-        self.x0,self.y0,self.z0 = (self.qoffset_x, self.qoffset_y,
-                                   self.qoffset_z)
         self.load_image(filestem, vrange)
-
+        
+    #-------------------------------------------------------------------------
     def load_header(self, filestem):
         try:
             fp = open(filestem+".nii", 'r')
@@ -151,13 +151,34 @@ class NiftiImage (ReconImage):
         values = struct_unpack(fp, byte_order, field_formats)
         fp.close()
         # now load values into self
-        map(self.__setattr__, struct_fields.keys(), values)
+        hd_vals = dict()
+        map(hd_vals.__setitem__, struct_fields.keys(), values)
         # sanity check? why not
-        if (self.filetype == 'single' and self.magic != 'n+1\x00') \
-           or (self.filetype == 'dual' and self.magic != 'ni1\x00'):
+        if (self.filetype == 'single' and hd_vals['magic'] != 'n+1\x00') \
+           or (self.filetype == 'dual' and hd_vals['magic'] != 'ni1\x00'):
             raise ValueError("Got file %s, but magic string is incorrect: %s"%\
-                  (filestem, self.magic))
-            
+                  (filestem, hd_vals['magic']))
+
+        # These values are required to be a ReconImage
+        (self.xdim, self.ydim, self.zdim, self.tdim) = \
+                    (hd_vals['xdim'], hd_vals['ydim'],
+                     hd_vals['zdim'], hd_vals['tdim'])
+        (self.xsize, self.ysize, self.zsize, self.tsize) = \
+                     (hd_vals['xsize'], hd_vals['ysize'],
+                      hd_vals['zsize'], hd_vals['tsize'])
+        (self.x0, self.y0, self.z0) = \
+                  (hd_vals['qoffset_x'], hd_vals['qoffset_y'],
+                   hd_vals['qoffset_z'])
+        # what about orientation name?
+        qb, qc, qd, qfac = \
+            (hd_vals['quatern_b'], hd_vals['quatern_c'],
+             hd_vals['quatern_d'], hd_vals['qfac'])
+        self.orientation_xform = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
+        self.vox_offset, self.datatype, self.bitpix = \
+                         (hd_vals['vox_offset'], hd_vals['datatype'],
+                          hd_vals['bitpix'])
+        
+    #-------------------------------------------------------------------------
     def load_image(self, filestem, vrange):
         if self.filetype == 'single':
             fp = open(filestem+".nii", 'r')
@@ -222,11 +243,11 @@ class NiftiWriter (object):
             file(fname,'w').write(self.make_hdr())
             #write extension? 
             file(fname,'a').write(default_extension)
-            file(fname,'a').write(self.image.data.tostring())
+            file(fname,'a').write(self.image[:].tostring())
         else:
             headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
             file(headername,'w').write(self.make_hdr())
-            file(imagename, 'w').write(self.image.data.tostring())
+            file(imagename, 'w').write(self.image[:].tostring())
            
 
     #-------------------------------------------------------------------------
@@ -237,30 +258,23 @@ class NiftiWriter (object):
         #
         # (un)rotation is handled like this: take the image as transformed with
         # 2 rotations, Qs, Rb (Qs represents a transform between scanner space
-        # and a radiological interpretation of the FID file, Rb is the xform
+        # and a right-handed interpretation of the data, Rb is the xform
         # applied by slicing coronal-wise, sagital-wise, etc with the slice
         # gradient).
         #     Then I_m = Qs*Rb(psi,theta,phi)*I_real
-        # The Varian scanner uses a transformation composed of:
-        #     R = Rk(phi)*Rj(psi)*Ri(theta)
         # The goal is to encode a quaternion which corrects this rotation:
-        #     Rc = Ri(-theta)*Rj(-psi)*Rk(-phi)*inv(Qs)
+        #     Rc = inv(Rb)*inv(Qs)
         #     so I_real = Rc*I_m
-        #
-        # I have chosen to first put the image into left-handed "radiological"
-        # coordinates by reflecting over the y-axis (psi=pi) and rotating the
-        # new x-y plane (phi=-pi/2)
         #
         # The euler angles for slicing rotations are from procpar
         # To avoid the chance of interpolation, these angles are "normalized"
         # to the closest multiple of pi/2 (ie 22 degrees->0, 49 degrees->90)
         # 
-        # There is also the chance of software rotations whose xform would
-        # left-multiply I above; this will be undone by the Qsoft quaternion
-        # (not working yet)
 
         image = self.image
         Qform = image.orientation_xform.Q
+        Qform_mat = image.orientation_xform.tomatrix()
+        qoffset = -dot(Qform_mat, asarray([image.x0, image.y0, image.z0]))
 
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
@@ -279,14 +293,14 @@ class NiftiWriter (object):
           'tsize': image.tsize,
           'scl_slope': self.scaling,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
-          'qfac': -1.0,
+          'qfac': image.orientation_xform.qfac,
           'qform_code': NIFTI_XFORM_SCANNER_ANAT,
-          'quatern_b': Qform[1],
-          'quatern_c': Qform[2],
-          'quatern_d': Qform[3],
-          'qoffset_x': image.x0,
-          'qoffset_y': image.y0,
-          'qoffset_z': image.z0,
+          'quatern_b': Qform[0],
+          'quatern_c': Qform[1],
+          'quatern_d': Qform[2],
+          'qoffset_x': qoffset[0],
+          'qoffset_y': qoffset[1],
+          'qoffset_z': qoffset[2],
           }
         
         if self.filetype=='single':

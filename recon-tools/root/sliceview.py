@@ -9,7 +9,7 @@ from matplotlib.image import AxesImage
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
 import matplotlib
-ASPECT = matplotlib.__version__.find('0.87') > -1 and 'auto' or 'preserve'
+ASPECT = matplotlib.__version__.find('0.87') > -1 and 'auto' or 'equal'
 
 def iscomplex(a): return hasattr(a, "imag")
 

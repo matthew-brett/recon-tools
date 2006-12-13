@@ -1,6 +1,6 @@
 "Zero-pads k-space by embedding each NxM slice into a 2Nx2M slice"
 from recon.operations import Operation
-from pylab import zeros, Complex32, arange, reshape
+from pylab import zeros, Complex32, arange, reshape, product
 from recon.util import embedIm
 
 class ZeroPad (Operation):
@@ -9,20 +9,27 @@ class ZeroPad (Operation):
     avoiding the creation of a duplicate array
     """
     def run(self, image):
-        (nv, ns, ny, nx) = image.data.shape
-        image.data.resize((nv,ns,ny*2,nx*2))
+        (nv, ns, ny, nx) = image.tdim and image.shape or (1,) + image.shape
+        old_shape = image.shape
+        new_shape = list(old_shape)
+        new_shape[-2:] = [ny*2, nx*2,]
+        image.resize(new_shape)
         #b points to the "old data" inside the resized array, shaped the old way
-        b = reshape(image.data.flat[0:nv*ns*ny*nx], (nv, ns, ny, nx))
+        b = reshape(image[:].flat[0:product(old_shape)], old_shape)
         for vol in (nv - arange(nv) - 1):
-            for slice in (ns - arange(ns) - 1):
-                if(slice == 0 and vol == 0):
+            for sl in (ns - arange(ns) - 1):
+                if(sl == 0 and vol == 0):
                     continue
-                # put old slice into new one cornered at (ny/2, nx/2)
-                embedIm(b[vol,slice], image.data[vol,slice], ny/2, nx/2)
+                # be careful in case it's a 3d array
+                slicer = image.tdim and (vol,sl) or (sl,)
+                # put old slicer into new one cornered at (ny/2, nx/2)
+                embedIm(b[slicer], image[slicer], ny/2, nx/2)
 
         #do last slice with permanent copy, or else b gets zero'd
-        b = reshape(image.data.flat[0:ny*nx], (ny,nx)).copy()
-        embedIm(b, image.data[0,0], ny/2, nx/2)
-        image.setData(image.data)
+        b = reshape(image[:].flat[0:ny*nx], (ny,nx)).copy()
+        final_slicer = image.tdim and (0,0) or (0,)
+        embedIm(b, image[final_slicer], ny/2, nx/2)
+        image.setData(image[:])
+        # should set xsize,ysize = xsize/2,ysize/2
     
     #done

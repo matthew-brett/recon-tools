@@ -1,9 +1,9 @@
 import pylab
 from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-     Complex32, asarray, arange, outerproduct, ones
+     Complex32, asarray, arange, outerproduct, ones, product, reshape
 
 from odict import odict
-from recon.util import import_from
+from recon.util import import_from, Quaternion
 
 # module-private dict specifying available image readers
 _readers = odict((
@@ -35,6 +35,28 @@ def get_dims(data):
         raise ValueError("data shape %s must be 2, 3, or 4 dimensional"%shape)
     return (ndim,) + (0,)*(4-ndim) + shape
 
+##############################################################################
+class DataChunk (object):
+    def __init__(self, data, num):
+        self._data = data
+        self.num = num
+        self.shape = data.shape
+
+    def __getitem__(self, slicer):
+        return self._data[slicer]
+
+    def __setitem__(self, slicer, data):
+        self._data[slicer] = data.astype(self._data.typecode())
+    
+    def __iter__(self):
+        if len(self.shape) > 1:
+            iternum = 0
+            while iternum < self.shape[0]:
+                yield DataChunk(self._data[iternum], iternum)
+                iternum += 1
+            raise StopIteration
+        else:
+            raise ValueError("can't iterate through a 1D array")
 
 ##############################################################################
 class ReconImage (object):
@@ -56,24 +78,30 @@ class ReconImage (object):
       ysize: spacial height of a row
       zsize: spacial slice thickness
       tsize: duration of each time-series volume
-      x0:  position of first column
-      y0:  position of first row
-      z0:  position of first slice
+      x0: x coordinate of voxel-origin ??
+      y0: y coordinate of voxel-origin ?? 
+      z0: z coordinate of voxle-origin ??
       orientation: name of the orientaion (coronal, axial, etc)
       orientation_xform: quaternion describing the orientation
 
     capabilities provided:
       volume/slice slicing
       fe/pe slicing
+      __getitem__, __setitem__
       data xform (abs, real, imag, etc)
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, tsize, x0, y0, z0):
+    def __init__(self, data, xsize, ysize, zsize, tsize,
+                 origin=None, orient_xform=None, orient_name=None):
         self.setData(data)
         self.xsize, self.ysize, self.zsize, self.tsize = \
           (xsize, ysize, zsize, tsize)
-        self.x0, self.y0, self.z0 = (x0, y0, z0)
+        self.x0, self.y0, self.z0 = origin or (self.xsize*self.xdim/2.,
+                                               self.ysize*self.ydim/2.,
+                                               self.zsize*self.zdim/2.)
+        self.orientation_xform = orient_xform or Quaternion()
+        self.orientation = orient_name or ""
 
     #-------------------------------------------------------------------------
     def info(self):
@@ -95,6 +123,8 @@ class ReconImage (object):
     def setData(self, data):
         self.data = data
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
+        self.shape = (self.tdim and (self.tdim,) or ()) + \
+                     (self.zdim, self.ydim, self.xdim)
 
     #-------------------------------------------------------------------------
     def concatenate(self, image, axis=0, newdim=False):
@@ -112,14 +142,36 @@ class ReconImage (object):
         return self._subimage(newdata)
 
     #-------------------------------------------------------------------------
-    def __getitem__(self, slicer): return self.data[slicer]
+    def __iter__(self):
+        # want to iterate over volumes, if tdim=0, then nvol = 1
+        if len(self.shape) > 3:
+            for t in range(self.tdim):
+                yield DataChunk(self[t], t)
+            raise StopIteration
+        else:
+            yield DataChunk(self[:], 0)
+            raise StopIteration
     #-------------------------------------------------------------------------
-    def __setitem__(self, slicer, newdata): self.data[slicer] = newdata
+    def __getitem__(self, slicer):
+        return self.data[slicer]
+    #-------------------------------------------------------------------------
+    def __setitem__(self, slicer, newdata):
+        if newdata.typecode().isupper() and self.data.typecode().islower():
+            print "warning: losing information on complex->real cast!"
+        self.data[slicer] = newdata.astype(self.data.typecode())
+    #-------------------------------------------------------------------------
+    def __mul__(self, a):
+        self[:] = self[:]*a
+    #-------------------------------------------------------------------------
+    def __div__(self, a):
+        self[:] = self[:]/a
     #-------------------------------------------------------------------------
     def _subimage(self, data):
-        return BaseImage(data,
-          self.xsize, self.ysize, self.zsize, self.tsize,
-          self.x0, self.y0, self.z0)
+        return ReconImage(data,
+                          self.xsize, self.ysize, self.zsize, self.tsize,
+                          origin=(self.x0, self.y0, self.z0),
+                          orient_xform=self.orientation_xform,
+                          orient_name=self.orientation)
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
@@ -129,6 +181,18 @@ class ReconImage (object):
     #-------------------------------------------------------------------------
     def subImages(self):
         for subnum in xrange(len(self.data)): yield self.subImage(subnum)
+
+    #-------------------------------------------------------------------------
+    def resize(self, newsize_tuple):
+        """
+        resize/reshape the data, non-destructively if the number of
+        elements doesn't change
+        """
+        if product(newsize_tuple) == product(self.shape):
+            self.data = reshape(self.data, tuple(newsize_tuple))
+        else:
+            self.data.resize(tuple(newsize_tuple))
+        self.setData(self[:])
 
 #-----------------------------------------------------------------------------
 def get_reader(format):

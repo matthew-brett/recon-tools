@@ -111,7 +111,7 @@ def embedIm(subIm, Im, yOff, xOff):
     if yOff + nSubY > nY or xOff + nSubX > nX:
         print "cannot place sub-image cornered at that location"
         return
-    Im[:] = zeros((nY,nX), Complex32).copy()
+    Im[:] = zeros((nY,nX), subIm.typecode()).copy()
     Im[yOff:yOff+nSubY,xOff:xOff+nSubX] = subIm[:,:]
 
 #-----------------------------------------------------------------------------
@@ -400,62 +400,98 @@ def resample_phase_axis(vol_data, pixel_pos):
     return vol_data
 #-----------------------------------------------------------------------------
 # quaternion and euler rotation helpers
+import sys
+sys.path.append('/Users/miket/trunks/nipy-trunk/lib')
+from neuroimaging.data_io.formats import nifti1_ext as nif
+import numpy
+
 class Quaternion:
-    def __init__(self, w=1., i=0., j=0., k=0., M=None):
+    def __init__(self, i=0., j=0., k=0., qfac=1., M=None):
         self.Q = None
         if M is not None:
             self.matrix2quat(M)
         else:
-            self.Q = N.array([w, i, j, k])
+            self.Q = N.array([i, j, k])
+            self.qfac = qfac
 
-    def conj(self):
-        return Quaternion(w=self.Q[0],i=-self.Q[1],j=-self.Q[2],k=-self.Q[3])
+##     def conj(self):
+##         return Quaternion(i=-self.Q[0],j=-self.Q[1],k=-self.Q[2])
 
     def matrix2quat(self, m):
         # m should be 3x3
-        m = m[...,-3:,-3:]
-        if trace(m)>0:
-            S = 0.5/sqrt(1+trace(m))
-            w = 0.25/S
-            ii = (m[2,1]-m[1,2])*S
-            jj = (m[0,2]-m[2,0])*S
-            kk = (m[1,0]-m[0,1])*S
-        elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
-            S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
-            w = (m[2,1]-m[1,2])/S
-            ii = S/4
-            jj = (m[0,1] + m[1,0])/S
-            kk = (m[0,2] + m[2,0])/S
-        elif m[1,1] > m[2,2]:
-            S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
-            w = (m[0,2]-m[2,0])/S
-            ii = (m[0,1]+m[1,0])/S
-            jj = S/4
-            kk = (m[1,2]+m[2,1])/S
-        else:
-            S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
-            w = (m[1,0]-m[0,1])/S
-            ii = (m[0,2]+m[2,0])/S
-            jj = (m[1,2]+m[2,1])/S
-            kk = S/4
-        self.Q = N.array([w, ii, jj, kk])
+        M44 = N.empty((4,4), N.Float)
+        M44[:3,:3] = m[...,-3:,-3:]
+        M44[:,3] = N.array([1., 1., 1., 1.])
+        qinfo = nif.mat2quatern(numpy.asarray(M44))
+        self.Q = qinfo[:3].copy()
+        self.qfac = qinfo[-1]
+##         m = m[...,-3:,-3:]
+##         if trace(m)>0:
+##             S = 0.5/sqrt(1+trace(m))
+##             w = 0.25/S
+##             ii = (m[2,1]-m[1,2])*S
+##             jj = (m[0,2]-m[2,0])*S
+##             kk = (m[1,0]-m[0,1])*S
+##         elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
+##             S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
+##             w = (m[2,1]-m[1,2])/S
+##             ii = S/4
+##             jj = (m[0,1] + m[1,0])/S
+##             kk = (m[0,2] + m[2,0])/S
+##         elif m[1,1] > m[2,2]:
+##             S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
+##             w = (m[0,2]-m[2,0])/S
+##             ii = (m[0,1]+m[1,0])/S
+##             jj = S/4
+##             kk = (m[1,2]+m[2,1])/S
+##         else:
+##             S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
+##             w = (m[1,0]-m[0,1])/S
+##             ii = (m[0,2]+m[2,0])/S
+##             jj = (m[1,2]+m[2,1])/S
+##             kk = S/4
+##         self.Q = N.array([w, ii, jj, kk])
 
     def tomatrix(self):
-        raise NotImplementedError
+
+        R = N.empty((3,3), N.Float)
+        b,c,d = tuple(self.Q)
+        a = 1.0 - (b*b + c*c + d*d)
+        if (a < 1.e-7):
+            a = 1.0 / N.power(b*b+c*c+d*d, 0.5)
+            b *= a
+            c *= a
+            d *= a
+            a = 0. #0.001
+        else:
+            a = N.power(a,0.5)
+        R[0,0] = (a*a + b*b - c*c - d*d)
+        R[0,1] = 2.*(b*c - a*d)
+        R[0,2] = 2.*(b*d + a*c)*self.qfac
+        R[1,0] = 2.*(b*c + a*d)
+        R[1,1] = (a*a + c*c - b*b - d*d)
+        R[1,2] = 2.*(c*d - a*b)*self.qfac
+        R[2,0] = 2.*(b*d - a*c)
+        R[2,1] = 2.*(c*d + a*b)
+        R[2,2] = (a*a + d*d - c*c - b*b)*self.qfac
+        return R
     
     def mult(self, quat):
-        a = self.Q
-        b = quat.Q
-        # perform quaternion multiplication
-        w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
-        ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
-        jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
-        kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
-        Q = Quaternion(w=w, i=ii, j=jj, k=kk)
-        return Q/norm(N.array([w,ii,jj,kk]))
+##         Q = Quaternion(M=N.dot(self.tomatrix(), quat.tomatrix()))
+##         # perform quaternion multiplication
+##         w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
+##         ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
+##         jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
+##         kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
+##         Q = Quaternion(w=w, i=ii, j=jj, k=kk)
+        return Quaternion(M=N.dot(self.tomatrix(), quat.tomatrix()))
 
     def __str__(self):
         return `self.Q`
+
+    def __mul__(self, q):
+        if isinstance(q, Quaternion):
+            return self.mult(q)
 
     def __div__(self, f):
         newq = self.Q/f
@@ -471,7 +507,7 @@ def euler2quat(theta=0, psi=0, phi=0):
     return Quaternion(M=(eulerRot(phi=phi,theta=theta,psi=psi)))
 
 #-----------------------------------------------------------------------------
-def eulerRot(theta=0, psi=0, phi=0):
+def eulerRot(theta=0, psi=0, phi=0, varian=False):
     # NIFTI defines A = B*C*D = Ri(theta)*Rk(psi)*Rj(phi)
     # so the quaternions will have this convention
     # http://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/figqformusage
@@ -493,7 +529,10 @@ def eulerRot(theta=0, psi=0, phi=0):
     aboutZ[0,0] = aboutZ[1,1] = cos(phi)
     aboutZ[0,1] = sin(phi)
     aboutZ[1,0] = -sin(phi)
-    M = dot(aboutX, dot(aboutY, aboutZ))
+    if varian:
+        M = dot(aboutZ, dot(aboutY, aboutX))
+    else:
+        M = dot(aboutX, dot(aboutY, aboutZ))
     # make sure no rounding error proprogates from here
     putmask(M, abs(M)<1e-5, 0)
     return M

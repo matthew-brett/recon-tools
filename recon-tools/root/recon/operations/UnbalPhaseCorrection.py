@@ -2,7 +2,7 @@ from Numeric import empty, sort
 from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
      pi, sqrt, ones, sum, find, Int, resize, dot, svd, transpose, \
      diag, putmask, sign, asarray
-from recon.operations import Operation, Parameter
+from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import ifft, apply_phase_correction, mod, linReg, shift, \
      unwrap_ref_volume, epi_trajectory
 
@@ -39,24 +39,25 @@ class UnbalPhaseCorrection (Operation):
         # *centric sampled data, whose k-space trajectory had directions,
         # needs special treatment: basically the general case is handled in
         # separated parts
-        
+        if not verify_scanner_image(self, image):
+            return
         if not image.ref_data:
             self.log("No reference volume, quitting")
             return
         if len(image.ref_vols) > 1:
             self.log("Could be performing Balanced Phase Correction!")
 
-        self.volShape = image.data.shape[1:]
+        self.volShape = image.shape[-3:]
         refVol = image.ref_data[0]        
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
 
         # [self.lin1:self.lin2] is the linear region of the gradient
         # self.lin_fe is the # of points in this region
-        lin_pix = int(round(self.lin_radius/image.xsize))
+        lin_pix = int(round(self.lin_radius/image.dFE))
         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
         self.lin_fe = self.lin2-self.lin1
-        self.FOV = image.xsize*n_fe
+        self.FOV = image.dFE*n_fe
         # iscentric says whether kspace is multishot centric;
         # xleave is the factor to which kspace data has been interleaved
         # (in the case of multishot interleave)
@@ -77,10 +78,10 @@ class UnbalPhaseCorrection (Operation):
         
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image.data[:] = apply_phase_correction(image.data, -theta)
+            image[:] = apply_phase_correction(image[:], -theta)
         else:
-            for dvol in image.data:
-                dvol[:] = apply_phase_correction(dvol, -theta)
+            for dvol in image:
+                dvol[:] = apply_phase_correction(dvol[:], -theta)
 
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape

@@ -1,6 +1,6 @@
 from pylab import ones, zeros, Float32, Complex32, multiply, pi, \
-     angle, conjugate, putmask, Int8, power, diff
-from Numeric import empty, sum, sort
+     angle, conjugate, putmask, Int8, power, diff, average, array, find, median
+from Numeric import empty, sum, sort, sign, take, reshape
 from LinearAlgebra import *
 from recon.punwrap import unwrap2D
 from recon.nifti import writeImage
@@ -20,10 +20,20 @@ def unwrap_phase(vols):
     shape = vols.shape
     uw_phase = empty(shape, Float32)
     masks = empty(shape, Int8)
+    heights = zeros((shape[:2]), Float32)
     for t in range(shape[0]):
         masks[t] = build_3Dmask(power(vols[t], 0.5))
         for z in range(shape[1]):
             uw_phase[t,z] = unwrap2D(angle(vols[t,z]), mask=masks[t,z])
+            #uw_phase[t,z] = angle(vols[t,z])*masks[t,z]
+            heights[t,z] = average(array([average(take(row,find(masks[t,z,r])))
+                                          for r,row in enumerate(uw_phase[t,z])\
+                                          if sum(masks[t,z,r])]))
+            heights[t,z] = 2*pi*int((heights[t,z] + sign(heights[t,z])*pi)/2/pi)
+        # bring every one down/up to the median height
+        heights[t] = (heights[t] - median(heights[t])).astype(Float32)
+        print heights[t]
+        uw_phase[t] = uw_phase[t] - reshape(heights[t], (shape[1],1,1))
     return uw_phase, masks
 
 #-----------------------------------------------------------------------------
@@ -61,10 +71,11 @@ class ComputeFieldMap (Operation):
         diff_vols = zeros((image.tdim-1,image.zdim,image.ydim,image.xdim), \
                           Complex32)
         for vol in range(image.tdim-1):
-            diff_vols[vol] = conjugate(image.data[vol+1])*image.data[vol]
+            diff_vols[vol] = conjugate(image[vol+1])*image[vol]
         phase_map, bytemasks = unwrap_phase(diff_vols)
         for vol in range(image.tdim-1):
             asym_time = asym_times[vol] - asym_times[vol+1]
+            print asym_time
             phase_map[vol] = (phase_map[vol]/asym_time).astype(Float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)

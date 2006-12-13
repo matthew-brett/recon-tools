@@ -11,7 +11,7 @@ class Shift (Operation):
 
     def run(self, image):
         if self.xshift:
-            shift(image.data, 0, self.xshift)
+            shift(image[:], 0, self.xshift)
         if self.yshift:
-            shift(image.data, 1, self.yshift)
+            shift(image[:], 1, self.yshift)
 

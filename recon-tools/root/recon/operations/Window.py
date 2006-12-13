@@ -19,7 +19,7 @@ def getWindow(winName, xSize, ySize):
     p = outerproduct(window(ySize), window(xSize))
     
     #return window filter, normalizing just in case
-    return (p/max(p.flat)).astype(Complex32)
+    return p/max(p.flat)
 
 
 class Window (Operation):
@@ -29,4 +29,4 @@ class Window (Operation):
 
     def run(self, image):
         # multiply the window by each slice of the image
-        image.data *= getWindow(self.win_name, image.xdim, image.ydim)
+        image *= getWindow(self.win_name, image.xdim, image.ydim)

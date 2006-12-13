@@ -4,6 +4,7 @@ from glob import glob
 from types import TypeType, BooleanType, TupleType
 
 from recon.util import import_from
+from recon.scanners import ScannerImage
 
 ##############################################################################
 def bool_valuator(val):
@@ -26,6 +27,11 @@ def tuple_valuator(val):
             return
     return tuple([try_int(el) for el in val if try_int(el)])
 
+def verify_scanner_image(op_obj, img_obj):
+    if not isinstance(img_obj, ScannerImage):
+        op_obj.log("This operation can only be run on ScannerImages")
+        return False
+    return True
 
 ##############################################################################
 class Parameter (object):

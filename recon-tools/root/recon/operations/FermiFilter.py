@@ -1,4 +1,3 @@
-from pylab import Float32
 from recon.operations import Operation, Parameter
 from recon.util import fermi_filter
 
@@ -17,8 +16,7 @@ class FermiFilter (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-        rows, cols = image.data.shape[-2:]
-        image.data *= fermi_filter(
-          rows, cols, self.cutoff, self.trans_width).astype(Float32)
+        rows, cols = image.shape[-2:]
+        image *= fermi_filter(rows, cols, self.cutoff, self.trans_width)
 
 

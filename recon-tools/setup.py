@@ -2,13 +2,13 @@
 import sys
 sys.path = ["./root"]+sys.path
 import recon
-import recon.varian
+import recon.scanners.varian
 import os, glob
 from distutils.core import setup, Extension
 
 # a little help to make setup go smoothly
 # grab extra file names to include in varian.tablib package
-psfiles = glob.glob(recon.varian.tablib+'/*')
+psfiles = glob.glob(recon.scanners.varian.tablib+'/*')
 psfiles = ['tablib/'+os.path.split(file)[1] for file in psfiles]
 # with RPM builds, TODOs is already pruned from MANIFEST.in
 if 'tablib/TODOs' in psfiles:
@@ -48,7 +48,8 @@ setup(
     'recon.operations',
     'recon.punwrap',
     'recon.tools',
-    'recon.varian'],
+    'recon.scanners',
+    'recon.scanners.varian',],
 
   scripts=[
     'scripts/dumpheader',
@@ -58,7 +59,7 @@ setup(
     'scripts/recon'],
 
   package_data = {'recon.conf':['*.ops'],
-                  'recon.varian': psfiles},
+                  'recon.scanners.varian': psfiles},
   
   ext_modules=[Extension('recon.punwrap._punwrap',
                punwrap_src)],

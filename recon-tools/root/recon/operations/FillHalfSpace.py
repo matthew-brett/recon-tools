@@ -96,10 +96,10 @@ class FillHalfSpace (Operation):
         return cooked3D.astype(volData.typecode())
     
     def run(self, image):
-        (nv, ns, ny, nx) = image.data.shape
+        ny = image.ydim
         self.over_fill = ny - self.fill_size/2
         self.fill_rows = self.fill_size - ny
-
+        
         if self.over_fill < 1:
             self.log("not enough measured data: this method needs a few " \
                      "over-scan lines (sampled past the middle of k-space)")
@@ -123,19 +123,18 @@ class FillHalfSpace (Operation):
                 self.criterion = (0,"iterateN")
                 self.iterations = 5
                 
-        old_data = image.data.copy()
-        old_image = image._subimage(old_data)
-        image.data.resize((nv,ns,self.fill_size,nx))
-        image.setData(image.data)
+        old_image = image._subimage(image[:].copy())
+        new_shape = list(image.shape)
+        new_shape[-2] = self.fill_size
+        image.resize(new_shape)
 
-        for t in range(nv):
-            
+        for new_vol, old_vol in zip(image, old_image):
             if self.method == "iterative":
-                cooked = self.cookImage2D(old_image.data[t])                
+                cooked = self.cookImage2D(old_vol[:])                
             else:
-                cooked = self.kSpaceFill(old_image.data[t])
+                cooked = self.kSpaceFill(old_vol[:])
                 
-            image.data[t][:] = cooked[:]
+            new_vol[:] = cooked[:]
             
     def kSpaceFill(self, vol):
         (ns, _, nx) = vol.shape

@@ -1,5 +1,4 @@
-from Numeric import empty
-from pylab import mlab, angle, cos, sin, Float, Complex32, asarray
+from pylab import angle
 from recon.operations import Operation
 from recon.util import shift, ifft, apply_phase_correction
 
@@ -8,7 +7,7 @@ class PhaseCorrection (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-        if not image.ref_data:
+        if not hasattr(image, 'ref_data'):
             self.log("No reference data, nothing to do.")
             return
         if len(image.ref_vols) > 1:
@@ -20,7 +19,7 @@ class PhaseCorrection (Operation):
         # apply correction to image data
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image.data = apply_phase_correction(image.data, -ref_phs)
+            image[:] = apply_phase_correction(image[:], -ref_phs)
         else:
-            for dvol in image.data:
-                dvol[:] = apply_phase_correction(dvol, -ref_phs)
+            for dvol in image:
+                dvol[:] = apply_phase_correction(dvol[:], -ref_phs)

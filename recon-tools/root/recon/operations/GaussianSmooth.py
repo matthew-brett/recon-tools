@@ -31,11 +31,10 @@ class GaussianSmooth (Operation):
                   description="full width at half max of gaussian dist"),
         Parameter(name="kernel_rank", type="int", default=3,
                   description="rank of smoothing kernel (gaussian will be "\
-                  "centered at a reasonable spot")
+                  "centered at a reasonable spot"),
         )
     
     def run(self, image):
-        image[:] = gaussian_smooth(image.data, self.fwhm,
-                                   self.kernel_rank).astype(image.data.typecode())
+        image[:] = gaussian_smooth(image[:], self.fwhm, self.kernel_rank)
         
     

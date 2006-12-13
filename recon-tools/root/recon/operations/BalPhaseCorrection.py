@@ -3,7 +3,7 @@
 #from FFT import inverse_fft
 from Numeric import sort
 from pylab import angle, conjugate, sin, cos, Complex32, Complex, fft, arange, reshape, ones, sqrt, plot, mean, take, pi, zeros, Float, show, floor, median, NewAxis, transpose, dot, svd, exp, Int, diag, title, asarray, legend, empty, sign, putmask, find, sum
-from recon.operations import Operation, Parameter
+from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import shift, fft, ifft, apply_phase_correction, unwrap1D, linReg, mod, checkerline, unwrap_ref_volume
 
 def shift_columns_left(matrix):
@@ -28,11 +28,12 @@ class BalPhaseCorrection (Operation):
         )
 
     def run(self, image):
-        if not image.ref_data or len(image.ref_vols) < 2:
+        if not verify_scanner_image(self, image): return
+        if not hasattr(image, "ref_data") or len(image.ref_vols) < 2:
             self.log("Not enough reference volumes, quitting.")
             return
 
-        self.volShape = image.data.shape[1:]
+        self.volShape = image.shape[-3:]
         
         #shift_columns_left(image.ref_data[0])
         #shift_columns_right(image.ref_data[0])
@@ -75,16 +76,16 @@ class BalPhaseCorrection (Operation):
                          self.solve_phase(phs_vol, r_mask, u_mask, s_mask)
         print self.coefs
         Tl = image.T_pe
-        delT = 1./image._procpar.sw[0]
+        delT = image.delT
         print "Tl = %f; delT = %f"%(Tl,delT,)
         theta_vol = self.correction_volume(Tl, delT)
 
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image.data[:] = apply_phase_correction(image.data, -theta_vol)
+            image[:] = apply_phase_correction(image[:], -theta_vol)
         else:
-            for dvol in image.data:
-                dvol[:] = apply_phase_correction(dvol, -theta_vol)
+            for dvol in image:
+                dvol[:] = apply_phase_correction(dvol[:], -theta_vol)
 
 
 

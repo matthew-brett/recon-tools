@@ -277,11 +277,11 @@ class ProcParImageMixin (object):
 
     tr = CachedReadOnlyProperty(lambda self: self.nseg*self._procpar.tr[0], "")
 
-    x0 = CachedReadOnlyProperty(lambda self: self.xsize*self.n_fe_true/2., "")
+    #x0 = CachedReadOnlyProperty(lambda self: self.dFE*self.n_fe_true/2., "")
 
-    y0 = CachedReadOnlyProperty(lambda self: self.ysize*self.n_pe_true/2., "")
+    #y0 = CachedReadOnlyProperty(lambda self: self.dPE*self.n_pe_true/2., "")
 
-    z0 = CachedReadOnlyProperty(lambda self: 0., "")
+    #z0 = CachedReadOnlyProperty(lambda self: self.dSL*self.nslice/2., "")
 
     phi = CachedReadOnlyProperty(lambda self: self._procpar.phi[0], "")
 
@@ -291,16 +291,16 @@ class ProcParImageMixin (object):
 
     delT = CachedReadOnlyProperty(lambda self: 1./self._procpar.sw[0], "")
 
-    xsize = CachedReadOnlyProperty(
+    dFE = CachedReadOnlyProperty(
         lambda self: 10.*float(self._procpar.lro[0])/self.n_fe_true, "")
 
-    ysize = CachedReadOnlyProperty(
+    dPE = CachedReadOnlyProperty(
         lambda self: 10.*float(self._procpar.lpe[0])/self.n_pe_true, "")
 
-    zsize = CachedReadOnlyProperty(
+    dSL = CachedReadOnlyProperty(
         lambda self: float(self.thk) + self.slice_gap, "")
 
-    tsize = CachedReadOnlyProperty(lambda self: self.tr, "")
+    #tsize = CachedReadOnlyProperty(lambda self: self.tr, "")
 
     datasize = CachedReadOnlyProperty(
         lambda self: self._procpar.dp[0]=="y" and 4 or 2, "")

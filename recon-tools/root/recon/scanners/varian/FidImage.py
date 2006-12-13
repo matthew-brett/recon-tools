@@ -3,11 +3,11 @@ import struct
 import stat
 import os.path
 import sys
-from Numeric import empty
-from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, fliplr,\
-  zeros, fromstring, reshape, arange, take, floor, argmax, multiply, asarray
+from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, sign, \
+     zeros, fromstring, reshape, arange, take, floor, argmax, multiply, \
+     asarray, empty, squeeze, dot
 from recon.util import shift, euler2quat, qmult
-
+from recon import util
 from recon.scanners import ScannerImage
 from recon.scanners.varian import tablib
 from recon.scanners.varian.ProcPar import ProcPar, ProcParImageMixin
@@ -56,7 +56,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
         self.initializeData()
         self.loadData(datadir)
         self.realizeOrientation()
+        # scanner image will init ReconImage, which will set the data dims
         ScannerImage.__init__(self)
+        
 
     #-------------------------------------------------------------------------
     def logParams(self):
@@ -73,36 +75,66 @@ class FidImage (ScannerImage, ProcParImageMixin):
         print "Raw precision (bytes): ", self.datasize
         print "Number of reference volumes: %d" % len(self.ref_vols)
         print "Orientation: %s" % self.orient
-        print "Pixel size (phase-encode direction): %7.2f" % self.ysize 
-        print "Pixel size (frequency-encode direction): %7.2f" % self.xsize
-        print "Slice thickness: %7.2f" % self.zsize
+        print "Pixel size (phase-encode direction): %7.2f" % self.dPE 
+        print "Pixel size (frequency-encode direction): %7.2f" % self.dFE
+        print "Slice thickness: %7.2f" % self.dSL
 
     #-------------------------------------------------------------------------
     def initializeData(self):
         "Allocate data matrices." # IF NEEDED! look at petable or something
         nrefs = len(self.ref_vols)
-        self.data = zeros(
-          (self.nvol, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
-        self.nav_data = zeros(
-          (self.nvol, self.nslice, self.nav_per_slice, self.n_fe_true),
-          Complex32)
-        self.ref_data = zeros(
-          (nrefs, self.nslice, self.n_pe_true, self.n_fe_true), Complex32)
-        self.ref_nav_data = zeros(
-          (nrefs, self.nslice, self.nav_per_slice, self.n_fe_true), Complex32)
+        self.data = zeros((self.nvol, self.nslice,
+                           self.n_pe_true, self.n_fe_true), Complex32)
+        self.nav_data = zeros((self.nvol, self.nslice,
+                               self.nav_per_slice, self.n_fe_true), Complex32)
+        self.ref_data = zeros((nrefs, self.nslice,
+                               self.n_pe_true, self.n_fe_true), Complex32)
+        self.ref_nav_data = zeros((nrefs, self.nslice,
+                                   self.nav_per_slice, self.n_fe_true),
+                                  Complex32)
         
     #-------------------------------------------------------------------------
     def realizeOrientation(self):
         "Set up the orientation transform defined in the procpar"
-        # Varian data is layed out with this rotation from radiological space:
-        # from scanner to image-> flip on y-axis, then rotate z
-        Qscanner = qmult(euler2quat(phi=-pi/2), euler2quat(psi=pi))
+        # Varian data is layed out with this improper rotation from
+        # neurological oriented space:
+        # from scanner to image-> map -y -> +y
+        # (the object lies [+X, +Y, +Z] = [P, R, S] inside the scanner,
+        #  so account for this rotation last)
+        Qs_mat = asarray([[ 1., 0., 0.],
+                          [ 0.,-1., 0.],
+                          [ 0., 0., 1.],])
+        Qr_mat = util.eulerRot(phi=pi/2)
+        Qscanner = util.Quaternion(M=Qs_mat)
+        Qrot = util.Quaternion(M=Qr_mat)
+
         phi,psi,theta = self.phi, self.psi, self.theta
-        # Y-angle (psi) keeps original sign due to LHS-RHS flip
-        # NIFTI rotations are applied in the reverse order of Varian's,
-        # so don't need to compose them backwards:
-        Qobl = euler2quat(theta=-theta, psi=psi, phi=-phi)
-        self.orientation_xform = qmult(Qobl,Qscanner)
+        phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
+                                                 (phi,theta,psi))
+        # find out the (closest) image plane
+        if theta == 0 and psi == 0:
+            self.image_plane = "axial"
+        elif theta == pi/2 and psi != pi/2:
+            self.image_plane = "coronal"
+        elif theta == pi/2 and psi == pi/2:
+            self.image_plane = "sagittal"
+        else:
+            self.image_plane = "oblique"
+        # Varian system [R A S] vector seems to be [Y -X Z], and
+        # the order of rotation in that space is
+        # 1) theta degrees clockwise around Y
+        # 2) psi degrees around X
+        # 3) phi degrees around Z
+        # The steps to rotate the reconstructed data are:
+        # 1) flip Y to put into a right-handed system
+        # 2) rotate in the reverse order as the Varian rotation
+        # 3) make a final pi/2 rotation around Z to make [R A S] = [X Y Z]
+        Qobl = util.Quaternion(M=dot(util.eulerRot(psi=theta),
+                                     dot(util.eulerRot(theta=psi),
+                                         util.eulerRot(phi=phi))))
+        self.orientation_xform = qmult(Qrot, qmult(Qobl,Qscanner))
+        # don't have orientation's name yet
+        self.orientation = ""
             
     #-------------------------------------------------------------------------
     def _load_petable(self):
@@ -443,4 +475,6 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 self.data[vnum-numrefs] = ksp_image
                 self.nav_data[vnum-numrefs] = navigators
 
-        self.setData(self.data)
+        # squeeze out single volume data
+        self.data = squeeze(self.data).copy()
+

@@ -1,5 +1,6 @@
 from pylab import flipud, fliplr
 from recon.operations import Operation, Parameter
+from recon.util import Quaternion
 
 ##############################################################################
 class FlipSlices (Operation):
@@ -13,15 +14,22 @@ class FlipSlices (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-        from sliceview import sliceview
-        from pylab import array
+
         if not self.flipud and not self.fliplr: return
-        for volume in image.data:
-            for i, slice in enumerate(volume):
+
+        for vol in image:
+            for sl in vol:
                 if self.flipud and self.fliplr:
-                    newslice = flipud(fliplr(slice))
+                    newslice = flipud(fliplr(sl[:]))
                 elif self.flipud:
-                    newslice = flipud(slice)
+                    newslice = flipud(sl[:])
                 elif self.fliplr:
-                    newslice = fliplr(slice)
-                slice[:] = newslice.copy()
+                    newslice = fliplr(sl[:])
+                sl[:] = newslice.copy()
+                
+        mat = image.orientation_xform.tomatrix()
+        if self.flipud:
+            mat[:,1] = -mat[:,1]
+        if self.fliplr:
+            mat[:,0] = -mat[:,0]
+        image.orientation_xform = Quaternion(M=mat)        

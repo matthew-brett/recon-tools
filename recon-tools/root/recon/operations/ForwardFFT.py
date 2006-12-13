@@ -15,8 +15,8 @@ class ForwardFFT (Operation):
     def run(self, image):
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image[:] = fft2d(image[:]).astype(image[:].typecode())
+            image[:] = fft2d(image[:])
         else:
-            for vol in image.data:
-                vol[:] = fft2d(vol).astype(vol.typecode())
+            for vol in image:
+                vol[:] = fft2d(vol[:])
 

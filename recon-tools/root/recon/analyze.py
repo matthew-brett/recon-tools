@@ -1,11 +1,11 @@
 "This module implements details of the Analyze7.5 file format."
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-  Complex32, fromstring, reshape, amin, amax, product
+from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, dot, \
+  Complex32, fromstring, reshape, amin, amax, product, array, identity
 import struct
 import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
-  BIG_ENDIAN
+  BIG_ENDIAN, Quaternion
 from recon.imageio import ReconImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
@@ -39,6 +39,40 @@ datatype2typecode = {
 typecode2datatype = \
   dict([(v,k) for k,v in datatype2typecode.items()])
         
+orientname2orientcode = {
+    "radiological": 0,
+    "coronal": 1,
+    "saggital": 2,
+    "transverse": 3,
+    "coronal_flipped": 4,
+    "saggital_flipped": 5,
+    }
+
+orientcode2orientname = dict([(v,k) for k,v in orientname2orientcode.items()])
+
+xforms = {
+    "radiological": array([[-1., 0., 0.],
+                           [ 0., 1., 0.],
+                           [ 0., 0., 1.],]),
+    "transverse": array([[-1., 0., 0.],
+                         [ 0.,-1., 0.],
+                         [ 0., 0., 1.],]),
+    "coronal": array([[-1., 0., 0.],
+                      [ 0., 0., 1.],
+                      [ 0., 1., 0.],]),
+    "coronal_flipped": array([[-1., 0., 0.],
+                              [ 0., 0.,-1.],
+                              [ 0., 1., 0.]],),
+    "saggital": array([[ 0., 1., 0.],
+                       [ 0., 0., 1.],
+                       [-1., 0., 0.],]),
+    "saggital_flipped": array([[ 0., 1., 0.],
+                               [ 0., 0.,-1.],
+                               [-1., 0., 0.],]),
+    }
+
+
+
 # what is native and what is swapped?
 byteorders = {
     sys.byteorder: sys.byteorder=='little' and LITTLE_ENDIAN or BIG_ENDIAN,
@@ -146,7 +180,22 @@ class AnalyzeImage (ReconImage):
         values = struct_unpack(file(filename), byte_order, field_formats)
 
         # now load values into self
-        map(self.__setattr__, struct_fields.keys(), values)
+        hd_vals = dict()
+        map(hd_vals.__setitem__, struct_fields.keys(), values)
+        (self.xdim, self.ydim, self.zdim, self.tdim) = \
+                    (hd_vals['xdim'], hd_vals['ydim'],
+                     hd_vals['zdim'], hd_vals['tdim'])
+        (self.xsize, self.ysize, self.zsize, self.tsize) = \
+                     (hd_vals['xsize'], hd_vals['ysize'],
+                      hd_vals['zsize'], hd_vals['tsize'])
+        (self.x0, self.y0, self.z0) = \
+                  (hd_vals['x0']*self.xsize,
+                   hd_vals['y0']*self.ysize,
+                   hd_vals['z0']*self.zsize)
+        self.orientation = orientcode2orientname.get(hd_vals['orient'], "")
+        xform_mat = xforms.get(hd_vals['orient'], identity(3))
+        self.orientation_xform = Quaternion(M=xform_mat)
+        self.datatype, self.bitpix = (hd_vals['datatype'], hd_vals['bitpix'])
 
     #-------------------------------------------------------------------------
     def load_image(self, filename, vrange):
@@ -213,6 +262,7 @@ class AnalyzeWriter (object):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
         data_magnitude = abs(image.data)
+
         imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
@@ -225,10 +275,13 @@ class AnalyzeWriter (object):
           'ysize': image.ysize,
           'zsize': image.zsize,
           'tsize': image.tsize,
+          'x0': (image.xdim/2),
+          'y0': (image.ydim/2),
+          'z0': (image.zdim/2),
           'scale_factor': self.scaling,
           'glmin': amin(data_magnitude.flat),
           'glmax': amax(data_magnitude.flat),
-          'orient': '\0'}   # kludge alert!  this must be fixed!
+          'orient': orientname2orientcode.get(image.orientation,'\0'),}
 
         def fieldvalue(fieldname, fieldformat):
             if imagevalues.has_key(fieldname): return imagevalues[fieldname]

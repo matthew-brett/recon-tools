@@ -1,7 +1,7 @@
 from FFT import fft, inverse_fft
 from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32,\
      swapaxes, product, NewAxis, reshape, squeeze, array, find
-from recon.operations import Operation, Parameter
+from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import reverse
 
 def circularize(a):
@@ -63,14 +63,13 @@ class FixTimeSkew (Operation):
     """
 
     params=(
-        Parameter(name="flip_slices", type="bool", default=False,
-                  description="Flip slices during reordering."),
         Parameter(name="data_space", type="str", default="kspace",
                   description="name of space to run op: kspace or imspace"),
         )
 
     def run(self, image):
-        (nvol, nslice, npe, nfe) = image.data.shape
+        if not verify_scanner_image(self, image): return
+        nslice = image.zdim
         # slice acquisition can be in some nonlinear order
         # eg: Varian data is acquired in an order like this:
         # [19,17,15,13,11, 9, 7, 5, 3, 1,18,16,14,12,10, 8, 6, 4, 2, 0,]
@@ -81,7 +80,8 @@ class FixTimeSkew (Operation):
         acq_order = image.acq_order
         # --- shift factors indexed slice number ---
         shifts = array([find(acq_order==s)[0] for s in range(nslice)])
-        if self.flip_slices: shifts = reverse(shifts)
+
+        # I don't like this kludge..
         if self.data_space == "imspace":
             image.data = abs(image[:]).astype('f')
 
@@ -91,7 +91,7 @@ class FixTimeSkew (Operation):
             for s in range(nslice):
                 c = float(shifts[s])/float(nslice)
                 #sl = (slice(0,nvol), slice(s,s+1), slice(0,npe), slice(0,nfe))
-                subsampInterp(image.data[:,s,:,:], c, axis=0)
+                subsampInterp(image[:,s,:,:], c, axis=0)
         else:
             for s in range(nslice):
                 # want to shift seg1 forward temporally and seg2 backwards--
@@ -102,15 +102,14 @@ class FixTimeSkew (Operation):
                 sl1 = self.segn(image,0)
                 sl2 = self.segn(image,1)
                 # interpolate for each segment        
-                subsampInterp(image.data[:,s,sl1,:], c1, axis=0)
-                subsampInterp(image.data[:,s,sl2,:], c2, axis=0)
+                subsampInterp(image[:,s,sl1,:], c1, axis=0)
+                subsampInterp(image[:,s,sl2,:], c2, axis=0)
 
                 
     def segn(self, image, n):
         # this is very very limited to 2-shot trajectories!
-        npe = image.data.shape[-2]
-        if image.petable_name.find('cen') > 0 or \
-           image.petable_name.find('alt') > 0:
+        npe = image.shape[-2]
+        if image.sampstyle == "centric":
             return slice(n*npe/2,npe/(2-n))
         else: return slice(n,npe,2)
     

@@ -1,5 +1,5 @@
-from recon.operations import Operation, Parameter
-from recon.analyze import readImage
+from recon.operations import Operation, Parameter, verify_scanner_image
+from recon.nifti import readImage
 from recon.util import resample_phase_axis
 from pylab import pi, arange, outerproduct, ones
 
@@ -14,7 +14,7 @@ class GeometricUndistortion (Operation):
 
     def run(self, image):
         "Correct for Nyquist ghosting due to field inhomogeneity."
-	
+        if not verify_scanner_image(self, image): return
 	if not self.fmap_file:
 	    self.log("No field map file provided, quitting")
 	    return
@@ -23,7 +23,9 @@ class GeometricUndistortion (Operation):
                      " to non-epi sequences, quitting")
             return
 	fMap = readImage(self.fmap_file)
-	if fMap.data.shape[-3:] != image.data.shape[-3:]:
+        # grab the fieldmap, ignore the mask
+        fMap = fMap[0]
+	if fMap.shape[-3:] != image.shape[-3:]:
 	    self.log("This field map's shape does not match"\
                      " the image shape, quitting")
 	    return
@@ -31,10 +33,10 @@ class GeometricUndistortion (Operation):
 	shift = (image.xdim * image.T_pe/2/pi)
         
         #watch the sign
-        pixel_pos = -shift*fMap.data + \
-                    outerproduct(arange(fMap.ydim), ones(fMap.ydim))
+        pixel_pos = -shift*fMap[:] + outerproduct(arange(fMap.ydim),
+                                                  ones(fMap.ydim))
         
-        image.data.real = resample_phase_axis(abs(image.data), pixel_pos)
-        image.data.imag = 0.
+        image[:].real = resample_phase_axis(abs(image[:]), pixel_pos)
+        image[:].imag = 0.
 	
         

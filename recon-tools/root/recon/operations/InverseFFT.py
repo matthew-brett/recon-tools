@@ -17,7 +17,7 @@ class InverseFFT (Operation):
     def run(self, image):
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image[:] = ifft2d(image[:]).astype(image[:].typecode())
+            image[:] = ifft2d(image[:])
         else:
-            for vol in image.data:
-                vol[:] = ifft2d(vol).astype(vol.typecode())
+            for vol in image:
+                vol[:] = ifft2d(vol[:])
