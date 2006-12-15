@@ -12,7 +12,6 @@ def build_3Dmask(vol):
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
     thresh = 0.1*(t98 - t2) + t2
-    print t2, t98, thresh
     putmask(mask, abs(vol)<thresh, 0)
     return mask
 
@@ -32,7 +31,6 @@ def unwrap_phase(vols):
             heights[t,z] = 2*pi*int((heights[t,z] + sign(heights[t,z])*pi)/2/pi)
         # bring every one down/up to the median height
         heights[t] = (heights[t] - median(heights[t])).astype(Float32)
-        print heights[t]
         uw_phase[t] = uw_phase[t] - reshape(heights[t], (shape[1],1,1))
     return uw_phase, masks
 
@@ -75,7 +73,6 @@ class ComputeFieldMap (Operation):
         phase_map, bytemasks = unwrap_phase(diff_vols)
         for vol in range(image.tdim-1):
             asym_time = asym_times[vol] - asym_times[vol+1]
-            print asym_time
             phase_map[vol] = (phase_map[vol]/asym_time).astype(Float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)

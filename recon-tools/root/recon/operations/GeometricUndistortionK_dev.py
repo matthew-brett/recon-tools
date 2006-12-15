@@ -118,7 +118,7 @@ class GeometricUndistortionK_dev (Operation):
         # compute T_n2 vector
         Tl = image.T_pe
         delT = image.delT
-        a, b = epi_trajectory(image.nseg, image.petable_name, N2) 
+        a, b = epi_trajectory(image.nseg, image.sampstyle, N2) 
         T_n2 = (a*delT/2. + b*Tl)
         
 

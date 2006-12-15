@@ -45,7 +45,7 @@ class GeometricUndistortionK (Operation):
         N2 = N2P = npe
         delT = image.delT
         df_n = 2.j*pi*fromfunction(lambda y,x: x-y, (N2,N2P))/float(M)
-        a, b = epi_trajectory(image.nseg, image.petable_name, N2)
+        a, b = epi_trajectory(image.nseg, image.sampstyle, N2)
         n2v = 1.j*(a*delT/2. + b*Tl)
         mv = arange(M)-M/2
         # outerproduct of df_n, mv is effectively outerproduct(df_n.flat, mv)

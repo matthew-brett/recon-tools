@@ -122,7 +122,7 @@ struct_fields = odict((
     ('glmin','i'),
     ('descrip','80s'),
     ('aux_file','24s'),
-    ('orient','c'),
+    ('orient','B'),
     ('x0','h'),
     ('y0','h'),
     ('z0','h'),
@@ -281,7 +281,7 @@ class AnalyzeWriter (object):
           'scale_factor': self.scaling,
           'glmin': amin(data_magnitude.flat),
           'glmax': amax(data_magnitude.flat),
-          'orient': orientname2orientcode.get(image.orientation,'\0'),}
+          'orient': orientname2orientcode.get(image.orientation,-1),}
 
         def fieldvalue(fieldname, fieldformat):
             if imagevalues.has_key(fieldname): return imagevalues[fieldname]

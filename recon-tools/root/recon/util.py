@@ -166,8 +166,8 @@ def complex_checkerboard(rows, cols):
     return checkerboard(rows, cols) - 1.j*checkerboard(rows, cols)
  
 #-----------------------------------------------------------------------------
-def epi_trajectory(nseg, pseq, M):
-    if pseq.find('cen') > 0 or pseq.find('alt') > 0:
+def epi_trajectory(nseg, sampling, M):
+    if sampling == "centric":
         if nseg > 2:
             raise NotImplementedError("centric sampling not implemented for nseg > 2")
         a = checkerline(M)
@@ -265,7 +265,7 @@ def unwrap_ref_volume(phases, fe1, fe2):
     """
     zdim,ydim,xdim = vol_shape = phases.shape
     uphases = empty(vol_shape, Float)
-    zerosl, zeropt = (0, vol_shape[2]/2)
+    zerosl, zeropt = (vol_shape[0]/2, vol_shape[2]/2)
 
     # unwrap the volume sliced along each PE line
     # the middle of each surface should be between -pi and pi,
@@ -400,10 +400,7 @@ def resample_phase_axis(vol_data, pixel_pos):
     return vol_data
 #-----------------------------------------------------------------------------
 # quaternion and euler rotation helpers
-import sys
-sys.path.append('/Users/miket/trunks/nipy-trunk/lib')
-from neuroimaging.data_io.formats import nifti1_ext as nif
-import numpy
+import LinearAlgebra as LA
 
 class Quaternion:
     def __init__(self, i=0., j=0., k=0., qfac=1., M=None):
@@ -414,43 +411,69 @@ class Quaternion:
             self.Q = N.array([i, j, k])
             self.qfac = qfac
 
-##     def conj(self):
-##         return Quaternion(i=-self.Q[0],j=-self.Q[1],k=-self.Q[2])
-
     def matrix2quat(self, m):
         # m should be 3x3
-        M44 = N.empty((4,4), N.Float)
-        M44[:3,:3] = m[...,-3:,-3:]
-        M44[:,3] = N.array([1., 1., 1., 1.])
-        qinfo = nif.mat2quatern(numpy.asarray(M44))
-        self.Q = qinfo[:3].copy()
-        self.qfac = qinfo[-1]
-##         m = m[...,-3:,-3:]
-##         if trace(m)>0:
-##             S = 0.5/sqrt(1+trace(m))
-##             w = 0.25/S
-##             ii = (m[2,1]-m[1,2])*S
-##             jj = (m[0,2]-m[2,0])*S
-##             kk = (m[1,0]-m[0,1])*S
-##         elif (m[0,0]>m[1,1]) and (m[0,0] > m[2,2]):
-##             S = sqrt(1 + m[0,0] - m[1,1] - m[2,2])*2
-##             w = (m[2,1]-m[1,2])/S
-##             ii = S/4
-##             jj = (m[0,1] + m[1,0])/S
-##             kk = (m[0,2] + m[2,0])/S
-##         elif m[1,1] > m[2,2]:
-##             S = sqrt(1 + m[1,1] - m[0,0] - m[2,2])*2
-##             w = (m[0,2]-m[2,0])/S
-##             ii = (m[0,1]+m[1,0])/S
-##             jj = S/4
-##             kk = (m[1,2]+m[2,1])/S
-##         else:
-##             S = sqrt(1 + m[2,2] - m[0,0] - m[1,1])*2
-##             w = (m[1,0]-m[0,1])/S
-##             ii = (m[0,2]+m[2,0])/S
-##             jj = (m[1,2]+m[2,1])/S
-##             kk = S/4
-##         self.Q = N.array([w, ii, jj, kk])
+        if len(m.shape) != 2:
+            raise ValueError("Matrix must be 3x3")
+            
+        M = m[-3:,-3:].astype('d')
+
+        
+        xd = N.sqrt(M[0,0]**2 + M[1,0]**2 + M[2,0]**2)
+        yd = N.sqrt(M[0,1]**2 + M[1,1]**2 + M[2,1]**2)
+        zd = N.sqrt(M[0,2]**2 + M[1,2]**2 + M[2,2]**2)
+        if xd < .0001:
+            M[:,0] = N.array([1., 0., 0.])
+            xd = 1.
+        if yd < .0001:
+            M[:,1] = N.array([0., 1., 0.])
+            yd = 1.
+        if zd < .0001:
+            M[:,2] = N.array([0., 0., 1.])
+            zd = 1.
+        M[:,0] /= xd
+        M[:,1] /= yd
+        M[:,2] /= zd
+        if N.sum((N.dot(N.transpose(M), M) - N.identity(3)).flat) > .0001:
+            raise ValueError("matrix not orthogonal, must fix")
+
+        zd = LA.determinant(M)
+        if zd > 0:
+            self.qfac = 1.0
+        else:
+            self.qfac = -1.0
+            M[:,2] *= -1.0
+
+        a = N.trace(M) + 1.0
+        if a > 0.5:
+            a = 0.5 * N.sqrt(a)
+            b = 0.25 * (M[2,1]-M[1,2])/a
+            c = 0.25 * (M[0,2]-M[2,0])/a
+            d = 0.25 * (M[1,0]-M[0,1])/a
+        else:
+            xd = 1.0 + M[0,0] - (M[1,1] + M[2,2])
+            yd = 1.0 + M[1,1] - (M[0,0] + M[2,2])
+            zd = 1.0 + M[2,2] - (M[0,0] + M[1,1])
+            if xd > 1.0:
+                b = 0.5 * N.sqrt(xd)
+                c = 0.25 * (M[0,1] + M[1,0])/b
+                d = 0.25 * (M[0,2] + M[2,0])/b
+                a = 0.25 * (M[2,1] - M[1,2])/b
+            elif yd > 1.0:
+                c = 0.5 * N.sqrt(yd)
+                b = 0.25 * (M[0,1] + M[1,0])/c
+                d = 0.25 * (M[1,2] + M[2,1])/c
+                a = 0.25 * (M[0,2] - M[2,0])/c
+            else:
+                d = 0.5 * N.sqrt(zd)
+                b = 0.25 * (M[0,2] + M[2,0])/d
+                c = 0.25 * (M[1,2] + M[2,1])/d
+                a = 0.25 * (M[1,0] - M[0,1])/d
+            if a < 0.01:
+                (a, b, c, d) = (-a, -b, -c, -d)
+
+        self.Q = N.array([b, c, d])
+        
 
     def tomatrix(self):
 
@@ -477,13 +500,6 @@ class Quaternion:
         return R
     
     def mult(self, quat):
-##         Q = Quaternion(M=N.dot(self.tomatrix(), quat.tomatrix()))
-##         # perform quaternion multiplication
-##         w = a[0]*b[0] - a[1]*b[1] - a[2]*b[2] - a[3]*b[3]
-##         ii = a[0]*b[1] + a[1]*b[0] + a[2]*b[3] - a[3]*b[2]
-##         jj = a[0]*b[2] + a[2]*b[0] + a[3]*b[1] - a[1]*b[3]
-##         kk = a[0]*b[3] + a[3]*b[0] + a[1]*b[2] - a[2]*b[1]
-##         Q = Quaternion(w=w, i=ii, j=jj, k=kk)
         return Quaternion(M=N.dot(self.tomatrix(), quat.tomatrix()))
 
     def __str__(self):

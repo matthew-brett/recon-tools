@@ -63,7 +63,7 @@ class UnbalPhaseCorrection (Operation):
         # (in the case of multishot interleave)
         self.iscentric = image.sampstyle is "centric"
         self.xleave = self.iscentric and 1 or image.nseg
-        self.alpha, self.beta = epi_trajectory(image.nseg, image.petable_name,
+        self.alpha, self.beta = epi_trajectory(image.nseg, image.sampstyle,
                                                n_pe)
         # want to fork the code based on sampling style
         theta = self.iscentric and self.run_centric(ifft(refVol)) or \
