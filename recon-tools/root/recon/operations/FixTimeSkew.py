@@ -1,6 +1,6 @@
 from FFT import fft, inverse_fft
-from pylab import arange, exp, pi, take, conjugate, empty, Complex, Complex32,\
-     swapaxes, product, NewAxis, reshape, squeeze, array, find
+import Numeric as N
+
 from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import reverse
 
@@ -8,7 +8,7 @@ def circularize(a):
     To = a.shape[-1]
     T = 3*To -2 + To%2
     #T = 3*To + To%2
-    ts_buf = empty(a.shape[:-1]+ (T,), Complex)
+    ts_buf = N.empty(a.shape[:-1]+ (T,), N.Complex)
 #### point-sharing, no negation or shift
 #### if a = [2, 3, 4, 5, 6], then ts_buf will be:
 #### [6, 5, 4, 3, (2, 3, 4, 5, 6,) 5, 4, 3, 2, ((2))]
@@ -20,18 +20,18 @@ def circularize(a):
 #### point-sharing, triple buffered, reversed and negated
 ##     ts_buf[...,To-1:2*To-1] = a
 ##     ts_buf[...,:To-1] = -reverse(a[...,1:]) + \
-##                       array(3*a[...,1] - a[...,2])[...,NewAxis]
+##                       N.array(3*a[...,1] - a[...,2])[...,N.NewAxis]
 ##     ts_buf[...,2*To-1:3*To-2] = -reverse(a[...,:To-1]) + \
-##                         array(3*a[...,-2] - a[...,-3])[...,NewAxis]
+##                         N.array(3*a[...,-2] - a[...,-3])[...,N.NewAxis]
 #### double buffered, reversed, negated, no point sharing
 ##     ts_buf[...,:To] = a
-##     ts_buf[...,To:] = -lutil.reverse(a) + array(3*a[...,0]-a[...,1])[...,NewAxis]
+##     ts_buf[...,To:] = -lutil.reverse(a) + N.array(3*a[...,0]-a[...,1])[...,N.NewAxis]
 ## original (triple buffered, no point sharing, negated and reversed
 ##     ts_buf[...,To:2*To] = a
 ##     ts_buf[...,:To] = -reverse(a) + \
-##                       array(3*a[...,0] - a[...,1])[...,NewAxis]
+##                       N.array(3*a[...,0] - a[...,1])[...,N.NewAxis]
 ##     ts_buf[...,2*To:3*To] = -reverse(a) + \
-##                         array(3*a[...,-1] - a[...,-2])[...,NewAxis]
+##                         N.array(3*a[...,-1] - a[...,-2])[...,N.NewAxis]
 #############################################################
     
     if To%2: ts_buf[...,-1] = ts_buf[...,-2]
@@ -43,18 +43,18 @@ def subsampInterp(ts, c, axis=-1):
     # with time series in last dimension
     To = ts.shape[axis]
     if axis != -1:
-        ts = swapaxes(ts, axis, -1)
+        ts = N.swapaxes(ts, axis, -1)
 
     ts_buf = circularize(ts)
     T = ts_buf.shape[-1]
     Fn = int(T/2.) + 1
-    phs_shift = empty((T,), Complex)
-    phs_shift[:Fn] = exp(-2.j*pi*c*arange(Fn)/float(T))
-    phs_shift[Fn:] = conjugate(reverse(phs_shift[1:Fn-1]))
+    phs_shift = N.empty((T,), N.Complex)
+    phs_shift[:Fn] = N.exp(-2.j*N.pi*c*N.arange(Fn)/float(T))
+    phs_shift[Fn:] = N.conjugate(reverse(phs_shift[1:Fn-1]))
 
     ts[:] = inverse_fft(fft(ts_buf)*phs_shift)[...,To-1:2*To-1].astype(ts.typecode())
 
-    if axis != -1: ts = swapaxes(ts, axis, -1)
+    if axis != -1: ts = N.swapaxes(ts, axis, -1)
 
 class FixTimeSkew (Operation):
     """
@@ -79,7 +79,7 @@ class FixTimeSkew (Operation):
         # --- slices in order of acquistion ---
         acq_order = image.acq_order
         # --- shift factors indexed slice number ---
-        shifts = array([find(acq_order==s)[0] for s in range(nslice)])
+        shifts = N.array([N.nonzero(acq_order==s)[0] for s in range(nslice)])
 
         # I don't like this kludge..
         if self.data_space == "imspace":

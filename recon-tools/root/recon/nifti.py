@@ -1,15 +1,15 @@
 "This module can write NIFTI files."
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, dot,\
-  Complex32, fromstring, reshape, product, array, sin, cos, pi, asarray, sign
+import Numeric as N
 import struct
 import exceptions
 import sys
+
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
-     Quaternion
+     Quaternion, range_exceeds, volume_min, volume_max
 from recon.imageio import ReconImage
-from recon.analyze import _concatenate, datatype2bitpix, datatype2typecode, \
-     typecode2datatype, byteorders
+from recon.analyze import datatype2bitpix, datatype2typecode, \
+     typecode2datatype, byteorders, _construct_dataview
 
 # datatype is a bit flag into the datatype identification byte of the NIFTI
 # header. 
@@ -124,9 +124,9 @@ class NiftiImage (ReconImage):
     """
     Loads an image from a NIFTI file as a ReconImage
     """
-    def __init__(self, filestem, vrange=()):
+    def __init__(self, filestem, target_dtype=None, vrange=()):
         self.load_header(filestem)
-        self.load_image(filestem, vrange)
+        self.load_image(filestem, target_dtype, vrange)
         
     #-------------------------------------------------------------------------
     def load_header(self, filestem):
@@ -136,7 +136,7 @@ class NiftiImage (ReconImage):
             try:
                 fp = open(filestem+".hdr", 'r')
             except exceptions.IOError:
-                raise "no NIFTI file found with this name: %s"%filestem
+                raise IOError("no NIFTI file found with this name: %s"%filestem)
             self.filetype = 'dual'
         else: self.filetype = 'single'
 
@@ -177,32 +177,41 @@ class NiftiImage (ReconImage):
         self.vox_offset, self.datatype, self.bitpix = \
                          (hd_vals['vox_offset'], hd_vals['datatype'],
                           hd_vals['bitpix'])
+        self.scaling,self.yinter = (hd_vals['scl_slope'],hd_vals['scl_inter'])
+        if not self.scaling:
+            self.scaling = 1.0
         
     #-------------------------------------------------------------------------
-    def load_image(self, filestem, vrange):
+    def load_image(self, filestem, target_dtype, vrange):
+        bytepix = self.bitpix/8
+        numtype = datatype2typecode[self.datatype]
+        byteoffset = 0
+        if target_dtype and not range_exceeds(target_dtype, numtype):
+            raise ValueError("the dynamic range of the desired datatype does "\
+                             "not exceed that of the raw data")
         if self.filetype == 'single':
             fp = open(filestem+".nii", 'r')
             fp.seek(self.vox_offset)
         else:
             fp = open(filestem+".img", 'r')
-        bytepix = self.bitpix/8
-        numtype = datatype2typecode[self.datatype]
-        byteoffset = 0
         # need to cook tdim if vrange is set
         if self.tdim and vrange:
             vend = (vrange[1]<0 or vrange[1]>=self.tdim) \
                    and self.tdim-1 or vrange[1]
             vstart = (vrange[0] > vend) and vend or vrange[0]
             self.tdim = vend-vstart+1
-            byteoffset = vstart*bytepix*product((self.zdim,self.ydim,self.xdim))
+            byteoffset = vstart*bytepix*N.product((self.zdim,
+                                                   self.ydim,self.xdim))
 
         dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
                           or (self.zdim, self.ydim, self.xdim)
-        datasize = bytepix * product(dims)
+        datasize = bytepix * N.product(dims)
         fp.seek(byteoffset, 1)
-        image = fromstring(fp.read(datasize), numtype)
+        image = N.fromstring(fp.read(datasize), numtype)
         if self.swapped: image = image.byteswapped()
-        self.setData(reshape(image, dims))
+        if target_dtype and target_dtype != numtype:
+            image = (image*self.scaling+self.yinter).astype(target_dtype)
+        self.setData(N.reshape(image, dims))
         fp.close()
 
 
@@ -220,13 +229,14 @@ class NiftiWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
                                 'c': '\0', 's': '', 'B': 0}
 
-    def __init__(self, image, datatype=None, filetype="single",
-                 params=dict(), scale=1.0):
+    def __init__(self, image, datatype=None, filetype="single", scale=1.0):
         self.image = image
         self.scaling = scale
-        self.params = params
         self.filetype = filetype
-        self.datatype = datatype or typecode2datatype[image.data.typecode()]
+        self.datatype = datatype or typecode2datatype[image[:].typecode()]
+        typecode = datatype2typecode[self.datatype]
+        self._dataview = _construct_dataview(image[:].typecode(), self.datatype,
+                                             self.scaling)
         self.sizeof_extension = len(default_extension)
 
     #-------------------------------------------------------------------------
@@ -243,11 +253,11 @@ class NiftiWriter (object):
             file(fname,'w').write(self.make_hdr())
             #write extension? 
             file(fname,'a').write(default_extension)
-            file(fname,'a').write(self.image[:].tostring())
+            file(fname,'a').write(self._dataview(self.image[:]).tostring())
         else:
             headername, imagename = "%s.hdr"%filestem, "%s.img"%filestem
             file(headername,'w').write(self.make_hdr())
-            file(imagename, 'w').write(self.image[:].tostring())
+            file(imagename, 'w').write(self._dataview(self.image[:]).tostring())
            
 
     #-------------------------------------------------------------------------
@@ -274,7 +284,7 @@ class NiftiWriter (object):
         image = self.image
         Qform = image.orientation_xform.Q
         Qform_mat = image.orientation_xform.tomatrix()
-        qoffset = -dot(Qform_mat, asarray([image.x0, image.y0, image.z0]))
+        qoffset = -N.dot(Qform_mat, N.asarray([image.x0, image.y0, image.z0]))
 
         imagevalues = {
           'dim_info': (3<<4 | 2<<2 | 1),
@@ -301,6 +311,8 @@ class NiftiWriter (object):
           'qoffset_x': qoffset[0],
           'qoffset_y': qoffset[1],
           'qoffset_z': qoffset[2],
+          'cal_min': float(volume_min(abs(image[:]))),
+          'cal_max': float(volume_max(abs(image[:]))),
           }
         
         if self.filetype=='single':
@@ -310,54 +322,11 @@ class NiftiWriter (object):
             imagevalues['magic'] = 'ni1'
 
         def fieldvalue(fieldname, fieldformat):
-            return imagevalues.get(fieldname) or\
+            return imagevalues.get(fieldname) or \
                    self._default_field_value(fieldname, fieldformat)
 
         fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
         return struct_pack(NATIVE, field_formats, fieldvalues)
-
-#-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=None,
-               filetype="single", suffix=None, scale=1.0):
-    """
-    Write the given image to the filesystem as one or more NIFTI 1.1 format
-    hdr/img pairs or single file format.
-    @param filestem:  will be prepended to each hdr and img file.
-    @param targetdim:  indicates the dimensionality of data to be written into
-      a single hdr/img pair.  For example, if a volumetric time-series is
-      given, and targetdim==3, then each volume will get its own file pair.
-      Likewise, if targetdim==2, then every slice of each volume will get its
-      own pair.
-    """
-    dimnames = {3:"volume", 2:"slice"}
-    def images_and_names(image, stem, targetdim, suffix=None):
-        # base case
-        if targetdim >= image.ndim: return [(image, stem)]
-        
-        # recursive case
-        subimages = tuple(image.subImages())
-        if suffix is not None:
-            substems = ["%s"%(stem,)+suffix%(i,) \
-                        for i in range(len(subimages))]
-        else:
-            substems = ["%s_%s%04d"%(stem, dimnames[image.ndim-1], i)\
-                        for i in range(len(subimages))]
-        return _concatenate(
-          [images_and_names(subimage, substem, targetdim)\
-           for subimage,substem in zip(subimages, substems)])
-
-    # suffix-mode only supports volume-wise naming, so force targetdim to 3
-    if suffix is not None: targetdim = 3
-    if targetdim is None: targetdim = image.ndim
-    im_dict = hasattr(image, '_procpar') and image._procpar or dict()
-    for subimage, substem in \
-            images_and_names(image, filestem, targetdim, suffix):
-        NiftiWriter(subimage, datatype=datatype, filetype=filetype,
-                    params=im_dict, scale=scale).write(substem)
-
-#-----------------------------------------------------------------------------
-def writeImageDual(image, filestem, **kwargs):
-    writeImage(image, filestem, filetype="dual", **kwargs)
 
 #-----------------------------------------------------------------------------
 def readImage(filestem, **kwargs): return NiftiImage(filestem, **kwargs)

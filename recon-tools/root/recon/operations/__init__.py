@@ -121,6 +121,11 @@ class Operation (object):
               (leftovers[0], self.__class__.__name__))
 
     #-------------------------------------------------------------------------
+    def paramHelp(self):
+        for p in self.params:
+            print "%s: %s"%(p.name, p.description)
+
+    #-------------------------------------------------------------------------
     def log(self, message):
         print "[%s]: %s"%(self.__class__.__name__, message)
 

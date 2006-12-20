@@ -1,9 +1,9 @@
-from Numeric import empty, sort
-from pylab import angle, conjugate, Float, arange, take, zeros, mean, floor, \
-     pi, sqrt, ones, sum, find, Int, resize, dot, svd, transpose, \
-     diag, putmask, sign, asarray
+import Numeric as N
+from LinearAlgebra import singular_value_decomposition as svd
+from MLab import angle, diag
+
 from recon.operations import Operation, Parameter, verify_scanner_image
-from recon.util import ifft, apply_phase_correction, mod, linReg, shift, \
+from recon.util import ifft, apply_phase_correction, linReg, shift, \
      unwrap_ref_volume, epi_trajectory
 
 class UnbalPhaseCorrection (Operation):
@@ -86,42 +86,42 @@ class UnbalPhaseCorrection (Operation):
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
-        conj_order = arange(n_pe)
+        conj_order = N.arange(n_pe)
         shift(conj_order, 0, -self.xleave)
-        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
+        inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = find(self.alpha > 0)
-        neg_order = find(self.alpha < 0)
+        pos_order = N.nonzero(self.alpha > 0)
+        neg_order = N.nonzero(self.alpha < 0)
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape and self.lin1)
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
-        phs_pos = empty((n_slice, self.lin_fe), Float)
-        phs_neg = empty((n_slice, self.lin_fe), Float)
-        s_mask = zeros(n_slice)
-        r_mask = zeros((n_slice, self.lin_fe))
-        res = zeros((n_slice,), Float)
+        phs_pos = N.empty((n_slice, self.lin_fe), N.Float)
+        phs_neg = N.empty((n_slice, self.lin_fe), N.Float)
+        s_mask = N.zeros(n_slice)
+        r_mask = N.zeros((n_slice, self.lin_fe))
+        res = N.zeros((n_slice,), N.Float)
         ### FIND THE MEANS FOR EACH SLICE
         for s in range(n_slice):
             # for pos_order, skip 1st 2 for xleave=2
             # for neg_order, skip last 2 for xleave=2
             phs_pos[s], mask_p, res_p = \
-                        self.masked_avg(take(phs_vol[s], \
-                                             pos_order[self.xleave:]))
+                        self.masked_avg(N.take(phs_vol[s], \
+                                               pos_order[self.xleave:]))
             phs_neg[s], mask_n, res_n = \
-                        self.masked_avg(take(phs_vol[s], \
-                                             neg_order[:-self.xleave]))
+                        self.masked_avg(N.take(phs_vol[s], \
+                                               neg_order[:-self.xleave]))
 
             res[s] = res_p + res_n
             r_mask[s] = mask_p*mask_n
 
         # find 4 slices with smallest residual
-        sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:4]]
+        sres = N.sort(res)
+        selected = [N.nonzero(res==c)[0] for c in sres[:4]]
         for c in selected:
             s_mask[c] = 1
-            if(sum(r_mask[c]) == 0):
+            if(N.sum(r_mask[c]) == 0):
                 # if best slice's means are masked, simply return empty
                 return
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
@@ -132,50 +132,50 @@ class UnbalPhaseCorrection (Operation):
     def run_centric(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
-        conj_order = arange(n_pe)
+        conj_order = N.arange(n_pe)
         shift(conj_order[:n_pe/2],0,1)
         shift(conj_order[n_pe/2:],0,-1)
-        inv_ref = conjugate(take(inv_ref, conj_order, axis=1)) * inv_ref
+        inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = find(self.alpha > 0)
-        neg_order = find(self.alpha < 0)
+        pos_order = N.nonzero(self.alpha > 0)
+        neg_order = N.nonzero(self.alpha < 0)
         # comes back truncated to linear region:
         # from this point on, into the svd, work with truncated arrays
         # (still have "true" referrences from from self.refShape, self.lin1, etc)
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
         # set up some arrays for mean phases
-        phs_pos_upper = empty((n_slice, self.lin_fe), Float)
-        phs_pos_lower = empty((n_slice, self.lin_fe), Float)
-        phs_neg_upper = empty((n_slice, self.lin_fe), Float)
-        phs_neg_lower = empty((n_slice, self.lin_fe), Float)
-        s_mask = zeros(n_slice)
-        r_mask = zeros((n_slice, self.lin_fe))
-        res = zeros((n_slice,), Float)
+        phs_pos_upper = N.empty((n_slice, self.lin_fe), N.Float)
+        phs_pos_lower = N.empty((n_slice, self.lin_fe), N.Float)
+        phs_neg_upper = N.empty((n_slice, self.lin_fe), N.Float)
+        phs_neg_lower = N.empty((n_slice, self.lin_fe), N.Float)
+        s_mask = N.zeros(n_slice)
+        r_mask = N.zeros((n_slice, self.lin_fe))
+        res = N.zeros((n_slice,), N.Float)
         for s in range(n_slice):
             # seems that for upper, skip 1st pos and last neg; 
             #            for lower, skip 1st pos and last neg
             phs_pos_upper[s], mask_pu, res_pu = \
-                        self.masked_avg(take(phs_vol[s], \
-                                             pos_order[n_pe/4+1:]))            
+                        self.masked_avg(N.take(phs_vol[s], \
+                                               pos_order[n_pe/4+1:]))
             phs_neg_upper[s], mask_nu, res_nu = \
-                        self.masked_avg(take(phs_vol[s], \
-                                             neg_order[n_pe/4:n_pe/2-1]))
+                        self.masked_avg(N.take(phs_vol[s], \
+                                               neg_order[n_pe/4:n_pe/2-1]))
             phs_pos_lower[s], mask_pl, res_pl = \
-                        self.masked_avg(take(phs_vol[s], pos_order[:n_pe/4-1]))
+                        self.masked_avg(N.take(phs_vol[s], pos_order[:n_pe/4-1]))
             phs_neg_lower[s], mask_nl, res_nl = \
-                        self.masked_avg(take(phs_vol[s], neg_order[1:n_pe/4]))
+                        self.masked_avg(N.take(phs_vol[s], neg_order[1:n_pe/4]))
                 
             res[s] = res_pu + res_nu + res_pl + res_nl
             r_mask[s] = mask_pu*mask_nu*mask_pl*mask_nl
 
         
         # find 4 slices with smallest residual
-        sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:4]]
+        sres = N.sort(res)
+        selected = [N.nonzero(res==c)[0] for c in sres[:4]]
         for c in selected:
             s_mask[c] = 1
-            if(sum(r_mask[c]) == 0):
+            if(N.sum(r_mask[c]) == 0):
                 # if best slice's means are masked, simply return empty
                 return
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
@@ -190,7 +190,7 @@ class UnbalPhaseCorrection (Operation):
         print self.coefs        
         theta_lower = self.correction_volume()
         
-        theta_vol = empty(theta_lower.shape, theta_lower.typecode())
+        theta_vol = N.empty(theta_lower.shape, theta_lower.typecode())
         theta_vol[:,:n_pe/2,:] = theta_lower[:,:n_pe/2,:]
         theta_vol[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
         return theta_vol
@@ -208,12 +208,12 @@ class UnbalPhaseCorrection (Operation):
         """
         
         nrow,npt = S.shape
-        mask = ones((npt,))
-        res = empty((nrow,), Float)
+        mask = N.ones((npt,))
+        res = N.empty((nrow,), N.Float)
 
-        E = mean(S)
-        std = sqrt(sum((S-E)**2)/nrow)
-        putmask(mask, std>self.thresh, 0)
+        E = N.add.reduce(S,axis=0)/float(S.shape[0])
+        std = N.sqrt(N.sum((S-E)**2)/nrow)
+        N.putmask(mask, std>self.thresh, 0)
 
 ##         from pylab import show, plot, title
 ##         color = ['b', 'g', 'r', 'c', 'm', 'y', 'k']
@@ -223,13 +223,13 @@ class UnbalPhaseCorrection (Operation):
 ##         plot(E, 'go')
 ##         show()
 
-        x_ax = find(mask)
-        if sum(mask)>2:
+        x_ax = N.nonzero(mask)
+        if N.sum(mask)>2:
             for r in range(nrow):
-                (_, _, res[r]) = linReg(take(S[r], x_ax), X=x_ax)
-        else: res = 1e10*ones(nrow)
+                (_, _, res[r]) = linReg(N.take(S[r], x_ax), X=x_ax)
+        else: res = 1e10*N.ones(nrow)
 
-        return E, mask, sum(res)
+        return E, mask, N.sum(res)
 
     def solve_phase(self, pos, neg, r_mask, s_mask):
         """let V = (a1 a2 a3 a4 a5 a6)^T,
@@ -254,19 +254,19 @@ class UnbalPhaseCorrection (Operation):
         R = self.refShape[-1]
         A1, A2, A3, A4, A5, A6 = (0,1,2,3,4,5)
         # need 2*(sum-of-unmasked-points) rows for each selected slice
-        n_rows = sum(r_mask, axis=1)
-        s_ind = find(s_mask)
-        A = empty((sum(take(n_rows, s_ind))*2, 6), Float)
-        P = empty((sum(take(n_rows, s_ind))*2, 1), Float)
+        n_rows = N.sum(r_mask, axis=1)
+        s_ind = N.nonzero(s_mask)
+        A = N.empty((N.sum(N.take(n_rows, s_ind))*2, 6), N.Float)
+        P = N.empty((N.sum(N.take(n_rows, s_ind))*2, 1), N.Float)
         row_start, row_end = 0, 0
         for s in s_ind:
             # alternate for pos and neg rows
             for b in [-1, 1]:
                 row_start = row_end
                 row_end = row_start + n_rows[s]
-                r_ind = find(r_mask[s])
-                P[row_start:row_end,0] = b==-1 and take(neg[s], r_ind) \
-                                               or  take(pos[s], r_ind)
+                r_ind = N.nonzero(r_mask[s])
+                P[row_start:row_end,0] = b==-1 and N.take(neg[s], r_ind) \
+                                               or  N.take(pos[s], r_ind)
                 # note these r_ind values are made relative to real fe points:
                 A[row_start:row_end,A1] = b*2*(r_ind + self.lin1-R/2)
                 A[row_start:row_end,A2] = -(r_ind + self.lin1-R/2)
@@ -277,7 +277,7 @@ class UnbalPhaseCorrection (Operation):
 
         # take the SVD of A, and left-multiply its inverse to P              
         [u,s,vt] = svd(A)
-        V = dot(transpose(vt), dot(diag(1/s), dot(transpose(u), P)))
+        V = N.dot(N.transpose(vt), N.dot(diag(1/s), N.dot(N.transpose(u), P)))
 
         return tuple(V) 
 
@@ -300,9 +300,9 @@ class UnbalPhaseCorrection (Operation):
         # up correctly, theta[s] = A[s]*B ALWAYS!
         (S, M, R) = self.volShape
         (a1, a2, a3, a4, a5, a6) = self.coefs
-        A = empty((M, len(self.coefs)), Float)
-        B = empty((len(self.coefs), R), Float)
-        theta = empty(self.volShape, Float)
+        A = N.empty((M, len(self.coefs)-3), N.Float)
+        B = N.empty((len(self.coefs)-3, R), N.Float)
+        theta = N.empty(self.volShape, N.Float)
         
         # m_line & zigzag define how the correction changes per PE line
         # m_line is usually {-32,-31,...,30, 31}, but changes in multishot
@@ -312,26 +312,26 @@ class UnbalPhaseCorrection (Operation):
         # build B matrix, always stays the same
 ##         # ADD THIS PART TO CHANGE r->f(r)
 ##         from pylab import power
-##         g = arange(R)-R/2
+##         g = N.arange(R)-R/2
 ##         g = g/(1 + power(g/(R*.45), 6))
 ##         B[0] = g*a1[0]
 ##         B[1] = g*a2[0]
-        B[0,:] = (arange(R)-R/2)*a1[0]
-        B[1,:] = (arange(R)-R/2)*a2[0]
-        B[2,:] = a3[0]
-        B[3,:] = a4[0]
-        B[4,:] = a5[0]
-        B[5,:] = a6[0]
+        B[0,:] = (N.arange(R)-R/2)*a1[0]
+        #B[1,:] = (N.arange(R)-R/2)*a2[0]
+        B[1,:] = a3[0]
+        #B[3,:] = a4[0]
+        B[2,:] = a5[0]
+        #B[5,:] = a6[0]
         
         # build A matrix, changes slightly as s varies
         A[:,0] = zigzag
-        A[:,1] = m_line
-        A[:,4] = zigzag
-        A[:,5] = m_line
+        #A[:,1] = m_line
+        A[:,2] = zigzag
+        #A[:,5] = m_line
         for s in range(S):
             # these are the slice-dependent columns
-            A[:,2] = s*zigzag
-            A[:,3] = s*m_line
-            theta[s] = dot(A,B)
+            A[:,1] = s*zigzag
+            #A[:,3] = s*m_line
+            theta[s] = N.dot(A,B)
             
         return theta

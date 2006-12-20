@@ -1,7 +1,8 @@
 import sys
+from MLab import angle
+import Numeric as N
+
 from recon.operations import Operation, Parameter
-from pylab import zeros, Complex32, Float, arange, reshape, rot90, conjugate, \
-     angle, sum_flat, exp, Complex, NewAxis, cos, pi
 from recon.util import embedIm, fft2d, ifft2d
 
 class FillHalfSpace (Operation):
@@ -26,7 +27,7 @@ class FillHalfSpace (Operation):
         (_, nx) = slice.shape
         ny = self.fill_size
         y0 = self.fill_size/2
-        fill_slice = zeros((ny,nx), Complex)
+        fill_slice = N.zeros((ny,nx), N.Complex)
         fill_slice[y0-self.over_fill:y0+self.over_fill,:] = \
                    slice[0:self.over_fill*2,:]
         
@@ -36,7 +37,7 @@ class FillHalfSpace (Operation):
     def imageFromFill2D(self, slice):
         (_, nx) = slice.shape
         ny = self.fill_size
-        fill_slice = zeros((ny,nx), Complex)
+        fill_slice = N.zeros((ny,nx), N.Complex)
         embedIm(slice, fill_slice, self.fill_rows, 0)
         fill_slice[:] = ifft2d(fill_slice)
         return fill_slice
@@ -53,41 +54,40 @@ class FillHalfSpace (Operation):
 ##         Im[0:n_fill_rows,0] = 0
 
     def mergeFill2D(self, filled, measured, winsize=8):
-        from pylab import sqrt
+        wsize_f = float(winsize)
         mergept = self.fill_rows
-        fill_win = 0.5*(1 + cos(pi*(arange(winsize)/float(winsize))))
-        measured_win = 0.5*(1 + cos(pi + pi*(arange(winsize)/float(winsize))))
+        fill_win = 0.5*(1 + N.cos(N.pi*(N.arange(wsize_f)/wsize_f)))
+        measured_win = 0.5*(1 + N.cos(N.pi + N.pi*(N.arange(wsize_f)/wsize_f)))
         #filled[:mergept,:] = filled[:mergept,:]
         filled[mergept+winsize:,:] = measured[winsize:,:]
         # merge measured data with filled data in winsize merge region
         filled[mergept:mergept+winsize,:] = \
-               fill_win[:,NewAxis]*filled[mergept:mergept+winsize,:] + \
-               measured_win[:,NewAxis]*measured[:winsize,:]
+               fill_win[:,N.NewAxis]*filled[mergept:mergept+winsize,:] + \
+               measured_win[:,N.NewAxis]*measured[:winsize,:]
 
     def cookImage2D(self, volData):
-        from pylab import imshow, show, colorbar, title
         out = sys.stdout
         (ns, _, nx) = volData.shape
         ny = self.fill_size
-        cooked3D = zeros((ns,ny,nx), Complex)
+        cooked3D = N.zeros((ns,ny,nx), N.Complex)
         for s, slice in enumerate(volData):
             out.write("filling slice %d: "%(s,))
             theta = self.phaseMap2D(slice)
             mag = abs(self.imageFromFill2D(slice))
-            cooked = zeros((ny, nx), Complex)
+            cooked = N.zeros((ny, nx), N.Complex)
             prev_power = 0.
             c = self.criterion[1]=="converge" and 100000. or self.iterations
             while c > self.criterion[0]:
                 prev_image = cooked.copy()
-                cooked = mag*exp(1.j*angle(theta))
+                cooked = mag*N.exp(1.j*angle(theta))
                 cooked[:] = fft2d(cooked)
                 cooked[self.fill_rows:,:] = slice[:]                
                 cooked[:] = ifft2d(cooked)
-                diff = sum_flat(abs(cooked-prev_image))
+                diff = N.sum(N.ravel(abs(cooked-prev_image)))
                 mag = abs(cooked)
 
                 c = self.criterion[1]=="converge" and diff or c-1
-            cooked = mag*exp(1.j*angle(theta))
+            cooked = mag*N.exp(1.j*angle(theta))
             cooked[:] = fft2d(cooked)
             self.mergeFill2D(cooked, slice, winsize=self.win_size)
             cooked3D[s][:] = cooked[:]
@@ -139,7 +139,7 @@ class FillHalfSpace (Operation):
     def kSpaceFill(self, vol):
         (ns, _, nx) = vol.shape
         ny = self.fill_size
-        fill_vol = zeros((ns,ny,nx), Complex32)
+        fill_vol = N.zeros((ns,ny,nx), N.Complex32)
         for s in range(ns):
             embedIm(vol[s], fill_vol[s], self.fill_rows, 0)
         return fill_vol.astype(vol.typecode())

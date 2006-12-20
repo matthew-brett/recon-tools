@@ -1,3 +1,17 @@
+recon-tools-0.4r2   (beta)                                         12/??/2006
+- ...
+- major overhaul of image class
+- fix to mpflash3d z-dimension length calculation
+- fix to FixTimeSkew on odd-number-of-volumes issue
+- fix to possible phase offset variations in ComputeFieldMap
+- fix (hopefully?) to sometimes-problematic reference-phase unwrapping
+- RotPlane operation replaces Rot90, which never really worked as
+  advertised--see RotPlane wiki for more details on usage
+- flip_slices option removed from ReorderSlices and FixTimeSkew, due to
+  conflicting action in RotPlan
+- NIFTI and ANALYZE orientation/transformation fields improved
+- new colormaps in slice-viewer
+
 ------------------------------------------------------------------------------
 recon-tools-0.4     (beta)                                         11/??/2006
 

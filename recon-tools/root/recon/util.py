@@ -1,26 +1,23 @@
-import sys
-import string 
-import os
 import struct
-# I will ditch this massive import in favor of a Numeric.foo style
 from FFT import fft as _fft, inverse_fft as _ifft, \
      fftnd as _fftnd, inverse_fftnd as _ifftnd
-from pylab import pi, zeros, frange, array, \
-  meshgrid, sqrt, exp, ones, amax, floor, asarray, cumsum, putmask, diff, \
-  norm, arange, empty, Int8, Int16, Int32, arange, dot, trace, cos, sin, sign,\
-  putmask, take, outerproduct, where, reshape, sort, clip, Float, Float32, \
-  UInt8, UInt16, product
+from MLab import diff
 import Numeric as N
-from punwrap import unwrap2D
 
+from punwrap import unwrap2D
 
 # maximum numeric range for some smaller data types
 integer_ranges = {
-  Int8:  127.,
-  UInt8: 255.,
-  Int16: 32767.,
-  UInt16: 65535.,
-  Int32: 2147483647.}
+  N.Int8:  127.,
+  N.UInt8: 255.,
+  N.Int16: 32767.,
+  N.UInt16: 65535.,
+  # even though (integer) precision is greater for (U)Int32 than Float32,
+  # we would want to encode small gradations in small real-like numbers
+  # in the great range of integers available.
+  N.Int32: 2147483647.,
+  N.UInt32: 4294967295.,
+  }
 
 # struct byte order constants
 NATIVE = "="
@@ -45,19 +42,39 @@ def import_from(modulename, objectname):
     return getattr(module, objectname)
 
 #-----------------------------------------------------------------------------
-def castData(data, data_code):
+def scale_data(data, new_typecode):
     "casts numbers in data to desired typecode in data_code"
     # if casting to an integer type, check the data range
     # if it clips, then scale down
     # if it has poor integral resolution, then scale up
     scl = 1.0
-    if data_code in integer_ranges.keys():
-        maxval = amax(abs(data).flat)
-        maxrange = integer_ranges[data_code]
+    if new_typecode in integer_ranges.keys():
+        maxval = volume_max(abs(data))
+        maxrange = integer_ranges[new_typecode]
         scl = maxval/maxrange or 1.
-        data[:] = (data/scl).astype(data_code)
     return scl
 
+#-----------------------------------------------------------------------------
+def range_exceeds(this_dtype, that_dtype):
+    a = N.array([0], this_dtype)
+    b = N.array([0], that_dtype)
+    # easiest condition
+    if a.itemsize() < b.itemsize():
+        return False
+    type_list = N.typecodes.keys()
+    type_list.remove('Character')
+    type_list.sort()
+    # this is: ['Complex', 'Float', 'Integer', 'UnsignedInteger']
+    for i in range(len(type_list[1:])):
+        # a Float cannot represent a Complex, nor an Int a Float, etc.
+        if this_dtype in N.typecodes[type_list[i]] and \
+           that_dtype in N.typecodes[type_list[i-1]]:
+            return False
+
+    # other conditions, such as a float32 representing a long int,
+    # or a double float representing a float32 are allowed
+    return True
+    
 #-----------------------------------------------------------------------------
 def shift(matrix, axis, shift):
     """
@@ -84,7 +101,7 @@ def shift(matrix, axis, shift):
     slices_old2[axis_dim] = slice(-shift, dims[axis_dim])
 
     # apply slices
-    new = empty(dims, matrix.typecode())
+    new = N.empty(dims, matrix.typecode())
     new[tuple(slices_new1)] = matrix[tuple(slices_old1)]
     new[tuple(slices_new2)] = matrix[tuple(slices_old2)]
     matrix[:] = new
@@ -96,7 +113,8 @@ def half_shift(matrix, dim=0):
     return tmp
 
 #-----------------------------------------------------------------------------
-def reverse(seq, axis=-1): return take(seq, -1-arange(seq.shape[axis]), axis)
+def reverse(seq, axis=-1): return N.take(seq, -1-N.arange(seq.shape[axis]),
+                                         axis)
 
 #-----------------------------------------------------------------------------
 def embedIm(subIm, Im, yOff, xOff):
@@ -111,7 +129,7 @@ def embedIm(subIm, Im, yOff, xOff):
     if yOff + nSubY > nY or xOff + nSubX > nX:
         print "cannot place sub-image cornered at that location"
         return
-    Im[:] = zeros((nY,nX), subIm.typecode()).copy()
+    Im[:] = N.zeros((nY,nX), subIm.typecode()).copy()
     Im[yOff:yOff+nSubY,xOff:xOff+nSubX] = subIm[:,:]
 
 #-----------------------------------------------------------------------------
@@ -147,15 +165,15 @@ def ifft(a):
 
 #-----------------------------------------------------------------------------
 def checkerline(cols):
-    return ones(cols) - 2*(arange(cols)%2)
+    return N.ones(cols) - 2*(N.arange(cols)%2)
 
 #-----------------------------------------------------------------------------
 def checkerboard(rows, cols):
-    return outerproduct(checkerline(rows), checkerline(cols))
+    return N.outerproduct(checkerline(rows), checkerline(cols))
 
 #-----------------------------------------------------------------------------
 def checkercube(slices, rows, cols):
-    p = zeros((slices, rows, cols))
+    p = N.zeros((slices, rows, cols))
     q = checkerboard(rows, cols)
     for z in range(slices):
         p[z] = (1 - 2*(z%2))*q
@@ -172,29 +190,41 @@ def epi_trajectory(nseg, sampling, M):
             raise NotImplementedError("centric sampling not implemented for nseg > 2")
         a = checkerline(M)
         a[:M/2] *= -1
-        b = arange(M)-M/2
+        b = N.arange(M)-M/2
         b[:M/2] = abs(b[:M/2] + 1)
     else:
-        a = empty(M, Int32)
+        a = N.empty(M, N.Int32)
         for n in range(nseg):
             a[n:M:2*nseg] = 1
             a[n+nseg:M:2*nseg] = -1
-        b = floor((arange(float(M))-M/2)/float(nseg)).astype(Int32)
+        b = N.floor((N.arange(float(M))-M/2)/float(nseg)).astype(N.Int32)
     return (a, b)
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     "apply a phase correction to k-space"
-    corrector = exp(1.j*phase)
+    corrector = N.exp(1.j*phase)
     return fft(ifft(image)*corrector).astype(image.typecode())
 
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
     "@return the given angle between -pi and pi"
-    if max(abs(a)) <= pi:
+    if max(abs(a)) <= N.pi:
         return a
-    return normalize_angle(a + where(a<-pi, 2.*pi, 0) + \
-                           where(a>pi, -2.*pi, 0))
+    return normalize_angle(a + N.where(a<-N.pi, 2.*N.pi, 0) + \
+                           N.where(a>N.pi, -2.*N.pi, 0))
 
+#-----------------------------------------------------------------------------
+def volume_max(a):
+    "return the global maximum of array a (oblsolete with numpy's a.max())"
+    if len(a.shape) == 1:
+        return N.maximum.reduce(a, axis=0)
+    return volume_max(N.maximum.reduce(a, axis=0))
+#-----------------------------------------------------------------------------
+def volume_min(a):
+    "return the global minimum of array a (oblsolete with numpy's a.min())"
+    if len(a.shape) == 1:
+        return N.minimum.reduce(a, axis=0)
+    return volume_max(N.minimum.reduce(a, axis=0))
 #-----------------------------------------------------------------------------
 def fermi_filter(rows, cols, cutoff, trans_width):
     """
@@ -204,11 +234,13 @@ def fermi_filter(rows, cols, cutoff, trans_width):
     @param trans_width: width of the transition.  Smaller values will result
       in a sharper dropoff.
     """
-    row_end = (rows-1)/2.0; col_end = (cols-1)/2.0
-    row_vals = frange(-row_end, row_end)**2
-    col_vals = frange(-col_end, col_end)**2
-    X, Y = meshgrid(col_vals, row_vals)
-    return 1/(1 + exp((sqrt(X + Y) - cutoff*cols/2.0)/trans_width))
+    row_end = rows/2.0; col_end = cols/2.0
+    row_vals = N.arange(-row_end, row_end)**2
+    col_vals = N.arange(-col_end, col_end)**2
+    #X, Y = meshgrid(col_vals, row_vals)
+    # instead of sqrt(X+Y), do this:
+    dist_2d = N.sqrt(N.add.outer(row_vals, col_vals))
+    return 1/(1 + N.exp((dist_2d - cutoff*cols/2.0)/trans_width))
 
 #-----------------------------------------------------------------------------
 def median_filter(image, N):
@@ -221,9 +253,9 @@ def median_filter(image, N):
 
     median_pt = int((N*N)/2)
     center = int(N/2)
-    image = reshape(image,(tdim*zdim, ydim, xdim))
-    img = empty(image.shape, image.typecode())
-    subm = empty((N, N), image.typecode())
+    image = N.reshape(image,(tdim*zdim, ydim, xdim))
+    img = N.empty(image.shape, image.typecode())
+    subm = N.empty((N, N), image.typecode())
     for tz in range(tdim*zdim):
         img[tz, 0, :] = 0.
         img[tz, -1:, :] = 0.
@@ -232,24 +264,24 @@ def median_filter(image, N):
             img[tz, y, xdim-1] = 0.
             for x in range(xdim-N):
                 subm[:,:] = image[tz, y+1:y+N+1, x+1:x+N+1]
-                s = sort(subm.flat)
+                s = N.sort(subm.flat)
                 img[tz, y+center+1, x+center+1] = s[median_pt]
-    return reshape(img, (tdim, zdim, ydim, xdim))
+    return N.reshape(img, (tdim, zdim, ydim, xdim))
 
 #-----------------------------------------------------------------------------
 def linReg(Y, X=None, yvar=None): 
     # find best linear line through data:
     # solve for (b,m) = (crossing, slope)
     # let sigma = 1, may use yvar for variance in the future
-    if X == None: X = arange(len(Y))
-    N = len(X)
+    if X == None: X = N.arange(len(Y))
+    Npt = len(X)
     Sx = sum(X)
     Sy = sum(Y)
     Sxx = sum(X**2)
     Sxy = sum(X*Y)
-    delta = N*Sxx - Sx**2
+    delta = Npt*Sxx - Sx**2
     b = (Sxx*Sy - Sx*Sxy)/delta
-    m = (N*Sxy - Sx*Sy)/delta
+    m = (Npt*Sxy - Sx*Sy)/delta
     #res = sum((Y-(m*X+b))**2)
     res = sum(abs(Y-(m*X+b)))/float(len(X))
     return (b, m, res)
@@ -264,7 +296,7 @@ def unwrap_ref_volume(phases, fe1, fe2):
     @return: uphases an unwrapped volume, shrunk to masked region
     """
     zdim,ydim,xdim = vol_shape = phases.shape
-    uphases = empty(vol_shape, Float)
+    uphases = N.empty(vol_shape, N.Float)
     zerosl, zeropt = (vol_shape[0]/2, vol_shape[2]/2)
 
     # unwrap the volume sliced along each PE line
@@ -273,8 +305,8 @@ def unwrap_ref_volume(phases, fe1, fe2):
     for u in range(0,vol_shape[1],1):
         uphases[:,u,:] = unwrap2D(phases[:,u,:])
         height = uphases[zerosl,u,zeropt]
-        height = int((height+sign(height)*pi)/2/pi)
-        uphases[:,u,:] = uphases[:,u,:] - 2*pi*height
+        height = int((height+N.sign(height)*N.pi)/2/N.pi)
+        uphases[:,u,:] = uphases[:,u,:] - 2*N.pi*height
 
     return uphases[:,:,fe1:fe2]
 
@@ -285,33 +317,33 @@ def mod(x,y):
         For numeric arrays, x % y has the same sign as x while
         mod(x,y) has the same sign as y.
     """
-    return x - y*floor(x*1.0/y)
+    return x - y*N.floor(x*1.0/y)
 
 
 #scipy's unwrap (pythonication of Matlab's routine)
-def unwrap1D(p,discont=pi,axis=-1):
+def unwrap1D(p,discont=N.pi,axis=-1):
     """unwraps radian phase p by changing absolute jumps greater than
        discont to their 2*pi complement along the given axis.
     """
-    p = asarray(p)
+    p = N.asarray(p)
     nd = len(p.shape)
     dd = diff(p,axis=axis)
     slice1 = [slice(None,None)]*nd     # full slices
     slice1[axis] = slice(1,None)
-    ddmod = mod(dd+pi,2*pi)-pi
-    putmask(ddmod,(ddmod==-pi) & (dd > 0),pi)
-    ph_correct = ddmod - dd;
-    putmask(ph_correct,abs(dd)<discont,0)
-    up = array(p,copy=1,typecode='d')
-    up[slice1] = p[slice1] + cumsum(ph_correct,axis)
+    ddmod = mod(dd+N.pi,2*N.pi)-N.pi
+    N.putmask(ddmod,(ddmod==-N.pi) & (dd > 0),N.pi)
+    ph_correct = ddmod - dd
+    N.putmask(ph_correct,abs(dd)<discont,0)
+    up = N.array(p,copy=1,typecode='d')
+    up[slice1] = p[slice1] + N.add.accumulate(ph_correct,axis)
     return up
 
 #-----------------------------------------------------------------------------
 def fftconvolve(in1, in2, mode="full", axes=None):
     """Convolve two N-dimensional arrays using FFT. See convolve.
     """
-    s1 = array(in1.shape)
-    s2 = array(in2.shape)
+    s1 = N.array(in1.shape)
+    s2 = N.array(in2.shape)
     if (in1.typecode() in ['D','F']) or (in1.typecode() in ['D', 'F']):
         cmplx=1
     else: cmplx=0
@@ -326,7 +358,7 @@ def fftconvolve(in1, in2, mode="full", axes=None):
     if mode == "full":
         return ret
     elif mode == "same":
-        osize = product(s1,axis=0) > product(s2,axis=0) and s1 or s2
+        osize = N.product(s1,axis=0) > N.product(s2,axis=0) and s1 or s2
         return _centered(ret,osize)
     elif mode == "valid":
         return _centered(ret,abs(s2-s1)+1)
@@ -334,8 +366,8 @@ def fftconvolve(in1, in2, mode="full", axes=None):
 #-----------------------------------------------------------------------------
 def _centered(arr, newsize):
     # Return the center newsize portion of the array.
-    newsize = asarray(newsize)
-    currsize = array(arr.shape)
+    newsize = N.asarray(newsize)
+    currsize = N.array(arr.shape)
     startind = (currsize - newsize) / 2
     endind = startind + newsize
     myslice = [slice(startind[k], endind[k]) for k in range(len(endind))]
@@ -388,14 +420,14 @@ def resample_phase_axis(vol_data, pixel_pos):
     nslice, n_pe, n_fe =  vdshape[1:]
 
     for vol in range(nvol):
-        for slice in range(nslice):
-            s = vol_data[vol, slice]
-            y = pplen==4 and pixel_pos[vol, slice] or pixel_pos[slice]
-            iy = clip(floor(y).astype(Int), 0, n_pe-2)
+        for sl in range(nslice):
+            s = vol_data[vol, sl]
+            y = pplen==4 and pixel_pos[vol, sl] or pixel_pos[sl]
+            iy = N.clip(N.floor(y).astype(N.Int32), 0, n_pe-2)
             dy = y - iy
             for m in range(n_pe):
-                s[:,m]=((1.-dy[:,m])*take(s[:,m],iy[:,m]) \
-                        + dy[:,m]*take(s[:,m],iy[:,m]+1)).astype(Float32)
+                s[:,m]=((1.-dy[:,m])*N.take(s[:,m],iy[:,m]) \
+                        + dy[:,m]*N.take(s[:,m],iy[:,m]+1)).astype(N.Float32)
 
     return vol_data
 #-----------------------------------------------------------------------------
@@ -523,34 +555,31 @@ def euler2quat(theta=0, psi=0, phi=0):
     return Quaternion(M=(eulerRot(phi=phi,theta=theta,psi=psi)))
 
 #-----------------------------------------------------------------------------
-def eulerRot(theta=0, psi=0, phi=0, varian=False):
+def eulerRot(theta=0, psi=0, phi=0):
     # NIFTI defines A = B*C*D = Ri(theta)*Rk(psi)*Rj(phi)
     # so the quaternions will have this convention
     # http://nifti.nimh.nih.gov/nifti-1/documentation/nifti1fields/nifti1fields_pages/figqformusage
-    aboutX = zeros((3,3),Float)
-    aboutY = zeros((3,3),Float)
-    aboutZ = zeros((3,3),Float)
+    aboutX = N.zeros((3,3),N.Float)
+    aboutY = N.zeros((3,3),N.Float)
+    aboutZ = N.zeros((3,3),N.Float)
     # bank
     aboutX[0,0] = 1
-    aboutX[1,1] = aboutX[2,2] = cos(theta)
-    aboutX[1,2] = sin(theta)
-    aboutX[2,1] = -sin(theta)
+    aboutX[1,1] = aboutX[2,2] = N.cos(theta)
+    aboutX[1,2] = N.sin(theta)
+    aboutX[2,1] = -N.sin(theta)
     # attitude
     aboutY[1,1] = 1
-    aboutY[0,0] = aboutY[2,2] = cos(psi)
-    aboutY[0,2] = sin(psi)
-    aboutY[2,0] = -sin(psi)
+    aboutY[0,0] = aboutY[2,2] = N.cos(psi)
+    aboutY[0,2] = N.sin(psi)
+    aboutY[2,0] = -N.sin(psi)
     # heading
     aboutZ[2,2] = 1
-    aboutZ[0,0] = aboutZ[1,1] = cos(phi)
-    aboutZ[0,1] = sin(phi)
-    aboutZ[1,0] = -sin(phi)
-    if varian:
-        M = dot(aboutZ, dot(aboutY, aboutX))
-    else:
-        M = dot(aboutX, dot(aboutY, aboutZ))
+    aboutZ[0,0] = aboutZ[1,1] = N.cos(phi)
+    aboutZ[0,1] = N.sin(phi)
+    aboutZ[1,0] = -N.sin(phi)
+    M = N.dot(aboutX, N.dot(aboutY, aboutZ))
     # make sure no rounding error proprogates from here
-    putmask(M, abs(M)<1e-5, 0)
+    N.putmask(M, abs(M)<1e-5, 0)
     return M
 
 #-----------------------------------------------------------------------------

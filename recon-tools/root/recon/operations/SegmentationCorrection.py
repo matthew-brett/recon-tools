@@ -1,5 +1,6 @@
-from Numeric import empty, NewAxis
-from pylab import mlab, pi, floor, angle, where, amax, cos, sin, Float, Complex32
+import Numeric as N
+from MLab import angle
+
 from recon.operations import Operation
 from recon.util import normalize_angle, ifft, apply_phase_correction
 
@@ -30,10 +31,10 @@ class SegmentationCorrection (Operation):
         phsdiff = normalize_angle(ref_nav_phs - nav_phs)
 
         # weight phase difference by the phase encode timing during each segment
-        pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,NewAxis]
-        theta = empty(image.data.shape, Float)
-        theta[:,:,:pe_per_seg] = phsdiff[:,:,NewAxis,0]*pe_times
-        theta[:,:,pe_per_seg:] = phsdiff[:,:,NewAxis,1]*pe_times
+        pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,N.NewAxis]
+        theta = N.empty(image.data.shape, N.Float)
+        theta[:,:,:pe_per_seg] = phsdiff[:,:,N.NewAxis,0]*pe_times
+        theta[:,:,pe_per_seg:] = phsdiff[:,:,N.NewAxis,1]*pe_times
 
         # Apply the phase correction.
         #image.data = apply_phase_correction(image.data, theta, shift=True)

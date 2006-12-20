@@ -1,5 +1,6 @@
+import Numeric as N
+
 from recon.operations import Operation, Parameter
-from Numeric import exp, power, log, arange, outerproduct, pi, asarray, NewAxis
 from recon.util import fftconvolve
 
 def gaussian_smooth(M, fwhm, kernSize):
@@ -11,14 +12,13 @@ def gaussian_smooth(M, fwhm, kernSize):
     """
     ndim = len(M.shape)
     if ndim < 2:
-        raise ValueError("Matrix dimension must be at least 2")
-    # set up guassian kernel
-    sigma = fwhm*power(8 * log(2), -0.5)
-    gax = arange(kernSize) - (kernSize-1)/2.
-    gf = exp(-power(gax,2)/(2*sigma**2))
-    kern = outerproduct(gf,gf)/(2*pi*sigma**2)
+        raise ValueError("Matrix dimension must be at least 2") # set up guassian kernel
+    sigma = fwhm*N.power(8 * N.log(2), -0.5)
+    gax = N.arange(kernSize) - (kernSize-1)/2.
+    gf = N.exp(-N.power(gax,2)/(2*sigma**2))
+    kern = N.outerproduct(gf,gf)/(2*N.pi*sigma**2)
     # use NewAxis to add dummy-dimensions to kern
-    slicer = (NewAxis,)*(ndim-2) + (slice(0,kernSize),)*2
+    slicer = (N.NewAxis,)*(ndim-2) + (slice(0,kernSize),)*2
     return fftconvolve(M, kern[slicer], mode='same', axes=(-2,-1))
 
 class GaussianSmooth (Operation):

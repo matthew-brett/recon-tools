@@ -1,6 +1,4 @@
-import pylab
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64,\
-     Complex32, asarray, arange, outerproduct, ones, product, reshape
+import Numeric as N
 
 from odict import odict
 from recon.util import import_from, Quaternion
@@ -15,11 +13,10 @@ available_readers = _readers.keys()
 
 # module-private dict specifying available image writers
 _writers = odict((
-    ("analyze", ("recon.analyze","writeImage")),
-    ("nifti", ("recon.nifti","writeImage")),
-    ("nifti_dual", ("recon.nifti","writeImageDual"))))
+    ("analyze", ("recon.analyze","AnalyzeWriter")),
+    ("nifti-single", ("recon.nifti","NiftiWriter")),
+    ("nifti-dual", ("recon.nifti","NiftiWriter"))))
 available_writers = _writers.keys()
-
 
 #-----------------------------------------------------------------------------
 def get_dims(data):
@@ -46,7 +43,7 @@ class DataChunk (object):
         return self._data[slicer]
 
     def __setitem__(self, slicer, data):
-        self._data[slicer] = data.astype(self._data.typecode())
+        self._data[slicer] = N.asarray(data).astype(self._data.typecode())
     
     def __iter__(self):
         if len(self.shape) > 1:
@@ -137,8 +134,8 @@ class ReconImage (object):
               "cannot concatenate images with different pixel sizes: %s != %s"%\
               (self_sizes, image_sizes))
 
-        newdata = newdim and asarray((self.data, image.data)) or\
-                    pylab.concatenate((self.data, image.data), axis)
+        newdata = newdim and N.asarray((self.data, image.data)) or \
+                  N.concatenate((self.data, image.data), axis)
         return self._subimage(newdata)
 
     #-------------------------------------------------------------------------
@@ -156,9 +153,10 @@ class ReconImage (object):
         return self.data[slicer]
     #-------------------------------------------------------------------------
     def __setitem__(self, slicer, newdata):
-        if newdata.typecode().isupper() and self.data.typecode().islower():
+        ndata = N.asarray(newdata)
+        if ndata.typecode().isupper() and self.data.typecode().islower():
             print "warning: losing information on complex->real cast!"
-        self.data[slicer] = newdata.astype(self.data.typecode())
+        self.data[slicer] = ndata.astype(self.data.typecode())
     #-------------------------------------------------------------------------
     def __mul__(self, a):
         self[:] = self[:]*a
@@ -188,8 +186,8 @@ class ReconImage (object):
         resize/reshape the data, non-destructively if the number of
         elements doesn't change
         """
-        if product(newsize_tuple) == product(self.shape):
-            self.data = reshape(self.data, tuple(newsize_tuple))
+        if N.product(newsize_tuple) == N.product(self.shape):
+            self.data = N.reshape(self.data, tuple(newsize_tuple))
         else:
             self.data.resize(tuple(newsize_tuple))
         self.setData(self[:])
@@ -225,7 +223,38 @@ def readImage(filename, format, **kwargs):
     return get_reader(format)(clean_name(filename), **kwargs)
 
 #-----------------------------------------------------------------------------
-def writeImage(image, filename, format, **kwargs):
-    "Write the given image to the filesystem in the given format."
-    return get_writer(format)(image, clean_name(filename), **kwargs)
+def _concatenate(listoflists):
+    "Flatten a list of lists by one degree."
+    finallist = []
+    for sublist in listoflists: finallist.extend(sublist)
+    return finallist
 
+#-----------------------------------------------------------------------------
+## def writeImage(image, filename, format, **kwargs):
+##     "Write the given image to the filesystem in the given format."
+##     return get_writer(format)(image, clean_name(filename), **kwargs)
+
+def writeImage(image, filestem, datatype=None, targetdim=None,
+               filetype=None, suffix=None, scale=1.0, format="analyze"):
+    Writer = get_writer(format)
+    dimnames = {3: "volume", 2: "slice"}
+    def images_and_names(image, stem, targetdim, suffix=None):
+        # base case
+        if targetdim >= image.ndim: return [(image, stem)]
+        
+        # recursive case
+        subimages = tuple(image.subImages())
+        if suffix is not None:
+            substems = ["%s"%(stem,)+suffix%(i,) \
+                        for i in range(len(subimages))]
+        else:
+            substems = ["%s_%s%04d"%(stem, dimnames[image.ndim-1], i)\
+                        for i in range(len(subimages))]
+        return _concatenate(
+          [images_and_names(subimage, substem, targetdim)\
+           for subimage,substem in zip(subimages, substems)])
+    if suffix is not None: targetdim = 3
+    if targetdim is None: targetdim = image.ndim
+    for subimage, substem in images_and_names(image,filestem,targetdim,suffix):
+        Writer(subimage, datatype=datatype,
+               filetype=filetype, scale=scale).write(substem)

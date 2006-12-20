@@ -1,6 +1,7 @@
 "Zero-pads k-space by embedding each NxM slice into a 2Nx2M slice"
+import Numeric as N
+
 from recon.operations import Operation
-from pylab import zeros, Complex32, arange, reshape, product
 from recon.util import embedIm
 
 class ZeroPad (Operation):
@@ -15,9 +16,9 @@ class ZeroPad (Operation):
         new_shape[-2:] = [ny*2, nx*2,]
         image.resize(new_shape)
         #b points to the "old data" inside the resized array, shaped the old way
-        b = reshape(image[:].flat[0:product(old_shape)], old_shape)
-        for vol in (nv - arange(nv) - 1):
-            for sl in (ns - arange(ns) - 1):
+        b = N.reshape(image[:].flat[0:N.product(old_shape)], old_shape)
+        for vol in (nv - N.arange(nv) - 1):
+            for sl in (ns - N.arange(ns) - 1):
                 if(sl == 0 and vol == 0):
                     continue
                 # be careful in case it's a 3d array
@@ -26,7 +27,7 @@ class ZeroPad (Operation):
                 embedIm(b[slicer], image[slicer], ny/2, nx/2)
 
         #do last slice with permanent copy, or else b gets zero'd
-        b = reshape(image[:].flat[0:ny*nx], (ny,nx)).copy()
+        b = N.reshape(image[:].flat[0:ny*nx], (ny,nx)).copy()
         final_slicer = image.tdim and (0,0) or (0,)
         embedIm(b, image[final_slicer], ny/2, nx/2)
         image.setData(image[:])

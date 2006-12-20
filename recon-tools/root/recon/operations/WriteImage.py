@@ -1,16 +1,23 @@
-from recon.imageio import writeImage
-from recon.util import castData
+import Numeric as N
 from recon.operations import Operation, Parameter
+from recon.util import import_from, integer_ranges, scale_data
+from recon.imageio import writeImage
+from odict import odict
 
-ANALYZE_FORMAT = "analyze"
-NIFTI_DUAL = "nifti-dual"
-NIFTI_SINGLE = "nifti-single"
-MAGNITUDE_TYPE = "magnitude"
-COMPLEX_TYPE = "complex"
+param2dtype = odict((
+    ('magnitude', N.Float32),
+    ('compmlex', N.Complex32),
+    ('double', N.Float),
+    ('byte', N.Int8),
+    ('short', N.Int16),
+    ('int', N.Int32),
+    ))
 
-##############################################################################
+# ReconTools default = idx 0
+output_datatypes = param2dtype.keys()
+
 class WriteImage (Operation):
-    "Write image to the filesystem."
+    "Write an image to the filesystem."
 
     params=(
       Parameter(name="filename", type="str", default="image",
@@ -23,66 +30,37 @@ class WriteImage (Operation):
       Parameter(name="format", type="str", default="analyze",
         description="File format to write image in."),
       Parameter(name="datatype", type="str", default="magnitude",
-        description="Output datatype (complex or magnitude). Default is "\
-                    "magnitude."))
+        description="Output datatype options: %s.\nDefault is"\
+                    "magnitude."%output_datatypes))
 
-    #-------------------------------------------------------------------------
-    def writeAnalyze(self, image):
-        from recon import analyze
-        # convert to format-specific datatype constant
-        if self.datatype == COMPLEX_TYPE:
-            # misunderstanding, default to
-            # magnitude type handled in next case
-            if not hasattr(image[:], "imag"):
-                self.datatype = MAGNITUDE_TYPE
-            data_code = analyze.COMPLEX        
-        if self.datatype == MAGNITUDE_TYPE:
-            if hasattr(image[:], "imag"):
-                image.data = abs(image[:])
-            data_code = analyze.FLOAT
-
-        # if the image data isn't of the desired type (analyze.FLOAT, or
-        # analyze.COMPLEX), then cast it there.
-        if data_code != analyze.typecode2datatype[image[:].typecode()]:
-            image.data = image[:].astype(analyze.datatype2typecode[data_code])
-                                           
-        analyze.writeImage(image, self.filename,
-                           datatype=data_code,
-                           targetdim=self.filedim,
-                           suffix=self.suffix,
-                           scale=1.0)
-    #-------------------------------------------------------------------------
-    def writeNifti(self, image):
-        from recon import nifti
-         # convert to format-specific datatype constant
-        if self.datatype == COMPLEX_TYPE:
-            # misunderstanding, default to
-            # magnitude type handled in next case
-            if not hasattr(image[:], "imag"):
-                self.datatype = MAGNITUDE_TYPE
-            data_code = nifti.COMPLEX        
-        if self.datatype == MAGNITUDE_TYPE:
-            if hasattr(image[:], "imag"):
-                image.data = abs(image[:])
-            data_code = nifti.FLOAT
-
-        # if the image data isn't of the desired type (nifti.FLOAT, or
-        # nifti.COMPLEX), then cast it there.
-        if data_code != nifti.typecode2datatype[image[:].typecode()]:
-            image.data = image[:].astype(nifti.datatype2typecode[data_code])
-            
-        nifti.writeImage(image, self.filename,
-                         datatype=data_code,
-                         targetdim=self.filedim,
-                         filetype=self.format[6:],
-                         suffix=self.suffix,
-                         scale=1.0)
-    #-------------------------------------------------------------------------
     def run(self, image):
+        # load the module that owns the Writer
         writer = {
-          ANALYZE_FORMAT: self.writeAnalyze,
-          NIFTI_SINGLE: self.writeNifti,
-          NIFTI_DUAL: self.writeNifti,
-        }.get(self.format, None)
-        if writer is None: print "Unsupported output type: %s"%self.format
-        writer(image)
+            "analyze": "analyze",
+            "nifti-single": "nifti",
+            "nifti-dual": "nifti",
+            }.get(self.format, None)
+        if writer is None:
+            raise ValueError("Unsupported output type: %s"%self.format)
+        writer = import_from("recon", writer)
+
+        # find out the new dtype to write the file with
+        new_dtype = param2dtype.get(self.datatype.lower(), None)
+        if new_dtype is None:
+            raise ValueError("Unsupported data type: %s"%self.datatype)
+
+        # check if the data needs a scale factor (maybe intercept)
+        if new_dtype in integer_ranges.keys():
+            scale = float(scale_data(image[:], new_dtype))
+        else:
+            scale = float(1.0)
+
+        data_code = writer.typecode2datatype[new_dtype]
+        # do a sanity check
+        if not hasattr(image[:], "imag") and data_code == writer.COMPLEX:
+            data_code = writer.FLOAT
+        
+        niftitype = self.format.find("nifti") > -1 and self.format[6:] or None
+        writeImage(image, self.filename, datatype=data_code, filetype=niftitype,
+                   targetdim=self.filedim, suffix=self.suffix,
+                   scale=scale, format=self.format)

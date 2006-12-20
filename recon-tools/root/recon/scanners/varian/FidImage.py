@@ -1,13 +1,9 @@
 "A class for interpreting image data in FID format"
-import struct
-import stat
 import os.path
 import sys
-from pylab import Complex32, Float32, Int16, Int32, pi, mlab, fft, sign, \
-     zeros, fromstring, reshape, arange, take, floor, argmax, multiply, \
-     asarray, empty, squeeze, dot
-from recon.util import shift, euler2quat, qmult
-from recon import util
+from MLab import squeeze
+import Numeric as N
+from recon.util import shift, euler2quat, qmult, eulerRot, Quaternion
 from recon.scanners import ScannerImage
 from recon.scanners.varian import tablib
 from recon.scanners.varian.ProcPar import ProcPar, ProcParImageMixin
@@ -31,12 +27,12 @@ def getPulseSeq(datadir):
 #-----------------------------------------------------------------------------
 def complex_fromstring(data, numtype):
     if sys.byteorder == "little":
-        return fromstring(
-            fromstring(data, numtype).byteswapped().astype(Float32).tostring(),
-            Complex32)
+        return N.fromstring(
+            N.fromstring(data, numtype).byteswapped().astype(N.Float32).tostring(),
+            N.Complex32)
     else:
-        return fromstring(
-	    fromstring(data,numtype).astype(Float32).tostring(), Complex32)
+        return N.fromstring(
+	    N.fromstring(data,numtype).astype(N.Float32).tostring(), N.Complex32)
 
 ##############################################################################
 class FidImage (ScannerImage, ProcParImageMixin):
@@ -51,7 +47,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
     to interface with the actual data on-disk.
     """
     #-------------------------------------------------------------------------
-    def __init__(self, datadir, vrange=None):
+    def __init__(self, datadir, vrange=None, target_dtype=N.Complex32):
         ProcParImageMixin.__init__(self, datadir, vrange=vrange)
         self.initializeData()
         self.loadData(datadir)
@@ -83,15 +79,16 @@ class FidImage (ScannerImage, ProcParImageMixin):
     def initializeData(self):
         "Allocate data matrices." # IF NEEDED! look at petable or something
         nrefs = len(self.ref_vols)
-        self.data = zeros((self.nvol, self.nslice,
-                           self.n_pe_true, self.n_fe_true), Complex32)
-        self.nav_data = zeros((self.nvol, self.nslice,
-                               self.nav_per_slice, self.n_fe_true), Complex32)
-        self.ref_data = zeros((nrefs, self.nslice,
-                               self.n_pe_true, self.n_fe_true), Complex32)
-        self.ref_nav_data = zeros((nrefs, self.nslice,
-                                   self.nav_per_slice, self.n_fe_true),
-                                  Complex32)
+        self.data = N.zeros((self.nvol, self.nslice,
+                             self.n_pe_true, self.n_fe_true), N.Complex32)
+        self.nav_data = N.zeros((self.nvol, self.nslice,
+                                 self.nav_per_slice, self.n_fe_true),
+                                N.Complex32)
+        self.ref_data = N.zeros((nrefs, self.nslice,
+                                 self.n_pe_true, self.n_fe_true), N.Complex32)
+        self.ref_nav_data = N.zeros((nrefs, self.nslice,
+                                     self.nav_per_slice, self.n_fe_true),
+                                    N.Complex32)
         
     #-------------------------------------------------------------------------
     def realizeOrientation(self):
@@ -101,22 +98,22 @@ class FidImage (ScannerImage, ProcParImageMixin):
         # from scanner to image-> map -y -> +y
         # (the object lies [+X, +Y, +Z] = [P, R, S] inside the scanner,
         #  so account for this rotation last)
-        Qs_mat = asarray([[ 1., 0., 0.],
-                          [ 0.,-1., 0.],
-                          [ 0., 0., 1.],])
-        Qr_mat = util.eulerRot(phi=pi/2)
-        Qscanner = util.Quaternion(M=Qs_mat)
-        Qrot = util.Quaternion(M=Qr_mat)
+        Qs_mat = N.asarray([[ 1., 0., 0.],
+                            [ 0.,-1., 0.],
+                            [ 0., 0., 1.],])
+        Qr_mat = eulerRot(phi=N.pi/2)
+        Qscanner = Quaternion(M=Qs_mat)
+        Qrot = Quaternion(M=Qr_mat)
 
         phi,psi,theta = self.phi, self.psi, self.theta
-        phi,theta,psi = map(lambda x: (pi/2)*int((x+sign(x)*45.)/90),
+        phi,theta,psi = map(lambda x: (N.pi/2)*int((x+N.sign(x)*45.)/90),
                                                  (phi,theta,psi))
         # find out the (closest) image plane
         if theta == 0 and psi == 0:
             self.image_plane = "axial"
-        elif theta == pi/2 and psi != pi/2:
+        elif theta == N.pi/2 and psi != N.pi/2:
             self.image_plane = "coronal"
-        elif theta == pi/2 and psi == pi/2:
+        elif theta == N.pi/2 and psi == N.pi/2:
             self.image_plane = "sagittal"
         else:
             self.image_plane = "oblique"
@@ -129,9 +126,10 @@ class FidImage (ScannerImage, ProcParImageMixin):
         # 1) flip Y to put into a right-handed system
         # 2) rotate in the reverse order as the Varian rotation
         # 3) make a final pi/2 rotation around Z to make [R A S] = [X Y Z]
-        Qobl = util.Quaternion(M=dot(util.eulerRot(psi=theta),
-                                     dot(util.eulerRot(theta=psi),
-                                         util.eulerRot(phi=phi))))
+        Qobl = Quaternion(M=N.dot(eulerRot(psi=theta),
+                                  N.dot(eulerRot(theta=psi),
+                                        eulerRot(phi=phi))))
+        
         self.orientation_xform = qmult(Qrot, qmult(Qobl,Qscanner))
         # don't have orientation's name yet
         self.orientation = ""
@@ -167,7 +165,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
             line = file(table_filename).readline().split()
             line = [int(i) for i in line]
 
-        self.petable = empty(n_pe_true*nslice, Int16)
+        self.petable = N.empty(n_pe_true*nslice, N.Int16)
         i = 0 
         for slice in range(nslice):
             for pe in range(n_pe_true):
@@ -182,7 +180,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 self.petable[i] = line.index(pe) + offset
                 i += 1
             
-        self.navtable = empty(nav_per_slice*nslice, Int16)
+        self.navtable = N.empty(nav_per_slice*nslice, N.Int16)
         if nav_per_seg == 1:    
             i = 0        
             # appears to not work if nav_per_seg > 1 ?
@@ -233,8 +231,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
         block = fidfile.getBlock(vol)
         bias = complex(block.lvl, block.tlt)
         volume = complex_fromstring(block.getData(), self.raw_typecode)
-        volume = (volume - bias).astype(Complex32)
-        return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
+        volume = (volume - bias).astype(N.Complex32)
+        return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_uncompressed_volume(self, fidfile, vol):
@@ -242,13 +240,13 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Reads one volume from an uncompressed FID file.
         @return: block of data with shape (nslice*n_pe, n_fe_true)
         """        
-        volume = empty((self.nslice, self.n_pe*self.n_fe_true), Complex32)
+        volume = N.empty((self.nslice, self.n_pe*self.n_fe_true), N.Complex32)
         for slice_num, slice in enumerate(volume):
             block = fidfile.getBlock(self.nslice*vol + slice_num)
             bias = complex(block.lvl, block.tlt)
             slice[:] = complex_fromstring(block.getData(), self.raw_typecode)
-            slice[:] = (slice - bias).astype(Complex32)
-        return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
+            slice[:] = (slice - bias).astype(N.Complex32)
+        return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_epi2fid_volume(self, fidfile, vol):
@@ -257,8 +255,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
         @return: block of data with shape (nslice*n_pe, n_fe_true)
         """
         # procpar indicates navigator lines, but none are read in? huh
-        volume = empty(
-          (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),Complex32)
+        volume = N.empty(
+            (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),N.Complex32)
         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
         for seg in range(self.nseg):
             for slice in range(self.nslice):
@@ -268,7 +266,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
                       + vol) + slice)
                     volume[slice, seg, self.nav_per_seg+pe, :] = \
                       complex_fromstring(block.getData(), self.raw_typecode) 
-        return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
+        return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_asems_ncsnn_volume(self, fidfile, vol):
@@ -276,7 +274,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Reads one volume from an asems_ncsnn FID file.
         @return: block of data with shape (nslice*n_pe, n_fe_true)
         """
-        volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
+        volume = N.empty((self.nslice, self.n_pe, self.n_fe_true), N.Complex32)
         for pe in range(self.n_pe):
             # should change to nvol_true?
             block = fidfile.getBlock(pe*self.nvol_true + vol)
@@ -285,10 +283,10 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 trace = complex_fromstring(trace, self.raw_typecode)
                 if self.pulse_sequence == "gems" and self.n_transients>1:
                     volume[slice,pe] = trace
-                else: volume[slice,pe] = (trace - bias).astype(Complex32)
+                else: volume[slice,pe] = (trace - bias).astype(N.Complex32)
 
-                #volume[slice,pe] = trace.astype(Complex32)
-        return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
+                #volume[slice,pe] = trace.astype(N.Complex32)
+        return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_asems_nccnn_volume(self, fidfile, vol):
@@ -296,7 +294,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Reads one volume from an asems_nccnn FID file.
         @return: block of data with shape (nslice*n_pe, n_fe_true)
         """
-        volume = empty((self.nslice, self.n_pe, self.n_fe_true), Complex32)
+        volume = N.empty((self.nslice, self.n_pe, self.n_fe_true), N.Complex32)
         for pe in range(self.n_pe):
             for slice in range(self.nslice):
                 # should change to nvol_true?
@@ -304,8 +302,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
                   ((pe*self.nslice+slice)*self.nvol_true + vol))
                 bias = complex(block.lvl, block.tlt)
                 trace = complex_fromstring(block.getData(), self.raw_typecode)
-                volume[slice,pe] = (trace - bias).astype(Complex32)
-        return reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
+                volume[slice,pe] = (trace - bias).astype(N.Complex32)
+        return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _get_fidformat(self, fidfile):
@@ -406,7 +404,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
           (fidformat=="compressed" and not(pulse_sequence == "epi"\
            and self.spinecho) or \
           (fidformat=="uncompressed" and pulse_sequence != "epidw"))
-        time_rev = n_fe_true - 1 - arange(n_fe_true)
+        time_rev = n_fe_true - 1 - N.arange(n_fe_true)
         if time_reverse: print "time reversing"
 
         # determine if phase encodes need reordering
@@ -425,7 +423,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
 
             # reverse ENTIRE negative-gradient read (??)
             if vol in self.ref_vols and vol==1:
-                volume[:] = take(volume, time_rev, axis=(len(volume.shape)-1))
+                volume[:] = N.take(volume, time_rev, axis=(len(volume.shape)-1))
 
             # time-reverse the data
             if time_reverse:
@@ -433,20 +431,20 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 for seg in range(self.nseg):
                     base = seg*f
                     for pe in range(base+1, base+f, 2): 
-                        volume[pe] = take(volume[pe], time_rev)
+                        volume[pe] = N.take(volume[pe], time_rev)
 
             # Reorder data according to phase encode table and separate
             # k-space data from navigator echos
             if needs_pe_reordering:
-                ksp_image = take(volume, self.petable)
-                navigators = take(volume, self.navtable) 
+                ksp_image = N.take(volume, self.petable)
+                navigators = N.take(volume, self.navtable) 
             else:
                 ksp_image = volume
-                navigators = empty(0, Complex32)
+                navigators = N.empty(0, N.Complex32)
 
             # reshape into final volume shape
-            ksp_image = reshape(ksp_image, (nslice, n_pe_true, n_fe_true))
-            navigators = reshape(navigators, (nslice, nav_per_slice, n_fe_true))
+            ksp_image = N.reshape(ksp_image, (nslice, n_pe_true, n_fe_true))
+            navigators = N.reshape(navigators, (nslice, nav_per_slice, n_fe_true))
 
             # The time-reversal section above reflects the odd slices through
             # the pe-axis. This section puts all slices in the same orientation.
@@ -454,10 +452,10 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 for slice in range(0,nslice,2):
                     for pe in range(n_pe_true):
                         ksp_image[slice,pe] = \
-                          take(ksp_image[slice,pe], time_rev)
+                          N.take(ksp_image[slice,pe], time_rev)
                     for pe in range(nav_per_slice):
                         navigators[slice,pe] = \
-                          take(navigators[slice,pe], time_rev)
+                          N.take(navigators[slice,pe], time_rev)
 
 ##             # Make a correction for mpflash data
 ##             if pulse_sequence == "mp_flash3d" and not self.flash_converted:
@@ -465,7 +463,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
 ##                 scale = 2*nline*n_fe_true
 ##                 for slice in ksp_image:
 ##                     slice[:] = (slice - (sum(slice[:nline,:].flat) + \
-## 			   sum(slice[-nline:,:].flat))/scale).astype(Complex32) 
+## 			   sum(slice[-nline:,:].flat))/scale).astype(N.Complex32) 
 
             # assign volume to the appropriate output matrix
             if vol in self.ref_vols:

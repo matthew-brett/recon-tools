@@ -1,9 +1,10 @@
 "Defines a command-line interface to the recon tool."
 from optparse import OptionParser, Option
-import os
+import os, sys
 import recon.conf
-from recon.operations.WriteImage import ANALYZE_FORMAT, NIFTI_SINGLE, \
-    NIFTI_DUAL, MAGNITUDE_TYPE, COMPLEX_TYPE, WriteImage  
+from recon.operations.WriteImage import WriteImage, \
+     output_datatypes as output_datatype_choices
+from recon.imageio import available_writers as output_format_choices
 from recon.tools import OrderedConfigParser, ConsoleTool
 from recon.operations import OperationManager, RunLogger, WriteImage
 from recon.scanners.varian.FidImage import getPulseSeq
@@ -19,11 +20,6 @@ class Recon (ConsoleTool):
     """
 
     _opmanager = OperationManager()
-    output_format_choices = ( 
-      ANALYZE_FORMAT, 
-      NIFTI_DUAL, 
-      NIFTI_SINGLE) 
-    output_datatype_choices= (MAGNITUDE_TYPE, COMPLEX_TYPE) 
     default_logfile = "recon.log"
 
     options = (
@@ -45,7 +41,7 @@ class Recon (ConsoleTool):
         "found after any reference scans.)"),
 
       Option("-f", "--file-format", dest="file_format", action="store",
-        type="choice", default=WriteImage.ANALYZE_FORMAT,
+        type="choice", default=output_format_choices[0],
         choices=output_format_choices,
         help="""{%s}
         analyze: Save individual image for each frame in analyze format.
@@ -54,7 +50,7 @@ class Recon (ConsoleTool):
           ("|".join(output_format_choices))),
 
       Option("-y", "--output-data-type", dest="output_datatype",
-        type="choice", default=MAGNITUDE_TYPE, action="store",
+        type="choice", default=output_datatype_choices[0], action="store",
         choices=output_datatype_choices,
         help="""{%s}
         Specifies whether output images should contain only magnitude or
@@ -74,7 +70,11 @@ class Recon (ConsoleTool):
 
       Option("-n", "--filedim", action="store", default=3,
              help="Sets the number of dimensions per output file "\
-             "(defaults to 3"))
+             "(defaults to 3"),
+
+      Option("-u", "--opusage", action="store", default=None,
+             help="run as -u opname, gives info on opname's paramters"))
+
       
 
     #-------------------------------------------------------------------------
@@ -98,6 +98,15 @@ class Recon (ConsoleTool):
             return (pwd, name+".recon")
         else: self.error("Expecting 2 arguments: datadir outfile")
 
+    #-------------------------------------------------------------------------
+    def _printOpHelp(self, opname):
+        if opname not in self._opmanager.getOperationNames():
+            print "There is no operation named %s"%opname
+        else:
+            print "help for %s"%opname            
+            self._opmanager.getOperation(opname)().paramHelp()
+        sys.exit(0)
+        
     #-------------------------------------------------------------------------
     def _findOplist(self, datadir):
         "Determine which stock oplist to use based on pulse sequence."
@@ -205,6 +214,8 @@ class Recon (ConsoleTool):
     
         options, args = self.parse_args()
         options.vrange = self.parseVolRange(options.vol_range)
+        if options.opusage is not None:
+            self._printOpHelp(options.opusage)
         # Recon can be run with these combos defined:
         # (_, _) (first logic stage, try to find fid files in pwd)
         # (args, _) (2nd logic stage, try to find default oplist)

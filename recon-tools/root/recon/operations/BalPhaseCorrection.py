@@ -1,24 +1,26 @@
 "Applies a Balanced Phase Correction on data sets with two reference volumes"
 
-#from FFT import inverse_fft
-from Numeric import sort
-from pylab import angle, conjugate, sin, cos, Complex32, Complex, fft, arange, reshape, ones, sqrt, plot, mean, take, pi, zeros, Float, show, floor, median, NewAxis, transpose, dot, svd, exp, Int, diag, title, asarray, legend, empty, sign, putmask, find, sum
+import Numeric as N
+from MLab import angle, diag
+from LinearAlgebra import singular_value_decomposition as svd
+
 from recon.operations import Operation, Parameter, verify_scanner_image
-from recon.util import shift, fft, ifft, apply_phase_correction, unwrap1D, linReg, mod, checkerline, unwrap_ref_volume
+from recon.util import ifft, apply_phase_correction, linReg, checkerline, \
+     unwrap_ref_volume, reverse
 
 def shift_columns_left(matrix):
 
-    for slice in matrix:
-        for col in range(slice.shape[1]-1):
-            slice[:,col] = slice[:,col+1]
-        slice[:,slice.shape[1]-1] = zeros(slice.shape[0]).astype(slice.typecode())
+    for sl in matrix:
+        for col in range(sl.shape[1]-1):
+            sl[:,col] = sl[:,col+1]
+        sl[:,sl.shape[1]-1] = N.zeros(sl.shape[0]).astype(sl.typecode())
         
 def shift_columns_right(matrix):
     """shifts columns (assumed to be last dimension) right w/o wrap-around"""
-    for slice in matrix:
-        for col in (-1 - arange(slice.shape[1]-1)):
-            slice[:,col] = slice[:,col-1]
-        slice[:,0] = zeros(slice.shape[0]).astype(slice.typecode())
+    for sl in matrix:
+        for col in reverse(N.arange(sl.shape[1]-1)):
+            sl[:,col] = sl[:,col-1]
+        sl[:,0] = N.zeros(sl.shape[0]).astype(sl.typecode())
 
 class BalPhaseCorrection (Operation):
     params = (
@@ -41,7 +43,7 @@ class BalPhaseCorrection (Operation):
         shift_columns_left(image.ref_data[1])
         #shift_columns_right(image.ref_data[1])
         inv_ref1 = ifft(image.ref_data[1])
-        inv_ref = inv_ref0*conjugate(inv_ref1)
+        inv_ref = inv_ref0*N.conjugate(inv_ref1)
         
         n_slice, n_pe, n_fe = self.refShape = inv_ref0.shape
 
@@ -53,22 +55,22 @@ class BalPhaseCorrection (Operation):
         # comes back smaller! read direction goes from lin1:lin2
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
         
-        s_mask = zeros(n_slice) # this will be 4 most "linear" slices
-        r_mask = ones((self.lin_fe)) #
-        u_mask = ones((n_pe))  # 
+        s_mask = N.zeros(n_slice) # this will be 4 most "linear" slices
+        r_mask = N.ones((self.lin_fe)) #
+        u_mask = N.ones((n_pe))  # 
         u_mask[0] = 0
         #u_mask[46:] = 0
-        res = zeros((n_slice,), Float)
+        res = N.zeros((n_slice,), N.Float)
         for s in range(n_slice):
             for row in phs_vol[s]:
-                (_, _, r) = linReg(row, X=arange(self.lin_fe))
+                (_, _, r) = linReg(row, X=N.arange(self.lin_fe))
                 res[s] += r
                 #plot(row)
             #show()
 
         # find 4 slices with smallest residual
-        sres = sort(res)
-        selected = [find(res==c)[0] for c in sres[:4]]
+        sres = N.sort(res)
+        selected = [N.nonzero(res==c)[0] for c in sres[:4]]
         for c in selected:
             s_mask[c] = 1
         
@@ -112,13 +114,13 @@ class BalPhaseCorrection (Operation):
         """
         (B1,B7,B8,B5,B6) = (0,1,2,3,4)
         U,R = self.refShape[-2:]
-        r_ind = find(r_mask) # this is w/ resp. to truncated row size
-        u_ind = find(u_mask)
-        s_ind = find(s_mask)
+        r_ind = N.nonzero(r_mask) # this is w/ resp. to truncated row size
+        u_ind = N.nonzero(u_mask)
+        s_ind = N.nonzero(s_mask)
         n_chunks = len(s_ind) # 1 chunk per slice(?)
         n_parts = len(u_ind)  # 1 part per pe-line(?)
-        A = empty((n_chunks*n_parts*len(r_ind), 5), Float)
-        P = empty((n_chunks*n_parts*len(r_ind), 1), Float)
+        A = N.empty((n_chunks*n_parts*len(r_ind), 5), N.Float)
+        P = N.empty((n_chunks*n_parts*len(r_ind), 1), N.Float)
         row_start, row_end = 0, 0
         #for c in range(n_chunks):
         #    for p in range(n_parts):
@@ -128,7 +130,7 @@ class BalPhaseCorrection (Operation):
                 row_start = row_end
                 row_end = row_start + len(r_ind)
                 # the data vector
-                P[row_start:row_end,0] = 0.5*take(pvol[s, u, :], r_ind)
+                P[row_start:row_end,0] = 0.5*N.take(pvol[s, u, :], r_ind)
                 
                 # the phase-space vector
                 A[row_start:row_end,B1] = sign
@@ -144,7 +146,7 @@ class BalPhaseCorrection (Operation):
         f.close()
         
         [u,s,vt] = svd(A)
-        V = dot(transpose(vt), dot(diag(1/s), dot(transpose(u), P)))
+        V = N.dot(N.transpose(vt), N.dot(diag(1/s), N.dot(N.transpose(u), P)))
 
 ##         foo = reshape(matrixmultiply(A,V), (n_chunks, n_parts, len(r_ind)))
 ##         from pylab import figure
@@ -176,22 +178,22 @@ class BalPhaseCorrection (Operation):
         #b3 = (delT/Tl)*b6[0]
         #b4 = (Tl/delT)*b1[0]
         b2=b3=b4 = 0.0
-        A = empty((M, 8), Float)
-        B = empty((8, R), Float)
-        theta = empty(self.volShape, Float)
+        A = N.empty((M, 8), N.Float)
+        B = N.empty((8, R), N.Float)
+        theta = N.empty(self.volShape, N.Float)
 
         # build B matrix, always stays the same
         B[0,:] = b1[0]
-        B[1,:] = (arange(R)-R/2)*b2
-        B[2,:] = (arange(R)-R/2)*b7[0]
+        B[1,:] = (N.arange(R)-R/2)*b2
+        B[2,:] = (N.arange(R)-R/2)*b7[0]
         B[3,:] = b3
         B[4,:] = b8[0]
         B[5,:] = b4
-        B[6,:] = (arange(R)-R/2)*b5[0]
+        B[6,:] = (N.arange(R)-R/2)*b5[0]
         B[7,:] = b6[0]
         
         # u_line & zigzag define how the correction changes per PE line
-        m_line = arange(M)
+        m_line = N.arange(M)
         zigzag = checkerline(M)
         # build A matrix, changes slightly as s varies
         A[:,0] = zigzag
@@ -203,7 +205,7 @@ class BalPhaseCorrection (Operation):
             A[:,3] = s*zigzag
             A[:,4] = s*zigzag
             A[:,7] = s*m_line
-            theta[s] = dot(A,B)
+            theta[s] = N.dot(A,B)
         return theta
 
 

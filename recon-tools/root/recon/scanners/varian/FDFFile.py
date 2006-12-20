@@ -1,5 +1,5 @@
 import pylab
-from pylab import fromstring
+from Numeric import fromstring
 
 #-----------------------------------------------------------------------------
 def string_valuator(strstr):

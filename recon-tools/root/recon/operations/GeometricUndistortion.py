@@ -1,8 +1,8 @@
+import Numeric as N
+
 from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.nifti import readImage
 from recon.util import resample_phase_axis
-from pylab import pi, arange, outerproduct, ones
-
 
 ##############################################################################
 class GeometricUndistortion (Operation):
@@ -30,11 +30,11 @@ class GeometricUndistortion (Operation):
                      " the image shape, quitting")
 	    return
 	
-	shift = (image.xdim * image.T_pe/2/pi)
+	shift = (image.xdim * image.T_pe/2/N.pi)
         
         #watch the sign
-        pixel_pos = -shift*fMap[:] + outerproduct(arange(fMap.ydim),
-                                                  ones(fMap.ydim))
+        pixel_pos = -shift*fMap[:] + N.outerproduct(N.arange(fMap.ydim),
+                                                    N.ones(fMap.ydim))
         
         image[:].real = resample_phase_axis(abs(image[:]), pixel_pos)
         image[:].imag = 0.

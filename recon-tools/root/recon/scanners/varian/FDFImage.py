@@ -1,6 +1,7 @@
 import glob
 from os.path import join as pjoin
-from pylab import asarray
+import Numeric as N
+
 from recon.scanners.varian.FDFFile import FDFFile, FDFHeader
 from ProcPar import ProcPar, ProcParImageMixin
 from recon.imageio import ReconImage
@@ -38,8 +39,8 @@ class FDFImage (BaseImage, ProcParImageMixin):
             for slicenum in range(self.zdim):
                 filename = slicefilename(volnum*self.zdim + slicenum + 1)
                 slices.append(FDFFile(pjoin(self.datadir, filename)).data)
-            volumes.append(asarray(slices))
-        self.setData(asarray(volumes))
+            volumes.append(N.asarray(slices))
+        self.setData(N.asarray(volumes))
 
     #-------------------------------------------------------------------------
     def save(self, outputdir): writeImage(self, pjoin(outputdir, "image"))

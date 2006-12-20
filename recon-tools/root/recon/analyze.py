@@ -1,11 +1,10 @@
 "This module implements details of the Analyze7.5 file format."
-from pylab import randn, amax, Int8, Int16, Int32, Float32, Float64, dot, \
-  Complex32, fromstring, reshape, amin, amax, product, array, identity
+import Numeric as N
 import struct
 import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
-  BIG_ENDIAN, Quaternion
+  BIG_ENDIAN, Quaternion, volume_max, volume_min, range_exceeds
 from recon.imageio import ReconImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
@@ -28,12 +27,12 @@ datatype2bitpix = {
 
 # map Analyze datatype to Numeric typecode
 datatype2typecode = {
-  BYTE: Int8,
-  SHORT: Int16,
-  INTEGER: Int32,
-  FLOAT: Float32,
-  DOUBLE: Float64,
-  COMPLEX: Complex32}
+  BYTE: N.Int8,
+  SHORT: N.Int16,
+  INTEGER: N.Int32,
+  FLOAT: N.Float32,
+  DOUBLE: N.Float64,
+  COMPLEX: N.Complex32}
 
 # map Numeric typecode to Analyze datatype
 typecode2datatype = \
@@ -51,24 +50,24 @@ orientname2orientcode = {
 orientcode2orientname = dict([(v,k) for k,v in orientname2orientcode.items()])
 
 xforms = {
-    "radiological": array([[-1., 0., 0.],
-                           [ 0., 1., 0.],
+    "radiological": N.array([[-1., 0., 0.],
+                             [ 0., 1., 0.],
+                             [ 0., 0., 1.],]),
+    "transverse": N.array([[-1., 0., 0.],
+                           [ 0.,-1., 0.],
                            [ 0., 0., 1.],]),
-    "transverse": array([[-1., 0., 0.],
-                         [ 0.,-1., 0.],
-                         [ 0., 0., 1.],]),
-    "coronal": array([[-1., 0., 0.],
-                      [ 0., 0., 1.],
-                      [ 0., 1., 0.],]),
-    "coronal_flipped": array([[-1., 0., 0.],
-                              [ 0., 0.,-1.],
-                              [ 0., 1., 0.]],),
-    "saggital": array([[ 0., 1., 0.],
-                       [ 0., 0., 1.],
-                       [-1., 0., 0.],]),
-    "saggital_flipped": array([[ 0., 1., 0.],
-                               [ 0., 0.,-1.],
-                               [-1., 0., 0.],]),
+    "coronal": N.array([[-1., 0., 0.],
+                        [ 0., 0., 1.],
+                        [ 0., 1., 0.],]),
+    "coronal_flipped": N.array([[-1., 0., 0.],
+                                [ 0., 0.,-1.],
+                                [ 0., 1., 0.]],),
+    "saggital": N.array([[ 0., 1., 0.],
+                         [ 0., 0., 1.],
+                         [-1., 0., 0.],]),
+    "saggital_flipped": N.array([[ 0., 1., 0.],
+                                 [ 0., 0.,-1.],
+                                 [-1., 0., 0.],]),
     }
 
 
@@ -152,9 +151,9 @@ class AnalyzeImage (ReconImage):
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, filestem, vrange=()):
+    def __init__(self, filestem, target_dtype=None, vrange=()):
         self.load_header(filestem+".hdr")
-        self.load_image(filestem+".img", vrange)
+        self.load_image(filestem+".img", target_dtype, vrange)
 
     #-------------------------------------------------------------------------
     def _dump_header(self):
@@ -193,32 +192,43 @@ class AnalyzeImage (ReconImage):
                    hd_vals['y0']*self.ysize,
                    hd_vals['z0']*self.zsize)
         self.orientation = orientcode2orientname.get(hd_vals['orient'], "")
-        xform_mat = xforms.get(hd_vals['orient'], identity(3))
+        xform_mat = xforms.get(hd_vals['orient'], N.identity(3))
         self.orientation_xform = Quaternion(M=xform_mat)
-        self.datatype, self.bitpix = (hd_vals['datatype'], hd_vals['bitpix'])
+        # various items:
+        self.datatype, self.bitpix, self.scaling = (hd_vals['datatype'],
+                                                    hd_vals['bitpix'],
+                                                    hd_vals['scale_factor'],)
+        if not self.scaling:
+            self.scaling = 1.0
 
     #-------------------------------------------------------------------------
-    def load_image(self, filename, vrange):
+    def load_image(self, filename, target_dtype, vrange):
         # bytes per pixel
         bytepix = self.bitpix/8
         numtype = datatype2typecode[self.datatype]
         byteoffset = 0
+        if target_dtype and not range_exceeds(target_dtype, numtype):
+            raise ValueError("the dynamic range of the desired datatype does "\
+                             "not exceed that of the raw data")            
         # need to cook tdim if vrange is set
         if self.tdim and vrange:
             vend = (vrange[1]<0 or vrange[1]>=self.tdim) \
                    and self.tdim-1 or vrange[1]
             vstart = (vrange[0] > vend) and vend or vrange[0]
             self.tdim = vend-vstart+1
-            byteoffset = vstart*bytepix*product((self.zdim,self.ydim,self.xdim))
+            byteoffset = vstart*bytepix*N.product((self.zdim,
+                                                   self.ydim,self.xdim))
 
-        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim)\
+        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
                           or (self.zdim, self.ydim, self.xdim)
-        datasize = bytepix * product(dims)
+        datasize = bytepix * N.product(dims)
         fp = file(filename)
         fp.seek(byteoffset, 1)
-        image = fromstring(fp.read(datasize),numtype)
+        image = N.fromstring(fp.read(datasize),numtype)
         if self.swapped: image = image.byteswapped()
-        self.setData(reshape(image, dims))
+        if target_dtype and target_dtype != numtype:
+            image = (image*self.scaling).astype(target_dtype)
+        self.setData(N.reshape(image, dims))
         fp.close()
 
 ##############################################################################
@@ -239,17 +249,18 @@ class AnalyzeWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
 
     #-------------------------------------------------------------------------
-    def __init__(self, image, datatype=None, scale=1.0):
+    def __init__(self, image, datatype=None, scale=1.0, **kwargs):
         self.image = image
         self.scaling = scale
-        self.datatype = datatype or typecode2datatype[image.data.typecode()]
-
+        self.datatype = datatype or typecode2datatype[image[:].typecode()]
+        typecode = datatype2typecode[self.datatype]
+        self._dataview = _construct_dataview(image[:].typecode(), self.datatype,
+                                             self.scaling)
     #-------------------------------------------------------------------------
     def _default_field_value(self, fieldname, fieldformat):
         "[STATIC] Get the default value for the given field."
         return self._defaults_for_fieldname.get(fieldname, None) or \
                self._defaults_for_descriptor[fieldformat[-1]]
-
     #-------------------------------------------------------------------------
     def write(self, filestem):
         "Write ANALYZE format header, image file pair."
@@ -261,7 +272,6 @@ class AnalyzeWriter (object):
     def write_hdr(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
-        data_magnitude = abs(image.data)
 
         imagevalues = {
           'datatype': self.datatype,
@@ -279,13 +289,14 @@ class AnalyzeWriter (object):
           'y0': (image.ydim/2),
           'z0': (image.zdim/2),
           'scale_factor': self.scaling,
-          'glmin': amin(data_magnitude.flat),
-          'glmax': amax(data_magnitude.flat),
+          # I suppose these should be set to pre-scaled values?
+          'glmin': int(round(volume_min(abs(image[:])))),
+          'glmax': int(round(volume_max(abs(image[:])))),
           'orient': orientname2orientcode.get(image.orientation,-1),}
 
         def fieldvalue(fieldname, fieldformat):
-            if imagevalues.has_key(fieldname): return imagevalues[fieldname]
-            if hasattr(image, fieldname): return getattr(image, fieldname)
+            if imagevalues.has_key(fieldname):
+                return imagevalues[fieldname]
             return self._default_field_value(fieldname, fieldformat)
 
         fieldvalues = [fieldvalue(*field) for field in struct_fields.items()]
@@ -297,52 +308,20 @@ class AnalyzeWriter (object):
         "Write ANALYZE format image (.img) file."
         # Write the image file.
         f = file( filename, "w" )
-        f.write( self.image.data.tostring() )
+        f.write( self._dataview(self.image[:]).tostring() )
         f.close()
 
 #-----------------------------------------------------------------------------
-def _concatenate(listoflists):
-    "Flatten a list of lists by one degree."
-    finallist = []
-    for sublist in listoflists: finallist.extend(sublist)
-    return finallist
-
-#-----------------------------------------------------------------------------
-def writeImage(image, filestem, datatype=None, targetdim=None,
-               suffix=None, scale=1.0):
-    """
-    Write the given image to the filesystem as one or more Analyze7.5 format
-    hdr/img pairs.
-    @param filestem:  will be prepended to each hdr and img file.
-    @param targetdim:  indicates the dimensionality of data to be written into
-      a single hdr/img pair.  For example, if a volumetric time-series is
-      given, and targetdim==3, then each volume will get its own file pair.
-      Likewise, if targetdim==2, then every slice of each volume will get its
-      own pair.
-    """
-    dimnames = {3:"volume", 2:"slice"}
-    def images_and_names(image, stem, targetdim, suffix=None):
-        # base case
-        if targetdim >= image.ndim: return [(image, stem)]
-        
-        # recursive case
-        subimages = tuple(image.subImages())
-        if suffix is not None:
-            substems = ["%s"%(stem,)+suffix%(i,) \
-                        for i in range(len(subimages))]
-        else:        
-            substems = ["%s_%s%04d"%(stem, dimnames[image.ndim-1], i)\
-                        for i in range(len(subimages))]
-        return _concatenate(
-          [images_and_names(subimage, substem, targetdim)\
-           for subimage,substem in zip(subimages, substems)])
-
-    # suffix-mode only supports volume-wise naming, so force targetdim to 3
-    if suffix is not None: targetdim = 3
-    if targetdim is None: targetdim = image.ndim
-    for subimage, substem in \
-            images_and_names(image, filestem, targetdim, suffix):
-        AnalyzeWriter(subimage, datatype=datatype, scale=scale).write(substem)
+def _construct_dataview(static_typecode, datatype, scaling):
+    new_typecode = datatype2typecode[datatype]
+    xform = lambda d: d
+    if static_typecode.isupper() and datatype != COMPLEX:
+        xform = lambda d: abs(d)
+    if scaling != 1.0:
+        # assume that this will need to be rounded to Int, so add 0.5
+        xform = lambda d,g=xform: g(d)/scaling + 0.5
+    xform = lambda d, g=xform: g(d).astype(new_typecode)
+    return xform
 
 #-----------------------------------------------------------------------------
 def readImage(filename, **kwargs): return AnalyzeImage(filename, **kwargs)

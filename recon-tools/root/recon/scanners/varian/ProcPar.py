@@ -2,7 +2,7 @@
 from os.path import join as pjoin
 from itertools import imap, ifilter
 from tokenize import generate_tokens
-from pylab import Int16, Int32, asarray, floor
+import Numeric as N
 import token as tokids
 
 
@@ -223,12 +223,12 @@ class ProcParImageMixin (object):
     nvol = CachedReadOnlyProperty(lambda self: len(self.vrange), "")
 
     slice_positions = CachedReadOnlyProperty(
-        lambda self: 10.*asarray(self._procpar.pss), "")
+        lambda self: 10.*N.asarray(self._procpar.pss), "")
 
     ### Not exactly in procpar, but useful still
     acq_order = CachedReadOnlyProperty(
-        lambda self: asarray(range(self.nslice-1,-1,-2) +
-                             range(self.nslice-2,-1,-2)), "")
+        lambda self: N.asarray(range(self.nslice-1,-1,-2) +
+                               range(self.nslice-2,-1,-2)), "")
 
     def _get_slice_gap(self):
         if self.pulse_sequence == "mp_flash3d" or self.nslice < 2: return 0.
@@ -306,7 +306,7 @@ class ProcParImageMixin (object):
         lambda self: self._procpar.dp[0]=="y" and 4 or 2, "")
 
     raw_typecode = CachedReadOnlyProperty(
-        lambda self: self._procpar.dp[0]=="y" and Int32 or Int16, "")
+        lambda self: self._procpar.dp[0]=="y" and N.Int32 or N.Int16, "")
 
     echo_factor = CachedReadOnlyProperty(
         lambda self: 2.0*abs(self._procpar.gro[0])\
@@ -317,16 +317,16 @@ class ProcParImageMixin (object):
             return self._procpar.te[0] - self.echo_factor - self._procpar.at[0]
         else:
             return self._procpar.te[0] - \
-              floor(self.pe_per_seg)/2.0*self.echo_spacing
+                   N.floor(self.pe_per_seg)/2.0*self.echo_spacing
     echo_time = CachedReadOnlyProperty(_get_echo_time, "")
 
     echo_spacing = CachedReadOnlyProperty(
         lambda self: self.echo_factor + self._procpar.at[0], "")
 
     pe_times = CachedReadOnlyProperty(
-        lambda self: asarray(
-          [self.echo_time + pe*self.echo_spacing\
-           for pe in range(self.pe_per_seg)]), "")
+        lambda self: N.asarray(
+                        [self.echo_time + pe*self.echo_spacing \
+                         for pe in range(self.pe_per_seg)]), "")
 
     # time between beginning of one PE scan and the next (was dwell_time)
     T_pe = CachedReadOnlyProperty(
