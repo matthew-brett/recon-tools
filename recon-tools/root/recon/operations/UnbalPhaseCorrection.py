@@ -300,8 +300,8 @@ class UnbalPhaseCorrection (Operation):
         # up correctly, theta[s] = A[s]*B ALWAYS!
         (S, M, R) = self.volShape
         (a1, a2, a3, a4, a5, a6) = self.coefs
-        A = N.empty((M, len(self.coefs)-3), N.Float)
-        B = N.empty((len(self.coefs)-3, R), N.Float)
+        A = N.empty((M, len(self.coefs)), N.Float)
+        B = N.empty((len(self.coefs), R), N.Float)
         theta = N.empty(self.volShape, N.Float)
         
         # m_line & zigzag define how the correction changes per PE line
@@ -317,21 +317,21 @@ class UnbalPhaseCorrection (Operation):
 ##         B[0] = g*a1[0]
 ##         B[1] = g*a2[0]
         B[0,:] = (N.arange(R)-R/2)*a1[0]
-        #B[1,:] = (N.arange(R)-R/2)*a2[0]
-        B[1,:] = a3[0]
-        #B[3,:] = a4[0]
-        B[2,:] = a5[0]
-        #B[5,:] = a6[0]
+        B[1,:] = (N.arange(R)-R/2)*a2[0]
+        B[2,:] = a3[0]
+        B[3,:] = a4[0]
+        B[4,:] = a5[0]
+        B[5,:] = a6[0]
         
         # build A matrix, changes slightly as s varies
         A[:,0] = zigzag
-        #A[:,1] = m_line
-        A[:,2] = zigzag
-        #A[:,5] = m_line
+        A[:,1] = m_line
+        A[:,4] = zigzag
+        A[:,5] = m_line
         for s in range(S):
             # these are the slice-dependent columns
-            A[:,1] = s*zigzag
-            #A[:,3] = s*m_line
+            A[:,2] = s*zigzag
+            A[:,3] = s*m_line
             theta[s] = N.dot(A,B)
             
         return theta

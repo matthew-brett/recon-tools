@@ -6,4 +6,6 @@ class ViewImage (Operation):
     "Run the sliceview volume viewer."
     #-------------------------------------------------------------------------
     def run(self, image):
-        sliceview(image.data, ("Time Point", "Slice", "Row", "Column"))
+        dimnames = (image.tdim and ("Time Point",) or ()) + \
+                   ("Slice", "Row", "Column",)
+        sliceview(image[:], dimnames)
