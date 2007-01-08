@@ -73,7 +73,9 @@ class Parameter (object):
         # don't valuate None, especially not as a string
         if valspec is None:
             return valspec
-        else: return self.valuator(valspec)
+        if type(valspec) == type("") and valspec.lower() == 'none':
+            return None
+        return self.valuator(valspec)
 
 
 
@@ -121,7 +123,10 @@ class Operation (object):
               (leftovers[0], self.__class__.__name__))
 
     #-------------------------------------------------------------------------
-    def paramHelp(self):
+    def opHelp(self):
+        print self.__doc__
+        if self.params is not ():
+            print "Parameters definitions:"
         for p in self.params:
             print "%s: %s"%(p.name, p.description)
 

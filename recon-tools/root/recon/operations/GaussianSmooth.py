@@ -12,7 +12,8 @@ def gaussian_smooth(M, fwhm, kernSize):
     """
     ndim = len(M.shape)
     if ndim < 2:
-        raise ValueError("Matrix dimension must be at least 2") # set up guassian kernel
+        raise ValueError("Matrix dimension must be at least 2")
+    # set up guassian kernel
     sigma = fwhm*N.power(8 * N.log(2), -0.5)
     gax = N.arange(kernSize) - (kernSize-1)/2.
     gf = N.exp(-N.power(gax,2)/(2*sigma**2))

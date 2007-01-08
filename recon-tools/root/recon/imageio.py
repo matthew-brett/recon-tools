@@ -34,6 +34,10 @@ def get_dims(data):
 
 ##############################################################################
 class DataChunk (object):
+    """
+    A sub-iterator with N-dimensional data; can offer up further
+    DataChunks with (N-1)-dimensional data
+    """
     def __init__(self, data, num):
         self._data = data
         self.num = num
@@ -91,6 +95,14 @@ class ReconImage (object):
     #-------------------------------------------------------------------------
     def __init__(self, data, xsize, ysize, zsize, tsize,
                  origin=None, orient_xform=None, orient_name=None):
+        """
+        Construct a ReconImage with at least data, xsize, ysize, zsize,
+        and tsize known. Optional information are an origin 3-tuple
+        specifying (x0,y0,z0), a Quaternion object representing the
+        transformation of this data to neurological orientation
+        (+X,+Y,+Z) = (Right,Anterior,Superior), and a name for the data's
+        orientation (used for ANALYZE format output).
+        """
         self.setData(data)
         self.xsize, self.ysize, self.zsize, self.tsize = \
           (xsize, ysize, zsize, tsize)
@@ -118,6 +130,7 @@ class ReconImage (object):
 
     #-------------------------------------------------------------------------
     def setData(self, data):
+        "Inform self about dimension info from the data array"
         self.data = data
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
         self.shape = (self.tdim and (self.tdim,) or ()) + \
@@ -125,6 +138,9 @@ class ReconImage (object):
 
     #-------------------------------------------------------------------------
     def concatenate(self, image, axis=0, newdim=False):
+        """Stitch together two images along a given axis, possibly
+        creating a new dimension
+        """
         self_sizes = (self.xsize, self.ysize, self.zsize)
         image_sizes = (image.xsize, image.ysize, image.zsize)
 
@@ -140,6 +156,7 @@ class ReconImage (object):
 
     #-------------------------------------------------------------------------
     def __iter__(self):
+        "Handles iteration over the image--always yields a 3D DataChunk"
         # want to iterate over volumes, if tdim=0, then nvol = 1
         if len(self.shape) > 3:
             for t in range(self.tdim):
@@ -173,12 +190,15 @@ class ReconImage (object):
 
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
+        "returns subnum-th sub-image with dimension ndim-1"
         ##!! Need to fix locations here !!##
         return self._subimage(self.data[subnum])
 
     #-------------------------------------------------------------------------
     def subImages(self):
-        for subnum in xrange(len(self.data)): yield self.subImage(subnum)
+        "yeilds all images of dimension self.ndim-1"
+        for subnum in xrange(len(self.data)):
+            yield self.subImage(subnum)
 
     #-------------------------------------------------------------------------
     def resize(self, newsize_tuple):

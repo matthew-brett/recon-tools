@@ -2,6 +2,7 @@
 from optparse import OptionParser, Option
 import os, sys
 import recon.conf
+import recon
 from recon.operations.WriteImage import WriteImage, \
      output_datatypes as output_datatype_choices
 from recon.imageio import available_writers as output_format_choices
@@ -26,36 +27,32 @@ class Recon (ConsoleTool):
         # reserving obvious -o for --outfile or something
       Option("-p", "--oplist", dest="oplist", type="string",
         default=None, action="store",
-        help="Name of the oplist file describing operations and operation" \
-        " parameters."),
+        help="Name of the oplist file describing operations and parameters."),
 
       Option("-r", "--vol-range", dest="vol_range", type="string",
         default=":", action="store",
-        help="Which image volumes to reconstruct.  Format is start:end, "
+        help="Which image volumes to reconstruct. Format is start:end, "\
         "where either start or end may be omitted, indicating to start "\
-        "with the first or end with the last respectively.  The index of "\
-        "the first volume is 0.  The default value is a single colon "\
-        "with no start or end specified, meaning process all image volumes.  "\
-        "(NOTE: this option refers specifically to *image* volumes, not to "\
-        "reference scans, so that the first image volume means the first "\
-        "found after any reference scans.)"),
+        "with the first or end with the last respectively. The index of "\
+        "the first volume is 0. The default value is a single colon "\
+        "with no start or end specified, meaning process all image volumes."),
 
       Option("-f", "--file-format", dest="file_format", action="store",
         type="choice", default=output_format_choices[0],
         choices=output_format_choices,
-        help="""{%s}
-        analyze: Save individual image for each frame in analyze format.
-        nifti-dual: save nifti file in (hdr, img) pair.
-        nifti-single: save nifti file in single-file format."""%\
-          ("|".join(output_format_choices))),
+        help="{%s} "\
+        "analyze: Save individual image for each frame in analyze format. "\
+        "nifti-dual: save nifti file in (hdr, img) pair. "\
+        "nifti-single: save nifti file in single-file format."%\
+             (" | ".join(output_format_choices))),
 
       Option("-y", "--output-data-type", dest="output_datatype",
         type="choice", default=output_datatype_choices[0], action="store",
         choices=output_datatype_choices,
         help="""{%s}
         Specifies whether output images should contain only magnitude or
-        both the real and imaginary components (only valid for analyze
-        format)."""%("|".join(output_datatype_choices))),
+        both the real and imaginary components."""%\
+             (" | ".join(output_datatype_choices))),
 
       Option("-l", "--log-file", default=default_logfile,
         help="where to record reconstruction details ('%s' by default)"\
@@ -66,20 +63,21 @@ class Recon (ConsoleTool):
              "but expect memory usage to go up by a factor of 4."),
 
       Option("-s", "--suffix", action="store", default=None,
-             help="Over-rides the default naming of output files."),
+             help="Overrides the default naming of output files."),
 
       Option("-n", "--filedim", action="store", default=3,
              help="Sets the number of dimensions per output file "\
-             "(defaults to 3"),
+             "(defaults to 3)"),
 
-      Option("-u", "--opusage", action="store", default=None,
-             help="run as -u opname, gives info on opname's paramters"))
+      Option("-u", "--opusage", dest="opname", action="store", default=None,
+             help="gives info on an operation and its parameters"))
 
       
 
     #-------------------------------------------------------------------------
     def __init__(self, *args, **kwargs):
-        OptionParser.__init__(self, *args, **kwargs)
+        v = "ReconTools " + recon.__version__
+        OptionParser.__init__(self, version=v, *args, **kwargs)
         self.set_usage("usage: %prog [options] datadir outfile")
         self.add_options(self.options)
 
@@ -104,7 +102,7 @@ class Recon (ConsoleTool):
             print "There is no operation named %s"%opname
         else:
             print "help for %s"%opname            
-            self._opmanager.getOperation(opname)().paramHelp()
+            self._opmanager.getOperation(opname)().opHelp()
         sys.exit(0)
         
     #-------------------------------------------------------------------------
@@ -214,8 +212,8 @@ class Recon (ConsoleTool):
     
         options, args = self.parse_args()
         options.vrange = self.parseVolRange(options.vol_range)
-        if options.opusage is not None:
-            self._printOpHelp(options.opusage)
+        if options.opname is not None:
+            self._printOpHelp(options.opname)
         # Recon can be run with these combos defined:
         # (_, _) (first logic stage, try to find fid files in pwd)
         # (args, _) (2nd logic stage, try to find default oplist)

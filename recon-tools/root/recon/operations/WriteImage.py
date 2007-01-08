@@ -6,7 +6,7 @@ from odict import odict
 
 param2dtype = odict((
     ('magnitude', N.Float32),
-    ('compmlex', N.Complex32),
+    ('complex', N.Complex32),
     ('double', N.Float),
     ('byte', N.Int8),
     ('short', N.Int16),
