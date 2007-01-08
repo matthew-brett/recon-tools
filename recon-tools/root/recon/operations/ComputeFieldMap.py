@@ -74,4 +74,5 @@ class ComputeFieldMap (Operation):
         for index in range(phase_map.shape[0]):
             catIm = fmap_im.subImage(index).concatenate(
                 bmask_im.subImage(index), newdim=True)
-            writeImage(catIm, self.fmap_file+"-%d"%index, filetype="single")
+            writeImage(catIm, self.fmap_file+"-%d"%index,
+                       format="nifti-single", filetype="single")

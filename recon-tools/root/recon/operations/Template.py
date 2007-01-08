@@ -4,7 +4,8 @@
 
 #here I'm importing various definitions from outside of Python:	
 from recon.operations import Operation, Parameter
-from pylab import reshape, arange, identity, matrixmultiply, inverse
+#import the entire Numeric package, renamed as N for convenience
+import Numeric as N
 
 #I can define a helper function outside of run(image) if it makes
 #sense to do so:
@@ -21,20 +22,22 @@ def doNothing(slice, fprm, iprm, xSize, ySize):
     """
    
     #giving some examples of working with arrays in Python
-    #creating an identity matrix
-    id = identity(xSize)
+    #creating an identity matrix (Numeric functions are accessed as
+    #members of the package, which was imported as N)
+    id = N.identity(xSize)
     #creating a "column vector" [0 1 2 3 ... xdim-1]^T
-    b = reshape(arange(xSize), (xSize, 1))
+    b = N.reshape(N.arange(xSize), (xSize, 1))
     #in Python, be careful with your multiplications! If you say:
     #c = id*b
     #meaning to get a copy of b, you'd be surprised to get instead
-    #a diagonal matrix whose trace = [0 + 1 + 2 + ... + xdim-1]. What's happened?
+    #a diagonal matrix whose trace = [0 + 1 + 2 + ... + xdim-1].
+    #What's happened?
     #Python has in fact treated b as an array (which, to be fair, it is)
     #and multiplied it element-wise by the arrays which form the rows in id.
     #If you are familiar with Matlab, this is similar to the .* operation.
     #
     #What I want to say is:
-    c = matrixmultiply(id,b)
+    c = N.dot(id,b)
     #yes, order of parameters is important
     #
     #standard notation for arithmetic is fine for vector/matrix scaling
@@ -43,14 +46,16 @@ def doNothing(slice, fprm, iprm, xSize, ySize):
     #subtracting a DC offset
     c = b - fprm
 	
-    #there are also several standard operations in pylab or Numeric, eg:
-    little_id = inverse(big_id)
+    #there are also several standard operations in pylab or Numeric,
+    #eg "inverse" (which is part of LinearAlgebra, provided by Numeric)
+    import LinearAlgebra as LA
+    little_id = LA.inverse(big_id)
 	
     #can't do it on non-square matrices
     if(ySize != xSize):
         return slice
     #else return, NOTHING!
-    return matrixmultiply(id,slice)
+    return N.dot(id,slice)
     #done
 
 #the following line declares a class, and from what class it inherits:	
@@ -64,7 +69,7 @@ class Template (Operation):
 
     #the Parameter objects in params are all constructed with four
     #elements: Parameter(name, type, default, description).
-    #I would skip these definitions if I weren't using parameters
+    #If you're not using any Parameters, skip this step
 
     #This params list is actually a Python "tuple". Examples:
     # 3-tuple: (a, b, c); 2-tuple: (a, b); 1-tuple: (a,)
@@ -79,13 +84,21 @@ class Template (Operation):
 
     #note the definition of run: the declaration MUST be this way 
     def run(self, image):
-        # do something to image.data here...
+        # do something to the ReconImage "image" here...
 
-        (xSize, ySize) = (image.xdim, image.ydim)
-        # a Python way of iterating through multiple dimensions
-        for vol in image.data:
+        #Numeric arrays are indexed in C-order. For a time-series
+        #of volumes, image[t,z,y,x] is the voxel at point (x,y,z,t)
+        #Be aware that this is the opposite of MATLAB indexing.
+        
+        #So, the length of the y-dim and x-dim are always the last 2 dimensions
+        (ySize, xSize) = image.shape[-2:]
+        # a Python way of iterating (secretly using ReconImage's __iter__)
+        for vol in image:
+            #every "vol" in this iteration is a 3D DataChunk object;
+            #a DataChunk also supports __iter__ and can slice into the data
             for slice in vol:
-                slice[:] = doNothing(slice, fparm, iparm, xSize, ySize)
+                #every slice is a 2D DataChunk
+                slice[:] = doNothing(slice[:], fparm, iparm, xSize, ySize)
 
 	# here the data is being changed in-place
         # final note: the operation returns nothing
