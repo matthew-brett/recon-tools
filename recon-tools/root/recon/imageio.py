@@ -24,9 +24,11 @@ def get_dims(data):
     Extract ndim, tdim, zdim, ydim, and xdim from data shape.
     @return: (ndim, tdim, zdim, ydim, xdim)
     """
-    # For consistency, 1-volume images have 4 data dimensions.
-    # Let's not reflect this in the image properties. 
-    shape = data.shape[0] == 1 and data.shape[1:] or data.shape
+    # In case the data dimension size for t or z are 1,
+    # let's not reflect this in the image properties. 
+    shape = data.shape
+    while shape[0] < 2:
+        shape = shape[1:]
     ndim = len(shape)
     if ndim < 2 or ndim > 4:
         raise ValueError("data shape %s must be 2, 3, or 4 dimensional"%shape)
@@ -133,8 +135,9 @@ class ReconImage (object):
         "Inform self about dimension info from the data array"
         self.data = data
         self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
-        self.shape = (self.tdim and (self.tdim,) or ()) + \
-                     (self.zdim, self.ydim, self.xdim)
+        self.shape = (self.tdim, self.zdim, self.ydim, self.xdim)
+        while self.shape[0] < 2:
+            self.shape = self.shape[1:]
 
     #-------------------------------------------------------------------------
     def concatenate(self, image, axis=0, newdim=False):

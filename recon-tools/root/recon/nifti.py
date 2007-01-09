@@ -9,7 +9,7 @@ from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
      Quaternion, range_exceeds, volume_min, volume_max
 from recon.imageio import ReconImage
 from recon.analyze import datatype2bitpix, datatype2typecode, \
-     typecode2datatype, byteorders, _construct_dataview
+     typecode2datatype, byteorders, _construct_dataview, canonical_orient
 
 # datatype is a bit flag into the datatype identification byte of the NIFTI
 # header. 
@@ -174,6 +174,7 @@ class NiftiImage (ReconImage):
             (hd_vals['quatern_b'], hd_vals['quatern_c'],
              hd_vals['quatern_d'], hd_vals['qfac'])
         self.orientation_xform = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
+        self.orientation = canonical_orient(self.orientation_xform.tomatrix())
         self.vox_offset, self.datatype, self.bitpix = \
                          (hd_vals['vox_offset'], hd_vals['datatype'],
                           hd_vals['bitpix'])
@@ -203,8 +204,9 @@ class NiftiImage (ReconImage):
             byteoffset = vstart*bytepix*N.product((self.zdim,
                                                    self.ydim,self.xdim))
 
-        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
-                          or (self.zdim, self.ydim, self.xdim)
+        dims = self.tdim > 1 and (self.tdim, self.zdim, self.ydim, self.xdim) \
+               or self.zdim > 1 and (self.zdim, self.ydim, self.xdim) \
+               or (self.ydim, self.xdim)
         datasize = bytepix * N.product(dims)
         fp.seek(byteoffset, 1)
         image = N.fromstring(fp.read(datasize), numtype)

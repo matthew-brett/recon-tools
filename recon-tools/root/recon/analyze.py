@@ -70,7 +70,12 @@ xforms = {
                                  [-1., 0., 0.],]),
     }
 
-
+def canonical_orient(xform):
+    N.putmask(xform, abs(xform) < .0001, 0)
+    for k,v in xforms.items():
+        if N.sum(abs(v.flat) - abs(xform.flat)) == 0:
+            return k
+    return ""
 
 # what is native and what is swapped?
 byteorders = {
