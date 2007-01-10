@@ -127,6 +127,9 @@ class FillHalfSpace (Operation):
         new_shape = list(image.shape)
         new_shape[-2] = self.fill_size
         image.resize(new_shape)
+        # often the ysize is set wrong--as if the Y-dimension spanns the FOV
+        if image.ysize > image.xsize:
+            image.ysize = image.xsize
 
         for new_vol, old_vol in zip(image, old_image):
             if self.method == "iterative":

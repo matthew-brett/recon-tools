@@ -43,8 +43,6 @@ class RotPlane (Operation):
             dest_xform = xforms.get(self.orient_target, None)
             Tr = image.orientation_xform.tomatrix()        
             Ts = N.dot(dest_xform, Tr)
-            # clean up Ts
-            N.putmask(Ts, abs(Ts)<.0001, 0)
         print Ts
         qform = util.Quaternion(M=LA.inverse(dest_xform))
         image.orientation_xform = qform

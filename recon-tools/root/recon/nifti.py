@@ -287,9 +287,10 @@ class NiftiWriter (object):
         Qform = image.orientation_xform.Q
         Qform_mat = image.orientation_xform.tomatrix()
         qoffset = -N.dot(Qform_mat, N.asarray([image.x0, image.y0, image.z0]))
+        (pe_dim, fe_dim) = Qform_mat[0,0] == 0. and (2, 1) or (1, 2)
 
         imagevalues = {
-          'dim_info': (3<<4 | 2<<2 | 1),
+          'dim_info': (3<<4 | pe_dim<<2 | fe_dim),
           'slice_code': NIFTI_SLICE_SEQ_INC,
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],

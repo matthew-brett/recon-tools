@@ -529,6 +529,7 @@ class Quaternion:
         R[2,0] = 2.*(b*d - a*c)
         R[2,1] = 2.*(c*d + a*b)
         R[2,2] = (a*a + d*d - c*c - b*b)*self.qfac
+        N.putmask(R, abs(R) < 1e-5, 0.)
         return R
     
     def mult(self, quat):

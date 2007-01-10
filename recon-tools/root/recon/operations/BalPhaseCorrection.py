@@ -3,6 +3,7 @@
 import Numeric as N
 from MLab import angle, diag
 from LinearAlgebra import singular_value_decomposition as svd
+import pylab as P
 
 from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import ifft, apply_phase_correction, linReg, checkerline, \
@@ -54,6 +55,7 @@ class BalPhaseCorrection (Operation):
         
         # comes back smaller! read direction goes from lin1:lin2
         phs_vol = unwrap_ref_volume(angle(inv_ref), self.lin1, self.lin2)
+        #phs_vol = angle(inv_ref)[...,self.lin1:self.lin2]
         
         s_mask = N.zeros(n_slice) # this will be 4 most "linear" slices
         r_mask = N.ones((self.lin_fe)) #
@@ -62,11 +64,9 @@ class BalPhaseCorrection (Operation):
         #u_mask[46:] = 0
         res = N.zeros((n_slice,), N.Float)
         for s in range(n_slice):
-            for row in phs_vol[s]:
+            for rn,row in enumerate(phs_vol[s]):
                 (_, _, r) = linReg(row, X=N.arange(self.lin_fe))
                 res[s] += r
-                #plot(row)
-            #show()
 
         # find 4 slices with smallest residual
         sres = N.sort(res)
@@ -76,10 +76,10 @@ class BalPhaseCorrection (Operation):
         
         self.coefs = (b1,b7,b8,b5,b6) = \
                          self.solve_phase(phs_vol, r_mask, u_mask, s_mask)
-        print self.coefs
+        #print self.coefs
         Tl = image.T_pe
         delT = image.delT
-        print "Tl = %f; delT = %f"%(Tl,delT,)
+        #print "Tl = %f; delT = %f"%(Tl,delT,)
         theta_vol = self.correction_volume(Tl, delT)
 
         from recon.tools import Recon
@@ -139,11 +139,11 @@ class BalPhaseCorrection (Operation):
                 A[row_start:row_end,B5] = (u-U/2)*(r_ind+self.lin1-R/2) # ditto
                 A[row_start:row_end,B6] = (u-U/2)*s
                 
-        f = open("matrix", "w")
-        f.write("[b1 r*b7 s*b8 u*r*b5 u*s*b6]\n")
-        for row in A:
-            f.write("[%d %d %d %d %d]\n"%(tuple(row)))
-        f.close()
+##         f = open("matrix", "w")
+##         f.write("[b1 r*b7 s*b8 u*r*b5 u*s*b6]\n")
+##         for row in A:
+##             f.write("[%d %d %d %d %d]\n"%(tuple(row)))
+##         f.close()
         
         [u,s,vt] = svd(A)
         V = N.dot(N.transpose(vt), N.dot(diag(1/s), N.dot(N.transpose(u), P)))
@@ -174,9 +174,11 @@ class BalPhaseCorrection (Operation):
         """
         (S, M, R) = self.volShape
         (b1,b7,b8,b5,b6) = self.coefs
-        #b2 = (delT/Tl)*b5[0]
-        #b3 = (delT/Tl)*b6[0]
-        #b4 = (Tl/delT)*b1[0]
+        print delT, Tl
+        b2 = (delT/Tl)*b5[0]
+        b3 = (delT/Tl)*b6[0]
+        b4 = (Tl/delT)*b1[0]
+        print `["%2.8f"%flo for flo in [b1,b2,b3,b4,b5,b6,b7,b8]]`
         b2=b3=b4 = 0.0
         A = N.empty((M, 8), N.Float)
         B = N.empty((8, R), N.Float)

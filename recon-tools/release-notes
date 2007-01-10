@@ -1,5 +1,7 @@
 recon-tools-0.4r2   (beta)                                         12/??/2006
 - ...
+- new recon option -u/--opusage can query a given op for Parameter hints
+  ( use like recon -u GeometricUndistortionK )
 - major overhaul of image class
 - fix to mpflash3d z-dimension length calculation
 - fix to FixTimeSkew on odd-number-of-volumes issue
