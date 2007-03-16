@@ -1,0 +1,13 @@
+# $Id: $
+PortSystem	1.0
+PortGroup	python24 1.0
+
+name		python-recon-tools
+version		0.5
+categories	python
+maintainers	mtrumpis@gmail.com
+description	mri reconstruction tools
+long_description    ditto
+homepage	https://cirl.berkeley.edu/view/BIC/ReconTools
+master_sites	https://cirl.berkeley.edu/twiki/pub/BIC/ReconTools/
+checksums	md5 f7adee2265de90d85a5012fc7d9d653f

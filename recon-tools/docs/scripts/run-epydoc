@@ -1,0 +1,11 @@
+#!/bin/sh
+PYTHON_PATH=../../root
+output_dir=../api
+mkdir -p ${output_dir}
+epydoc -qqqq \
+  --output ${output_dir} \
+  --name recon-tools \
+  --css grayscale \
+  --no-private \
+  --ignore-param-mismatch \
+  $PYTHON_PATH/*.py $PYTHON_PATH/recon
