@@ -158,8 +158,9 @@ def sawtoothVolSeries(dims):
             for x in range(nx):
                 vol_series[:,s,y,2*x] = (real_ts*32767.).astype(Int16)
                 vol_series[:,s,y,2*x+1] = (imag_ts*32767.).astype(Int16)
-    writeFid(vol_series)
-    return real_ts    
+    #writeFid(vol_series)
+    #return real_ts
+    return vol_series
 
 
 

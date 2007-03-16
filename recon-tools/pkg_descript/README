@@ -1,7 +1,0 @@
-Here are some files which describe how to do an on-line build with various
-packaging systems.
-
-DarwinPorts: Portfile
-Gentoo Portage: imaging-tools.ebuild
-more to come?
-
