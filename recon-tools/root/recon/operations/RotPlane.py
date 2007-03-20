@@ -49,7 +49,7 @@ class RotPlane (Operation):
         Ts = N.dot(N.linalg.inv(dest_xform), Tr)
         qform = util.Quaternion(M=dest_xform)
         image.orientation_xform = qform
-        rot = self.compose_xform(Ts)
+        rot = compose_xform(Ts)
         ### do transform + book-keeping
         temp = rot(image.data)
         # now want to reorder array elements, not change sign:
@@ -66,34 +66,36 @@ class RotPlane (Operation):
         # name the orientation, for ANALYZE users
         image.orientation = self.orient_target
 
+#-----------------------------------------------------------------------------
+def compose_xform(mat):
+    if not mat[-1,-1]:
+        raise ValueError("something's bungled!")
+    xform = lambda x: x
+    if not mat[0,0]:
+        xform = lambda x, g=xform: N.swapaxes(g(x), -1, -2)
+    if (mat[1,0] < 0 or mat[1,1] < 0):
+        # need to flip +y -> -y
+        xform = lambda x, g=xform: reverse_y(g(x))
+    if (mat[0,0] < 0 or mat[0,1] < 0):
+        # need to flip +x -> -x
+        xform = lambda x, g=xform: reverse_x(g(x))
+    if mat[-1,-1] < 0:
+        xform = lambda x, g=xform: reverse_z(g(x))
+    return xform
 
-    def compose_xform(self, mat):
-        if not mat[-1,-1]:
-            raise ValueError("something's bungled!")
-        xform = lambda x: x
-        if not mat[0,0]:
-            xform = lambda x, g=xform: N.swapaxes(g(x), -1, -2)
-        if (mat[1,0] < 0 or mat[1,1] < 0):
-            # need to flip +y -> -y
-            xform = lambda x, g=xform: reverse_y(g(x))
-        if (mat[0,0] < 0 or mat[0,1] < 0):
-            # need to flip +x -> -x
-            xform = lambda x, g=xform: reverse_x(g(x))
-        if mat[-1,-1] < 0:
-            xform = lambda x, g=xform: reverse_z(g(x))
-        return xform
-        
-            
+#-----------------------------------------------------------------------------
 def reverse_x(M):
     slices = [slice(0,d) for d in M.shape]
     slices[-1] = slice(M.shape[-1], None, -1)
     return M[slices]
 
+#-----------------------------------------------------------------------------
 def reverse_y(M):
     slices = [slice(0,d) for d in M.shape]
     slices[-2] = slice(M.shape[-2], None, -1)
     return M[slices]
 
+#-----------------------------------------------------------------------------
 def reverse_z(M):
     slices = [slice(0,d) for d in M.shape]
     slices[-3] = slice(M.shape[-3], None, -1)

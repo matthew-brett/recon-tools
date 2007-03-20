@@ -15,6 +15,9 @@ from recon.imageio import readImage
 from odict import odict
 
 def iscomplex(a): return a.imag.any()
+def ifdefset(a, b):
+    if b is not None:
+        a = b
 
 # Transforms for viewing different aspects of complex data
 def ident_xform(data): return data
@@ -64,6 +67,25 @@ ui_info = \
         <menuitem action='summer'/>
         <menuitem action='winter'/>
       </menu>
+      <menu action='Interpolation'>
+        <menuitem action='nearest'/>
+        <menuitem action='bilinear'/>
+        <menuitem action='bicubic'/>
+        <menuitem action='spline16'/>
+        <menuitem action='spline36'/>
+        <menuitem action='hanning'/>
+        <menuitem action='hamming'/>
+        <menuitem action='hermite'/>
+        <menuitem action='kaiser'/>
+        <menuitem action='quadric'/>
+        <menuitem action='catrom'/>
+        <menuitem action='gaussian'/>
+        <menuitem action='bessel'/>
+        <menuitem action='mitchell'/>
+        <menuitem action='sinc'/>
+        <menuitem action='lanczos'/>
+        <menuitem action='blackman'/>
+      </menu>
       <menuitem action='Contour Plot'/>
     </menu>
     <menu action='OverlayMenu'>
@@ -98,6 +120,13 @@ cmap_lookup = odict((
     (20, P.cm.summer),
     (21, P.cm.winter),
     ))
+
+interpo_methods = ['nearest', 'bilinear', 'bicubic', 'spline16', 'spline36',
+                      'hanning', 'hamming', 'hermite', 'kaiser', 'quadric',
+                      'catrom', 'gaussian', 'bessel', 'mitchell', 'sinc',
+                      'lanczos', 'blackman']
+
+interpo_lookup = odict([(num, name) for num,name in enumerate(interpo_methods)])
 
 ##############################################################################
 class sliceview (gtk.Window):
@@ -224,7 +253,8 @@ class sliceview (gtk.Window):
     def getOverlaySlice(self):
         if self.overlay_data is not None:
             slices = self.control_panel.getIndexSlices()
-            slices = slices[-3:]
+            slices = (slices[-3],) + tuple([slice(0,d)
+                                            for d in self.overlay_data.shape[-2:]])
             return self.transform(self.overlay_data[slices])
         
     #-------------------------------------------------------------------------
@@ -361,14 +391,16 @@ class sliceview (gtk.Window):
         self.norm = P.normalize(vmin=self.blkpt, vmax=self.whtpt*scale)
    
     #-------------------------------------------------------------------------
-
     def launch_contour_tool(self, action):
         self.contour_tools = ContourToolWin(self.sliceplot, self)
 
+    #-------------------------------------------------------------------------
     def launch_overlay_toolbox(self, action):
         if self.overlay_data is not None:
-            self.overlay_tools = OverlayToolWin(self.overlay, self)
-
+            if not hasattr(self, "overlay_tools") or not self.overlay_tools:
+                self.overlay_tools = OverlayToolWin(self.overlay, self)
+            
+    #-------------------------------------------------------------------------
     def activate_action(self, action):
         self.dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
             gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
@@ -377,7 +409,22 @@ class sliceview (gtk.Window):
         self.dialog.connect ("response", lambda d, r: d.destroy())
         self.dialog.show()
 
-    
+    #-------------------------------------------------------------------------
+    def activate_radio_action(self, action, current):
+        active = current.get_active()
+        value = current.get_current_value()
+
+        if active:
+            dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
+                gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
+                "You activated radio action: \"%s\" of type \"%s\".\nCurrent value: %d" %
+                (current.get_name(), type(current), value))
+
+            # Close dialog on user response
+            dialog.connect("response", lambda d, r: d.destroy())
+            dialog.show()
+
+    #-------------------------------------------------------------------------
     def ask_fname(self, prompt, action="save", filter=None):
         mode = {
             "save": gtk.FILE_CHOOSER_ACTION_SAVE,
@@ -400,6 +447,7 @@ class sliceview (gtk.Window):
         dialog.destroy()
         return fname
 
+    #-------------------------------------------------------------------------
     def save_png(self, action):
         # save a PNG of the current image and the current scaling
         fname = self.ask_fname("Save image as...")
@@ -409,6 +457,7 @@ class sliceview (gtk.Window):
         im = self.sliceplot.getImage().make_image()
         im.write_png(fname)
 
+    #-------------------------------------------------------------------------
     def save_png_montage(self, action):
         # make a montage PNG, for now make 5 slices to a row
         # make images 128x128 pix
@@ -457,20 +506,7 @@ class sliceview (gtk.Window):
                 t.set_size(12)
         fig.savefig(fname, dpi=figdpi)
 
-    def activate_radio_action(self, action, current):
-        active = current.get_active()
-        value = current.get_current_value()
-
-        if active:
-            dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
-                gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
-                "You activated radio action: \"%s\" of type \"%s\".\nCurrent value: %d" %
-                (current.get_name(), type(current), value))
-
-            # Close dialog on user response
-            dialog.connect("response", lambda d, r: d.destroy())
-            dialog.show()
-
+    #-------------------------------------------------------------------------
     def initoverlay(self, action):
         image_filter = gtk.FileFilter()
         image_filter.add_pattern("*.hdr")
@@ -492,25 +528,34 @@ class sliceview (gtk.Window):
         self.overlay = OverLay(self.sliceplot, norm=self.overlay_norm)
         self.updateSlice()
 
+    #-------------------------------------------------------------------------
     def killoverlay(self, action):
         if self.overlay_data is not None:
             self.overlay.removeSelf()
-            if self.overlay_tools:
+            if hasattr(self, "overlay_tools") and self.overlay_tools:
                 self.overlay_tools.destroy()
                 del self.overlay_tools
             del self.overlay
             del self.overlay_data
             self.overlay_data = None
-                            
+
+    #-------------------------------------------------------------------------
     def cmap_handler(self, action, current):
         # cmap_lookup defined in this module
         cmap = cmap_lookup[current.get_current_value()]
         self.sliceplot.setCmap(cmap)
         self.status.cbar.setCmap(cmap)
 
+    #-------------------------------------------------------------------------
+    def interpo_handler(self, action, current):
+        interp_method = interpo_lookup[current.get_current_value()]
+        self.sliceplot.setInterpo(interp_method)
+
+    #-------------------------------------------------------------------------
     def scale_handler(self, action, current):
         self.scale_image(current.get_current_value())
 
+    #-------------------------------------------------------------------------
     def scale_image(self, scale):
         base_img_size = min(self.control_panel.getRowDim().size,
                             self.control_panel.getColDim().size)
@@ -532,6 +577,7 @@ class sliceview (gtk.Window):
         self.sliceplot.set_size_request(canvas_size,canvas_size)
         self.sliceplot.draw()
 
+    #-------------------------------------------------------------------------
     def auto_scale_image(self):
         # try to find some scale that gets ~ 256x256 pixels
         base_img_size = min(self.control_panel.getRowDim().size,
@@ -548,13 +594,15 @@ class sliceview (gtk.Window):
         self.sliceplot.set_size_request(canvas_size,canvas_size)
         #self.sliceplot.draw()
         return P
-        
+
+    #-------------------------------------------------------------------------
     def _create_action_group(self, default_scale):
         entries = (
             ( "FileMenu", None, "_File" ),
             ( "ToolsMenu", None, "_Tools" ),
             ( "SizeMenu", None, "_Image Size" ),
             ( "ColorMapping", None, "_Color Mapping"),
+            ( "Interpolation", None, "_Interpolation"),
             ( "Save Image", gtk.STOCK_SAVE,
               "_Save Image", "<control>S",
               "Saves current slice as PNG",
@@ -595,30 +643,12 @@ class sliceview (gtk.Window):
             ( "8x", None, "_8x", None, "", 8 )
         )
 
-        cmap_toggles = (
-            ( "Blues", None, "_Blues", None, "", 0 ),
-            ( "Greens", None, "_Greens", None, "", 1 ),
-            ( "Greys", None, "_Greys", None, "", 2 ),
-            ( "Oranges", None, "_Oranges", None, "", 3 ),
-            ( "Purples", None, "_Purples", None, "", 4 ),
-            ( "Reds", None, "_Reds", None, "", 5 ),
-            ( "Spectral", None, "_Spectral", None, "", 6 ),
-            ( "autumn", None, "_autumn", None, "", 7 ),
-            ( "bone", None, "_bone", None, "", 8 ),
-            ( "cool", None, "_cool", None, "", 9 ),
-            ( "copper", None, "_copper", None, "", 10 ),
-            ( "gist_earth", None, "_gist_earth", None, "", 11 ),
-            ( "gist_gray", None, "_gist_gray", None, "", 12 ),
-            ( "gist_heat", None, "_gist_heat", None, "", 13 ),
-            ( "gist_rainbow", None, "_gist_rainbow", None, "", 14 ),
-            ( "gray", None, "_gray", None, "", 15 ),
-            ( "hot", None, "_hot", None, "", 16 ),
-            ( "hsv", None, "_hsv", None, "", 17 ),
-            ( "jet", None, "_jet", None, "", 18 ),
-            ( "spring", None, "_spring", None, "", 19 ),
-            ( "summer", None, "_summer", None, "", 20 ),
-            ( "winter", None, "_winter", None, "", 21 ),
-        )
+        cmap_toggles = tuple([(cmap.name.strip(), None,
+                               "_"+cmap.name.strip(), None, "", num)
+                              for num, cmap in cmap_lookup.items()])
+
+        interpo_toggles = tuple([(i, None, "_"+i, None, "", num)
+                                 for num, i in interpo_lookup.items()])
 
         action_group = gtk.ActionGroup("WindowActions")
         action_group.add_actions(entries)
@@ -626,6 +656,8 @@ class sliceview (gtk.Window):
                                        self.scale_handler)
         action_group.add_radio_actions(cmap_toggles, 8,
                                        self.cmap_handler)
+        action_group.add_radio_actions(interpo_toggles, 0,
+                                       self.interpo_handler)
         return action_group
 
 ##############################################################################
@@ -659,15 +691,18 @@ class ContourToolWin (gtk.Window):
         P.show()
         #gtk.main()
 
+    #-------------------------------------------------------------------------
     def _takedown(self, foo):
         self.sliceplot.killContour()
         self.padre.contour_tools = None
         foo.destroy()
 
+    #-------------------------------------------------------------------------
     def setContours(self, levels):
         cset = self.sliceplot.doContours(levels)
         self.draw_bar(cset)
 
+    #-------------------------------------------------------------------------
     def draw_bar(self, cset):
         # try to fix cset levels to 4 significant digits
         cset.levels = P.floor(0.5 + cset.levels*1000)/1000.
@@ -675,6 +710,7 @@ class ContourToolWin (gtk.Window):
         self.fig.colorbar(cset, self.cbar_ax)
         self.figcanvas.draw()        
 
+    #-------------------------------------------------------------------------
     def clevel_handler(self, adj):
         self.setContours(int(self.levSlider.get_value()))
 
@@ -695,7 +731,7 @@ class OverlayToolWin (gtk.Window):
         self.alphaslider.set_value_pos(gtk.POS_RIGHT)
         self.alphaslider.get_adjustment().connect("value-changed",
                                                   self.alpha_handler)
-        self.vbox.pack_start(gtk.Label("Transparency level"), False, False, 0)
+        self.vbox.pack_start(gtk.Label("Opaqueness level"), False, False, 0)
         self.vbox.pack_start(self.alphaslider)
 
         self.vbox.pack_start(gtk.HSeparator(), expand=False)
@@ -710,6 +746,16 @@ class OverlayToolWin (gtk.Window):
         self.vbox.pack_start(gtk.Label("Overlay colormap"),
                              False, False, 0)
         self.vbox.pack_start(self.cmap_list)
+
+        # add interpolation combo box and label
+        self.interpo_list = gtk.combo_box_new_text()
+        for interpo in interpo_lookup.values():
+            self.interpo_list.append_text(interpo)
+        self.interpo_list.set_active(interpo_lookup.values().index("nearest"))
+        self.interpo_list.connect("changed", self.interpo_handler)
+        self.vbox.pack_start(gtk.Label("Overlay interpolation"),
+                             False, False, 0)
+        self.vbox.pack_start(self.interpo_list)
         gtk.Window.__init__(self)
         self.set_destroy_with_parent(True)
         self.connect("destroy", self._takedown)
@@ -719,17 +765,24 @@ class OverlayToolWin (gtk.Window):
         self.show_all()
         P.show()
 
+    #-------------------------------------------------------------------------
     def _takedown(self, foo):
         self.padre.overlay_tools = None
         foo.destroy()
 
+    #-------------------------------------------------------------------------
     def alpha_handler(self, adj):
         self.overlay_ref.setAlpha(self.alphaslider.get_value())
 
+    #-------------------------------------------------------------------------
     def cmap_handler(self, cbox):
         cmap = cmap_lookup[cbox.get_active()]
         self.overlay_ref.setCmap(cmap)
-        
+
+    #-------------------------------------------------------------------------
+    def interpo_handler(self, cbox):
+        interpo = interpo_lookup[cbox.get_active()]
+        self.overlay_ref.setInterpo(interpo)
 
 ##############################################################################
 class Dimension (object):
@@ -977,8 +1030,11 @@ class ColPlot (FigureCanvas):
 class SlicePlot (FigureCanvas):
     "A Canvas class containing a 2D matplotlib plot"    
     #-------------------------------------------------------------------------
-    def __init__(self, data, x, y, cmap=P.cm.bone, norm=None):
-        self.norm = None
+    def __init__(self, data, x, y, cmap=P.cm.bone,
+                 norm=None, interpolation="nearest"):
+        self.norm = norm
+        self.cmap = cmap        
+        self.interpolation=interpolation
         self.hasContours = False
         self.contourLevels = 7
         fig = P.Figure(figsize=P.figaspect(data), dpi=80)
@@ -986,8 +1042,7 @@ class SlicePlot (FigureCanvas):
         ax.yaxis.tick_right()
         ax.title.set_y(1.05) 
         FigureCanvas.__init__(self, fig)
-        self.cmap = cmap
-        self.setData(data, norm=norm)
+        self.setData(data)
         self._init_crosshairs(x, y)
 
     #-------------------------------------------------------------------------
@@ -1021,25 +1076,27 @@ class SlicePlot (FigureCanvas):
     def setImage(self, image, num=0):
         if self.getImage(num=num):
             self.getAxes().images[num] = image
-
     #-------------------------------------------------------------------------
     def setCmap(self, cmapObj):
-        self.cmap = cmapObj
-        self.setData(self.data, norm=self.norm)
+        self.setData(self.data, cmap=cmapObj)
     #-------------------------------------------------------------------------
-    def setData(self, data, norm=None):
-        ax = self.getAxes()
-
-        if self.getImage() is None:
-            ax.imshow(data, interpolation="nearest",
-              cmap=self.cmap, norm=norm, origin="lower")
-        elif norm and norm != self.norm:
-            self.setImage(AxesImage(ax, interpolation="nearest",
-              cmap=self.cmap, norm=norm, origin="lower"))
+    def setInterpo(self, interp_method):
+        self.setData(self.data, interpolation=interp_method)
         
-        self.getImage().set_data(data)
-        self.getImage().set_cmap(self.cmap)
-        self.norm = norm
+    #-------------------------------------------------------------------------
+    def setData(self, data, norm=None, cmap=None, interpolation=None):
+        ax = self.getAxes()
+        if interpolation: self.interpolation = interpolation
+        if cmap: self.cmap = cmap
+        if norm: self.norm = norm
+        if self.getImage() is None:
+            ax.imshow(data, origin="lower")
+        
+        img = self.getImage()        
+        img.set_data(data)
+        img.set_cmap(self.cmap)
+        img.set_interpolation(self.interpolation)
+        img.set_norm(self.norm)
         nrows, ncols = data.shape[:2]
         ax.set_xlim((0,ncols))
         ax.set_ylim((0,nrows))
@@ -1050,6 +1107,7 @@ class SlicePlot (FigureCanvas):
             self.draw()
             return None
 
+    #-------------------------------------------------------------------------
     def doContours(self, levels):
         self.hasContours = True
         self.contourLevels = levels
@@ -1070,6 +1128,7 @@ class SlicePlot (FigureCanvas):
         self.draw()
         return cset
 
+    #-------------------------------------------------------------------------
     def killContour(self):
         ax = self.getAxes()
         ax.collections = []
@@ -1101,51 +1160,60 @@ class OverLay (object):
     with an existing SlicePlot.
     """
 
-    def __init__(self, sliceplot, alpha=.55,
-                 cmap=P.cm.gist_heat, norm=None):
+    def __init__(self, sliceplot, alpha=.55, cmap=P.cm.gist_heat,
+                 norm=None, interpolation="nearest"):
 
         self.sliceplot = sliceplot
         self.norm = norm
         self.cmap = cmap
         self.alpha = alpha
+        self.interpolation = interpolation
         # set up the shared axes object for an overlay
         ax = sliceplot.getAxes()
         ax.hold(True)
         ax.set_axis_bgcolor('k')
 
-    def setData(self, data, alpha=None, cmap=None, norm=None):
-        alpha = alpha or self.alpha
-        cmap = cmap or self.cmap
-        norm = norm or self.norm
+    #-------------------------------------------------------------------------
+    def setData(self, data, alpha=None, cmap=None,
+                norm=None, interpolation=None):
+        self.alpha = alpha or self.alpha
+        self.cmap = cmap or self.cmap
+        self.norm = norm or self.norm
+        self.interpolation = interpolation or self.interpolation
         ax = self.sliceplot.getAxes()
         extent = self.sliceplot.getImage().get_extent()
         if self.sliceplot.getImage(num=1) is None:
-            ax.imshow(data, interpolation="nearest", cmap=cmap,
-                      alpha=alpha, norm=norm, extent=extent, origin="lower")
-        elif norm != self.norm:
-            self.sliceplot.setImage(AxesImage(ax, interpolation="nearest",
-                                              cmap=cmap,alpha=alpha,norm=norm,
-                                              extent=extent, origin="lower"),
-                                    num=1)
+            ax.imshow(data, extent=extent, origin="lower")
+##         elif norm != self.norm:
+##             self.sliceplot.setImage(AxesImage(ax, interpolation=interpolation,
+##                                               cmap=cmap,alpha=alpha,norm=norm,
+##                                               extent=extent, origin="lower"),
+##                                     num=1)
         # retrieve overlay image ref
-        image = self.sliceplot.getImage(num=1)
-        image.set_data(data)
-        image.set_cmap(cmap)
-        image.set_alpha(alpha)
-        self.norm = norm
-        self.cmap = cmap
-        self.alpha = alpha
+        img = self.sliceplot.getImage(num=1)
+        img.set_data(data)
+        img.set_cmap(self.cmap)
+        img.set_alpha(self.alpha)
+        img.set_interpolation(self.interpolation)
+        img.set_norm(self.norm)
         self.data = data
         self.sliceplot.draw()
 
+    #-------------------------------------------------------------------------
     def setAlpha(self, alphaVal):
         self.alpha = alphaVal
         self.setData(self.data)
 
+    #-------------------------------------------------------------------------
     def setCmap(self, cmapObj):
         self.cmap = cmapObj
         self.setData(self.data)
-
+    #-------------------------------------------------------------------------
+    def setInterpo(self, interpo):
+        if interpo in interpo_lookup.values():
+            self.interpolation = interpo
+            self.setData(self.data)
+    #-------------------------------------------------------------------------
     def removeSelf(self):
         ax = self.sliceplot.getAxes()
         if len(ax.images) > 1:
