@@ -3,9 +3,8 @@ from optparse import OptionParser, Option
 import os, sys
 import recon.conf
 import recon
-from recon.operations.WriteImage import WriteImage, \
+from recon.imageio import available_writers as output_format_choices, \
      output_datatypes as output_datatype_choices
-from recon.imageio import available_writers as output_format_choices
 from recon.tools import OrderedConfigParser, ConsoleTool
 from recon.operations import OperationManager, RunLogger
 from recon.scanners.varian.FidImage import getPulseSeq

@@ -1,7 +1,7 @@
 import numpy as N
 
 from odict import odict
-from recon.util import import_from, Quaternion
+from recon.util import import_from, Quaternion, integer_ranges, scale_data
 
 # module-private dict specifying available image readers
 _readers = odict((
@@ -19,6 +19,22 @@ _writers = odict((
     ))
 
 available_writers = _writers.keys()
+
+recon_output2dtype = odict((
+    ('magnitude', N.dtype(N.float32)),
+    ('complex', N.dtype(N.complex64)),
+    ('double', N.dtype(N.float64)),
+    ('byte', N.dtype(N.int8)),
+    ('ubyte', N.dtype(N.uint8)),
+    ('short', N.dtype(N.int16)),
+    ('ushort', N.dtype(N.uint16)),
+    ('int', N.dtype(N.int32)),
+    ('uint', N.dtype(N.uint32)),
+    ))
+
+# ReconTools default = idx 0
+output_datatypes = recon_output2dtype.keys()
+
 #-----------------------------------------------------------------------------
 def get_dims(data):
     """
@@ -222,7 +238,8 @@ class ReconImage (object):
         self.setData(self[:])
 
     #-------------------------------------------------------------------------
-    def writeImage(self, filestem, format_type="analyze", **kwargs):
+    def writeImage(self, filestem, format_type="analyze",
+                   datatype="magnitude", **kwargs):
         """
         Export the image object in a medical file format (ANALYZE or NIFTI).
         format_type is one of the internal file format specifiers, which
@@ -232,11 +249,21 @@ class ReconImage (object):
         targetdim -- number of dimensions per file
         filetype -- differentiates single + dual formats for NIFTI
         suffix -- over-ride default suffix style (eg volume0001)
-        scale -- a scaling used when storing as an integer type
+
+        If necessary, a scaling is found for integer types
         """%(" ; ".join(available_writers))
 
-        _write(self, filestem, format_type, **kwargs)
+        new_dtype = recon_output2dtype.get(datatype.lower(), None)
+        if new_dtype is None:
+            raise ValueError("Unsupported data type: %s"%datatype)
 
+        if new_dtype in integer_ranges.keys():
+            scale = float(scale_data(self[:], new_dtype))
+        else:
+            scale = float(1.0)
+
+        _write(self, filestem, format_type, scale=scale,
+               dtype=new_dtype,**kwargs)
 
 #-----------------------------------------------------------------------------
 def get_reader(format):
@@ -247,8 +274,11 @@ def get_reader(format):
           (format, ", ".join(available_readers)))
     return import_from(*readerspec)
 #-----------------------------------------------------------------------------
-def readImage(filename, format, **kwargs):
+def readImage(filename, format, datatype=None, **kwargs):
     "Load an image in the specified format from the given filename."
+    if datatype and datatype not in recon_output2dtype.keys():
+        raise ValueError("Unsupported data type: %s"%datatype)
+    kwargs['target_dtype'] = recon_output2dtype.get(datatype, None)
     return get_reader(format)(clean_name(filename), **kwargs)
 
 #-----------------------------------------------------------------------------
@@ -261,8 +291,17 @@ def get_writer(format_type):
                          (format, ", ".join(available_writers)))
     return import_from(*writerspec)
 #-----------------------------------------------------------------------------
-def _write(image, filestem, format_type, datatype=None, targetdim=None,
+def _write(image, filestem, format_type, dtype=None, targetdim=None,
            suffix=None, scale=1.0):
+    """
+    Given a RTools format_type description (eg, nifti-single), a numpy
+    dtype in dtype, and a filename, write an appropriate file.
+    Other keyword args:
+      targetdim -- number of dimensions per output file (2, 3, or 4)
+      suffix -- over-rides normal _volume000n suffix (for targetdim=3 only)
+      scale -- scaling factor for integer output dtypes
+    """
+
     Writer = get_writer(format_type)
     dimnames = {3: "volume", 2: "slice"}
     def images_and_names(image, stem, targetdim, suffix=None):
@@ -283,7 +322,7 @@ def _write(image, filestem, format_type, datatype=None, targetdim=None,
     if suffix is not None: targetdim = 3
     if targetdim is None: targetdim = image.ndim
     for subimage, substem in images_and_names(image,filestem,targetdim,suffix):
-        Writer(subimage, substem, datatype=datatype, scale=scale)
+        Writer(subimage, substem, dtype=dtype, scale=scale)
 
 #-----------------------------------------------------------------------------
 def clean_name(fname):

@@ -4,8 +4,10 @@ import gtk
 import gobject
 import os
 import pylab as P
+#from matplotlib.widgets import RectangleSelector
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
+from matplotlib.patches import Rectangle
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
 import matplotlib
@@ -186,27 +188,24 @@ class sliceview (gtk.Window):
           self.control_panel.getRowIndex(),
           self.control_panel.getColIndex(),
           cmap=cmap, norm=self.norm)
-        #self.sliceplot.set_size_request(350,350)
-        self.sliceplot.mpl_connect(
-          'motion_notify_event', self.sliceMouseMotionHandler)
-        self.sliceplot.mpl_connect(
-          'button_press_event', self.sliceMouseDownHandler)
-        self.sliceplot.mpl_connect(
-          'button_release_event', self.sliceMouseUpHandler)
-        def_scale = self.auto_scale_image()
+
+        self.connectFigureCanvasEvents(mode="init")
+        self.auto_scale_image()
         self.scrollwin.add_with_viewport(self.sliceplot)
         #table.attach(self.sliceplot, 1, 2, 2, 3)
         table.attach(self.scrollwin, 1, 2, 2, 3)
 
         # status
-        self.status = StatusBar(self.sliceDataRange(),
+        self.status = StatusBar(self.sliceplot, self.sliceDataRange(),
                                 cmap=cmap, norm=self.norm)
-        self.status.set_size_request(600,40)
+        self.status.connect_button(self.ROIHandler)
+        self.status.set_size_request(600,85)
         table.attach(self.status, 0, 2, 3, 4, xoptions=0, yoptions=0)
 
         # tool-bar
         merge = gtk.UIManager()
-        merge.insert_action_group(self._create_action_group(def_scale), 0)
+        merge.insert_action_group(self._create_action_group(self.image_scale),
+                                  0)
 
         try:
             mergeid = merge.add_ui_from_string(ui_info)
@@ -228,9 +227,9 @@ class sliceview (gtk.Window):
         # 27 for menu bar
         # 200 for row-plot, control panel
         # 400 for col-plot, scroll window
-        # 40 for status bar
+        # 40 for status bar (85)
         # = 670
-        self.set_default_size(600,670)
+        self.set_default_size(600,715)
         self.set_title(title)
         self.set_border_width(3)
         self.add(table)
@@ -290,6 +289,7 @@ class sliceview (gtk.Window):
         self.colplot.setDataRange(data_max, data_min)
 
     #-------------------------------------------------------------------------
+    ###### Event handlers for control panel object
     def spinnerHandler(self, adj):
         print "sliceview::spinnerHandler slice_dims", \
                self.control_panel.slice_dims
@@ -317,6 +317,11 @@ class sliceview (gtk.Window):
         self.updateSlice()
 
     #-------------------------------------------------------------------------
+    ###### Event handlers for sliceplot events
+    def sliceResizeHandler(self, event):
+        self.scale_image()
+        
+    #-------------------------------------------------------------------------
     def sliceMouseDownHandler(self, event):
         y, x = self.sliceplot.getEventCoords(event)
         self._dragging = True
@@ -335,6 +340,56 @@ class sliceview (gtk.Window):
         self.updateCoords(y,x)
 
     #-------------------------------------------------------------------------
+    ###### Handlers for ROI button
+    def ROIHandler(self, button):
+        # when ROI button is pressed, turn off mouse-press events
+        # (turn them back on after the rectangle-drawing handler is finished
+
+        # if RS already drawn, do nothing
+        if not (hasattr(self, "RS") and self.RS):
+            
+            self.connectFigureCanvasEvents(mode="disable")
+            self.sliceplot.toggleCrosshairs(mode=False)
+            ax = self.sliceplot.getAxes()
+            rect_props = dict(facecolor='red', edgecolor='cyan', alpha=0.25,
+                              fill=True)
+            self.RS = RectangleSelector(ax, self.rectangleHandler,
+                                        drawtype="box", useblit=True,
+                                        rectprops=rect_props)
+            self.sliceplot.draw()
+            
+    #-------------------------------------------------------------------------
+    def rectangleHandler(self, event1, event2):
+        x1,y1 = map(lambda x: int(round(x)), [event1.xdata, event1.ydata])
+        x2,y2 = map(lambda x: int(round(x)), [event2.xdata, event2.ydata])
+        (x1,x2,y1,y2) = (min(x1,x2),max(x1,x2),min(y1,y2),max(y1,y2))
+        self.RS.is_active(False)
+        self.connectFigureCanvasEvents(mode="enable")
+        self.sliceplot.toggleCrosshairs(mode=True)
+        self.RS = None
+        avg = self.getSlice()[y1:y2,x1:x2].mean()
+        text = "average in [%d,%d] to [%d,%d]: %2.4f"%(x1,y1-1,x2,y2-1,avg)
+        self.status.setROILabel(text)
+        
+    ###### Helpers for object-to-object coordination
+    def connectFigureCanvasEvents(self, mode="enable"):
+        if mode == "init":
+            # once enabled, these two never get disconnected
+            self.sliceplot.mpl_connect(
+                "motion_notify_event", self.sliceMouseMotionHandler)
+            self.sliceplot.mpl_connect(
+                "resize_event", self.sliceResizeHandler)
+            mode = "enable"
+        if mode == "enable":
+            # mouse-pressing events may be disabled
+            self.press_id = self.sliceplot.mpl_connect(
+                "button_press_event", self.sliceMouseDownHandler)
+            self.release_id = self.sliceplot.mpl_connect(
+                "button_release_event", self.sliceMouseUpHandler)
+        else:
+            self.sliceplot.mpl_disconnect(self.press_id)
+            self.sliceplot.mpl_disconnect(self.release_id)
+    #-------------------------------------------------------------------------
     def updateCoords(self, y, x):
 
         # do nothing if coords haven't changed
@@ -346,13 +401,6 @@ class sliceview (gtk.Window):
 
         # update crosshairs and projection plots if button down
         if self._dragging: self.updateProjections(y,x)
-
-    #------------------------------------------------------------------------- 
-    def updateStatusLabel(self, y, x):
-        if x != None and y != None:
-            text = "[%d,%d] = %.4f"%(y, x, self.getSlice()[y,x])
-        else: text = ""
-        self.status.setLabel(text)
 
     #------------------------------------------------------------------------- 
     def updateProjections(self, y, x):
@@ -368,6 +416,13 @@ class sliceview (gtk.Window):
           self.control_panel.getColIndex(),
           self.control_panel.getRowIndex())
         
+    #------------------------------------------------------------------------- 
+    def updateStatusLabel(self, y, x):
+        if x != None and y != None:
+            text = "[%d,%d] = %.4f"%(x, y, self.getSlice()[y,x])
+        else: text = ""
+        self.status.setLabel(text)
+
     #------------------------------------------------------------------------- 
     def setNorm(self, contrast=1.):
         scale = -0.75*(contrast-1.0) + 1.0
@@ -391,6 +446,7 @@ class sliceview (gtk.Window):
         self.norm = P.normalize(vmin=self.blkpt, vmax=self.whtpt*scale)
    
     #-------------------------------------------------------------------------
+    ###### Handlers and helpers for menubar actions
     def launch_contour_tool(self, action):
         self.contour_tools = ContourToolWin(self.sliceplot, self)
 
@@ -400,30 +456,6 @@ class sliceview (gtk.Window):
             if not hasattr(self, "overlay_tools") or not self.overlay_tools:
                 self.overlay_tools = OverlayToolWin(self.overlay, self)
             
-    #-------------------------------------------------------------------------
-    def activate_action(self, action):
-        self.dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
-            gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
-            'You activated action: "%s" of type "%s"' % (action.get_name(), type(action)))
-        # Close dialog on user response
-        self.dialog.connect ("response", lambda d, r: d.destroy())
-        self.dialog.show()
-
-    #-------------------------------------------------------------------------
-    def activate_radio_action(self, action, current):
-        active = current.get_active()
-        value = current.get_current_value()
-
-        if active:
-            dialog = gtk.MessageDialog(self, gtk.DIALOG_DESTROY_WITH_PARENT,
-                gtk.MESSAGE_INFO, gtk.BUTTONS_CLOSE,
-                "You activated radio action: \"%s\" of type \"%s\".\nCurrent value: %d" %
-                (current.get_name(), type(current), value))
-
-            # Close dialog on user response
-            dialog.connect("response", lambda d, r: d.destroy())
-            dialog.show()
-
     #-------------------------------------------------------------------------
     def ask_fname(self, prompt, action="save", filter=None):
         mode = {
@@ -538,6 +570,7 @@ class sliceview (gtk.Window):
             del self.overlay
             del self.overlay_data
             self.overlay_data = None
+            self.overlay_norm = None
 
     #-------------------------------------------------------------------------
     def cmap_handler(self, action, current):
@@ -553,28 +586,32 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def scale_handler(self, action, current):
-        self.scale_image(current.get_current_value())
+        self.image_scale = current.get_current_value()
+        self.scale_image()
 
     #-------------------------------------------------------------------------
-    def scale_image(self, scale):
+    def scale_image(self):
+        scale = self.image_scale
         base_img_size = min(self.control_panel.getRowDim().size,
                             self.control_panel.getColDim().size)
-        canvas_size = self.sliceplot.get_size_request()[0]
-        canvas_size_real = self.sliceplot.get_width_height()[0]
+        canvas_size_x, canvas_size_y = self.sliceplot.get_size_request()
+        canvas_size_real_x,canvas_size_real_y=self.sliceplot.get_width_height()
         new_img_size = base_img_size*scale
         # If the new image requires a larger canvas, resize it.
         # Otherwise, make sure the canvas is at the default size
-        if canvas_size < new_img_size+50:
-            canvas_size_real = canvas_size = int(new_img_size + 50)
-        elif canvas_size > 400 and new_img_size < 350:
-            canvas_size = 350
-            canvas_size_real = 396
+        if canvas_size_x < new_img_size+50:
+            canvas_size_real_x = canvas_size_real_y = \
+                        canvas_size_x = canvas_size_y = int(new_img_size + 50)
+        elif max(canvas_size_x,canvas_size_y) > 400 and new_img_size < 350:
+            canvas_size_x = canvas_size_y = 350
+            canvas_size_real_x = canvas_size_real_y = 396
         ax = self.sliceplot.getAxes()
-        w = h = new_img_size/float(canvas_size_real)
-        l = 15./canvas_size
-        b = 1.0 - (new_img_size + 25.)/canvas_size_real
+        w = new_img_size/float(canvas_size_real_x)
+        h = new_img_size/float(canvas_size_real_y)
+        l = 15./canvas_size_real_x
+        b = 1.0 - (new_img_size + 25.)/canvas_size_real_y
         ax.set_position([l,b,w,h])
-        self.sliceplot.set_size_request(canvas_size,canvas_size)
+        self.sliceplot.set_size_request(canvas_size_x,canvas_size_y)
         self.sliceplot.draw()
 
     #-------------------------------------------------------------------------
@@ -582,8 +619,8 @@ class sliceview (gtk.Window):
         # try to find some scale that gets ~ 256x256 pixels
         base_img_size = min(self.control_panel.getRowDim().size,
                             self.control_panel.getColDim().size)
-        P = round(256./base_img_size)
-        new_img_size =  P*base_img_size
+        p = round(256./base_img_size)
+        new_img_size =  p*base_img_size
         canvas_size = 350
         canvas_size_real = 396
         ax = self.sliceplot.getAxes()
@@ -592,8 +629,7 @@ class sliceview (gtk.Window):
         b = 1.0 - (new_img_size + 25.)/canvas_size_real
         ax.set_position([l,b,w,h])
         self.sliceplot.set_size_request(canvas_size,canvas_size)
-        #self.sliceplot.draw()
-        return P
+        self.image_scale = p
 
     #-------------------------------------------------------------------------
     def _create_action_group(self, default_scale):
@@ -726,7 +762,7 @@ class OverlayToolWin (gtk.Window):
         alpha = self.overlay_ref.alpha
 
         # add alpha slider and label
-        self.alphaslider = gtk.HScale(gtk.Adjustment(alpha, 0.05, 1, .05))
+        self.alphaslider = gtk.HScale(gtk.Adjustment(alpha, 0.05, 1, .05, .05))
         self.alphaslider.set_digits(3)
         self.alphaslider.set_value_pos(gtk.POS_RIGHT)
         self.alphaslider.get_adjustment().connect("value-changed",
@@ -814,7 +850,7 @@ class DimSlider (gtk.HScale):
 ##############################################################################
 class ContrastSlider (gtk.HScale):
     def __init__(self):
-        gtk.HScale.__init__(self, gtk.Adjustment(1.0, 0.05, 2.0, 0.05, 1))
+        gtk.HScale.__init__(self, gtk.Adjustment(1.0, 0.05, 2.0, 0.025, 0.05))
         self.set_digits(2)
         self.set_value_pos(gtk.POS_RIGHT)
 
@@ -1062,6 +1098,30 @@ class SlicePlot (FigureCanvas):
         col_data = ((x+.5, x+.5), (y+.5-data_height/4., y+.5+data_height/4.))
         return row_data, col_data
 
+    #------------------------------------------------------------------------- 
+    def setCrosshairs(self, x, y):
+        row_data, col_data = self._crosshairs_data(x, y)
+        row_line, col_line = self.crosshairs
+        row_line.set_data(*row_data)
+        col_line.set_data(*col_data)
+        self.draw()
+
+    #-------------------------------------------------------------------------
+    def toggleCrosshairs(self, mode=True):
+        for line in self.crosshairs:
+            line.set_visible(mode)
+        self.draw()
+
+    #-------------------------------------------------------------------------
+    def getEventCoords(self, event):
+        if event.xdata is not None: x = int(event.xdata)
+        else: x = None
+        if event.ydata is not None:y = int(event.ydata)
+        else: y = None
+        if x < 0 or x >= self.data.shape[0]: x = None
+        if y < 0 or y >= self.data.shape[1]: y = None
+        return (y,x)
+
     #-------------------------------------------------------------------------
     def getAxes(self):
         # let's say there's only 1 axes in the figure
@@ -1135,24 +1195,6 @@ class SlicePlot (FigureCanvas):
         self.hasContours = False
         self.draw()
     
-    #------------------------------------------------------------------------- 
-    def setCrosshairs(self, x, y):
-        row_data, col_data = self._crosshairs_data(x, y)
-        row_line, col_line = self.crosshairs
-        row_line.set_data(*row_data)
-        col_line.set_data(*col_data)
-        self.draw()
-
-    #-------------------------------------------------------------------------
-    def getEventCoords(self, event):
-        if event.xdata is not None: x = int(event.xdata)
-        else: x = None
-        if event.ydata is not None:y = int(event.ydata)
-        else: y = None
-        if x < 0 or x >= self.data.shape[0]: x = None
-        if y < 0 or y >= self.data.shape[1]: y = None
-        return (y,x)
-
 ##############################################################################
 class OverLay (object):
     """
@@ -1270,103 +1312,278 @@ class ColorBar (FigureCanvas):
 class StatusBar (gtk.Frame):
     
     #-------------------------------------------------------------------------
-    def __init__(self, range, cmap, norm):
+    def __init__(self, sliceplot, range, cmap, norm):
         gtk.Frame.__init__(self)
-        main_hbox = gtk.HBox()
-        main_hbox.set_border_width(0)
-
-        # neighborhood size selection (eg '5x5', '3x4')
-        # these numbers refer to "radii", not box size
-        self.entry = gtk.Entry(3)
-        self.entry.set_size_request(40,25)
-
-        # pixel value
-        self.px_stat = gtk.Statusbar()
-        self.px_stat.set_has_resize_grip(False)
-        #self.px_stat.set_size_request(160,25)
-
-        # neighborhood avg
-        self.av_stat = gtk.Statusbar()
-        self.av_stat.set_has_resize_grip(False)
-        #self.av_stat.set_size_request(160,25)
-
-        # try to label entry box
-        #label = gtk.Label("Radius")
-        #label.set_alignment(0, 0.2)
-        #label.set_size_request(10,25)
-        #label.set_line_wrap(True)
-
+        self.set_border_width(3)
+        vbox = gtk.VBox(spacing=5)
+        upper_hbox = gtk.HBox()
+        upper_hbox.set_border_width(0)
+        lower_hbox = gtk.HBox()
+        lower_hbox.set_border_width(0)
+        
         # colorbar
         self.cbar = ColorBar(range, cmap=cmap, norm=norm)
         self.cbar.set_size_request(400,20)
-        main_hbox.add(self.cbar)
+        upper_hbox.add(self.cbar)
  
         # pixel value
         self.label = gtk.Label()
-        self.label.set_alignment(2, 0.5)
+        self.label.set_alignment(1, 0.5)
         self.label.set_size_request(140,20)
         self.label.set_line_wrap(True)
-        main_hbox.add(self.label)
-       
-        self.px_context = self.px_stat.get_context_id("Pixel Value")
-        self.av_context = self.av_stat.get_context_id("Neighborhood Avg")
-        # default area to average
-        self.entry.set_text('3x3')
-        self.add(main_hbox)
+        upper_hbox.add(self.label)
+
+        # rectangle-draw button
+        self.drawbutton = gtk.Button(label="Get ROI average")
+        #self.drawbutton.connect("clicked", self.button_handler)
+        self.drawbutton.set_size_request(200,20)
+        lower_hbox.add(self.drawbutton)
+
+        # average report
+        self.roi_label = gtk.Label()
+        self.roi_label.set_justify(gtk.JUSTIFY_CENTER)
+        self.roi_label.set_line_wrap(True)
+        self.roi_label.set_size_request(400,20)
+        lower_hbox.add(self.roi_label)
+
+        vbox.add(lower_hbox)
+        vbox.add(upper_hbox)
+        self.add(vbox)
         self.show_all()
+        self.sliceplot_ref = sliceplot
 
     #-------------------------------------------------------------------------
-    def report(self, event, data):
-        if not (event.xdata and event.ydata):
-            avbuf = pxbuf = "  clicked outside axes"
-        else:
-            y, x = int(event.ydata), int(event.xdata)
-            pxbuf = "  pix val: %f"%data[y, x]
-            avbuf = "  %ix%i avg: %s"%self.squareAvg(y, x, data)
-        
-        self.pop_items()
-        self.push_items(pxbuf, avbuf)
-
-    #-------------------------------------------------------------------------
-    def squareAvg(self, y, x, data):
-        areaStr = self.getText()
-        #box is defined +/-yLim rows and +/-xLim cols
-        #if for some reason areaStr was entered wrong, default to (1, 1)
-        yLim, xLim = len(areaStr)==3 and\
-                     (int(areaStr[0]), int(areaStr[2])) or (1, 1)
-        if y < yLim or x < xLim or\
-           y+yLim >= data.shape[0] or\
-           x+xLim >= data.shape[1]:
-            return (yLim, xLim, "outOfRange")
-
-        indices = P.afromfunction(lambda yi,xi: y+yi-yLim + 1.0j*(x + xi-xLim),
-                               (yLim*2+1, xLim*2+1))
-        scale = indices.shape[0]*indices.shape[1]
-        av = sum(map(lambda zi: data[int(zi.real), int(zi.imag)]/scale,
-                     indices.flatten()))
-        
-        #return box dimensions and 7 significant digits of average
-        return (yLim, xLim, str(av)[0:8])
-
-    #-------------------------------------------------------------------------
-    def getText(self): return self.entry.get_text()
-
+    def connect_button(self, button_handler):
+        self.drawbutton.connect("clicked", button_handler)
+    
     #-------------------------------------------------------------------------
     def setLabel(self, text):
         self.label.set_text(text)
-
-    #-------------------------------------------------------------------------    
-    def pop_items(self):
-        self.av_stat.pop(self.av_context)
-        self.px_stat.pop(self.px_context)
-
+        
     #-------------------------------------------------------------------------
-    def push_items(self, pxbuf, avbuf):
-        self.av_stat.push(self.av_context, avbuf)
-        self.px_stat.push(self.px_context, pxbuf)
+    def setROILabel(self, text):
+        self.roi_label.set_text(text)
+
+##############################################################################
+##############################################################################
+############################ MATPLOTLIB HACK #################################
+class RectangleSelector:
+    """
+    Select a min/max range of the x axes for a matplotlib Axes
+
+    Example usage:
+
+      ax = subplot(111)
+      ax.plot(x,y)
+
+      def onselect(eclick, erelease):
+          'eclick and erelease are matplotlib events at press and release'
+          print 'startposition : (%f,%f)'%(eclick.xdata, eclick.ydata)
+          print 'endposition   : (%f,%f)'%(erelease.xdata, erelease.ydata)
+          print 'used button   : ', eclick.button
+
+      span = Selector(ax, onselect,drawtype='box')
+      show()
+
+    """
+    def __init__(self, ax, onselect, drawtype='box',
+                 minspanx=None, minspany=None, useblit=False,
+                 lineprops=None, rectprops=None):
+
+        """
+        Create a selector in ax.  When a selection is made, clear
+        the span and call onselect with
+
+          onselect(pos_1, pos_2)
+
+        and clear the drawn box/line. There pos_i are arrays of length 2
+        containing the x- and y-coordinate.
+
+        If minspanx is not None then events smaller than minspanx
+        in x direction are ignored(it's the same for y).
+
+        The rect is drawn with rectprops; default
+          rectprops = dict(facecolor='red', edgecolor = 'black',
+                           alpha=0.5, fill=False)
+
+        The line is drawn with lineprops; default
+          lineprops = dict(color='black', linestyle='-',
+                           linewidth = 2, alpha=0.5)
+
+        Use type if you want the mouse to draw a line, a box or nothing
+        between click and actual position ny setting
+        drawtype = 'line', drawtype='box' or drawtype = 'none'.
+
+
+        """
+        self.ax = ax
+        self.visible = True
+        self.canvas = ax.figure.canvas
+        self.connect_id = []
+        self.active = True
+        self.is_active(True)
+##         self.canvas.mpl_connect('motion_notify_event', self.onmove)
+##         self.canvas.mpl_connect('button_press_event', self.press)
+##         self.canvas.mpl_connect('button_release_event', self.release)
+##         self.canvas.mpl_connect('draw_event', self.update_background)
+
+        self.to_draw = None
+        self.background = None
+
+        if drawtype == 'none':
+            drawtype = 'line'                        # draw a line but make it
+            self.visible = False                     # invisible
+
+        if drawtype == 'box':
+            if rectprops is None:
+                rectprops = dict(facecolor='white', edgecolor = 'black',
+                                 alpha=0.5, fill=False)
+            self.rectprops = rectprops
+            self.to_draw = Rectangle((0,0), 0, 1,visible=False,**self.rectprops)
+            self.ax.add_patch(self.to_draw)
+        if drawtype == 'line':
+            if lineprops is None:
+                lineprops = dict(color='black', linestyle='-',
+                                 linewidth = 2, alpha=0.5)
+            self.lineprops = lineprops
+            self.to_draw = Line2D([0,0],[0,0],visible=False,**self.lineprops)
+            self.ax.add_line(self.to_draw)
+
+        self.onselect = onselect
+        self.useblit = useblit
+        self.minspanx = minspanx
+        self.minspany = minspany
+        self.drawtype = drawtype
+        # will save the data (position at mouseclick)
+        self.eventpress = None
+        # will save the data (pos. at mouserelease)
+        self.eventrelease = None
+
+    def update_background(self, event):
+        'force an update of the background'
+        if self.useblit:
+            self.background = self.canvas.copy_from_bbox(self.ax.bbox)
+
+
+    def is_active(self, active):
+        """ Use this to activate the RectangleSelector from your program.
+        """
+        self.active = active
+        if active and len(self.connect_id) == 0: # you want to activate and it
+                                                   #  isn't already active
+            self.connect_id.append(self.canvas.mpl_connect(
+                  'motion_notify_event', self.onmove))
+            self.connect_id.append(self.canvas.mpl_connect(
+                  'button_press_event', self.press))
+            self.connect_id.append(self.canvas.mpl_connect(
+                  'button_release_event', self.release))
+            self.connect_id.append(self.canvas.mpl_connect(
+                  'draw_event', self.update_background))
+
+        if not active and len(self.connect_id) != 0:  # you want to deactivate
+            for index in self.connect_id:     #  and it isn't already inactive
+                self.canvas.mpl_disconnect(index)
+            self.connect_id = []
+
+    def ignore(self, event):
+        'return True if event should be ignored'
+        # If no button was pressed yet ignore the event if it was out
+        # of the axes
+        if self.eventpress == None:
+            return event.inaxes!= self.ax
+
+        # If a button was pressed, check if the release-button is the
+        # same.
+        return  (event.inaxes!=self.ax or
+                 event.button != self.eventpress.button)
+
+    def press(self, event):
+        'on button press event'
+        # Is the correct button pressed within the correct axes?
+        if self.ignore(event): return
+
+
+        # make the drawed box/line visible get the click-coordinates,
+        # button, ...
+        self.to_draw.set_visible(self.visible)
+        self.eventpress = event
+        return False
+
+
+    def release(self, event):
+        'on button release event'
+        if self.eventpress is None or self.ignore(event): return
+        # make the box/line invisible again
+        self.to_draw.set_visible(False)
+        self.canvas.draw()
+        # release coordinates, button, ...
+        self.eventrelease = event
+        xmin, ymin = self.eventpress.xdata, self.eventpress.ydata
+        xmax, ymax = self.eventrelease.xdata, self.eventrelease.ydata
+        # calculate dimensions of box or line get values in the right
+        # order
+        if xmin>xmax: xmin, xmax = xmax, xmin
+        if ymin>ymax: ymin, ymax = ymax, ymin
+
+
+
+        spanx = xmax - xmin
+        spany = ymax - ymin
+        xproblems = self.minspanx is not None and spanx<self.minspanx
+        yproblems = self.minspany is not None and spany<self.minspany
+        if (self.drawtype=='box')  and (xproblems or  yproblems):
+            """Box to small"""     # check if drawed distance (if it exists) is
+            return                 # not to small in neither x nor y-direction
+        if (self.drawtype=='line') and (xproblems and yproblems):
+            """Line to small"""    # check if drawed distance (if it exists) is
+            return                 # not to small in neither x nor y-direction
+        self.onselect(self.eventpress, self.eventrelease)
+                                              # call desired function
+        self.eventpress = None                # reset the variables to their
+        self.eventrelease = None              #   inital values
+        return False
+
+    def update(self):
+        'draw using newfangled blit or oldfangled draw depending on useblit'
+        if self.useblit:
+            if self.background is not None:
+                self.canvas.restore_region(self.background)
+            self.ax.draw_artist(self.to_draw)
+            self.canvas.blit(self.ax.bbox)
+        else:
+            self.canvas.draw_idle()
+        return False
+
+
+    def onmove(self, event):
+        'on motion notify event if box/line is wanted'
+        if self.eventpress is None or self.ignore(event): return
+        x,y = event.xdata, event.ydata            # actual position (with
+                                                  #   (button still pressed)
+        if self.drawtype == 'box':
+            minx, maxx = self.eventpress.xdata, x # click-x and actual mouse-x
+            miny, maxy = self.eventpress.ydata, y # click-y and actual mouse-y
+            if minx>maxx: minx, maxx = maxx, minx # get them in the right order
+            if miny>maxy: miny, maxy = maxy, miny
+            self.to_draw.xy[0] = minx             # set lower left of box
+            self.to_draw.xy[1] = miny
+            self.to_draw.set_width(maxx-minx)     # set width and height of box
+            self.to_draw.set_height(maxy-miny)
+            self.update()
+            return False
+        if self.drawtype == 'line':
+            self.to_draw.set_data([self.eventpress.xdata, x],
+                                  [self.eventpress.ydata, y])
+            self.update()
+            return False
 
 
 ##############################################################################
+##############################################################################
+##############################################################################
+
+
+        
 if __name__ == "__main__":
     from pylab import randn
     import pdb

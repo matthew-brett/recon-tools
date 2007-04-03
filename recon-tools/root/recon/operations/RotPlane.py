@@ -47,11 +47,15 @@ class RotPlane (Operation):
         # Tr*[x',y',z']^T = dest_xform*[x,y,z]^T
         # So inv(dest_xform)*Tr*[x',y',z'] = [x,y,z] = orientation of choice!
         Ts = N.dot(N.linalg.inv(dest_xform), Tr)
+        if not Ts[-1,-1]:
+            raise ValueError("This operation only makes in-plane rotations. "\
+                             "EG you cannot use the saggital transform for "\
+                             "an image in the coronal plane.")
         qform = util.Quaternion(M=dest_xform)
         image.orientation_xform = qform
         rot = compose_xform(Ts)
         ### do transform + book-keeping
-        temp = rot(image.data)
+        temp = rot(image[:])
         # now want to reorder array elements, not change sign:
         Ts = abs(Ts.astype(N.int32))
         shape = N.array([image.xdim, image.ydim, image.zdim])
@@ -68,8 +72,6 @@ class RotPlane (Operation):
 
 #-----------------------------------------------------------------------------
 def compose_xform(mat):
-    if not mat[-1,-1]:
-        raise ValueError("something's bungled!")
     xform = lambda x: x
     if not mat[0,0]:
         xform = lambda x, g=xform: N.swapaxes(g(x), -1, -2)

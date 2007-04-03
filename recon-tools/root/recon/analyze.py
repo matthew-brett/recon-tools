@@ -4,7 +4,7 @@ import struct
 import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
-  BIG_ENDIAN, Quaternion, volume_max, volume_min, range_exceeds
+  BIG_ENDIAN, Quaternion, volume_max, volume_min, range_exceeds, integer_ranges
 from recon.imageio import ReconImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
@@ -214,7 +214,8 @@ class AnalyzeImage (ReconImage):
         bytepix = self.bitpix/8
         numtype = datatype2dtype[self.datatype]
         byteoffset = 0
-        if target_dtype and not range_exceeds(target_dtype, numtype):
+        if target_dtype is not None and \
+               not range_exceeds(target_dtype, numtype):
             raise ValueError("the dynamic range of the desired datatype does "\
                              "not exceed that of the raw data")            
         # need to cook tdim if vrange is set
@@ -233,8 +234,11 @@ class AnalyzeImage (ReconImage):
         fp.seek(byteoffset, 1)
         image = N.fromstring(fp.read(datasize),numtype)
         if self.swapped: image = image.byteswap()
-        if target_dtype and target_dtype != numtype:
-            image = (image*self.scaling).astype(target_dtype)
+        if target_dtype is not None and target_dtype != numtype:
+            if target_dtype not in integer_ranges.keys():
+                image = (image*self.scaling).astype(target_dtype)
+            else:
+                image = image.astype(target_dtype)
         self.setData(N.reshape(image, dims))
         fp.close()
 
@@ -256,13 +260,17 @@ class AnalyzeWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., 'c': '\0', 's': ''}
 
     #-------------------------------------------------------------------------
-    def __init__(self, image, datatype=None, scale=1.0):
+    def __init__(self, image, dtype=None, scale=1.0):
         self.image = image
         self.scaling = scale
-        self.datatype = datatype or dtype2datatype[image[:].dtype]
-        dtype = datatype2dtype[self.datatype]
-        self._dataview = _construct_dataview(image[:].dtype, self.datatype,
-                                             self.scaling)
+        if dtype is None:
+            dtype = image[:].dtype
+        self.datatype = dtype2datatype.get(dtype, None)
+        if not self.datatype:
+            raise ValueError("This data type is not supported by the "\
+                             "ANALYZE format: %s"%dtype)
+        self._dataview = _construct_dataview(image[:].dtype,
+                                             dtype, self.scaling)
     #-------------------------------------------------------------------------
     def _default_field_value(self, fieldname, fieldformat):
         "[STATIC] Get the default value for the given field."
@@ -319,10 +327,9 @@ class AnalyzeWriter (object):
         f.close()
 
 #-----------------------------------------------------------------------------
-def _construct_dataview(static_dtype, datatype, scaling):
-    new_dtype = datatype2dtype[datatype]
+def _construct_dataview(static_dtype, new_dtype, scaling):
     xform = lambda d: d
-    if static_dtype.char.isupper() and datatype != COMPLEX:
+    if static_dtype.char.isupper() and not new_dtype.char.isupper():
         xform = lambda d: abs(d)
     if scaling != 1.0:
         # assume that this will need to be rounded to Int, so add 0.5

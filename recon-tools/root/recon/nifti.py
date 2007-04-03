@@ -6,7 +6,7 @@ import sys
 
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
-     Quaternion, range_exceeds, volume_min, volume_max
+     Quaternion, range_exceeds, volume_min, volume_max, integer_ranges
 from recon.imageio import ReconImage
 from recon.analyze import byteorders, _construct_dataview, canonical_orient
 
@@ -208,7 +208,8 @@ class NiftiImage (ReconImage):
         bytepix = self.bitpix/8
         numtype = datatype2dtype[self.datatype]
         byteoffset = 0
-        if target_dtype and not range_exceeds(target_dtype, numtype):
+        if target_dtype is not None and \
+               not range_exceeds(target_dtype, numtype):
             raise ValueError("the dynamic range of the desired datatype does "\
                              "not exceed that of the raw data")
         if self.filetype == 'single':
@@ -232,8 +233,12 @@ class NiftiImage (ReconImage):
         fp.seek(byteoffset, 1)
         image = N.fromstring(fp.read(datasize), numtype)
         if self.swapped: image = image.byteswap()
-        if target_dtype and target_dtype != numtype:
-            image = (image*self.scaling+self.yinter).astype(target_dtype)
+
+        if target_dtype is not None and target_dtype != numtype:
+            if target_dtype not in integer_ranges.keys():
+                image = (image*self.scaling+self.yinter).astype(target_dtype)
+            else:
+                image = image.astype(target_dtype)
         self.setData(N.reshape(image, dims))
         fp.close()
 
@@ -252,14 +257,18 @@ class NiftiWriter (object):
     _defaults_for_descriptor = {'i': 0, 'h': 0, 'f': 0., \
                                 'c': '\0', 's': '', 'B': 0}
 
-    def __init__(self, image, datatype=None, filetype="single", scale=1.0):
+    def __init__(self, image, dtype=None, filetype="single", scale=1.0):
         self.image = image
         self.scaling = scale
         self.filetype = filetype
-        self.datatype = datatype or dtype2datatype[image[:].dtype]
-        dtype = datatype2dtype[self.datatype]
-        self._dataview = _construct_dataview(image[:].dtype, self.datatype,
-                                             self.scaling)
+        if dtype is None:
+            dtype = image[:].dtype
+        self.datatype = dtype2datatype.get(dtype, None)
+        if not self.datatype:
+            raise ValueError("This data type is not supported by the "\
+                             "NIFTI format: %s"%dtype)
+        self._dataview = _construct_dataview(image[:].dtype,
+                                             dtype, self.scaling)
         self.sizeof_extension = len(default_extension)
 
     #-------------------------------------------------------------------------

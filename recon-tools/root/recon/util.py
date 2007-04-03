@@ -54,18 +54,18 @@ def scale_data(data, new_dtype):
     return scl
 
 #-----------------------------------------------------------------------------
-def range_exceeds(this_dtype, that_dtype):
-    a = N.array([0], this_dtype)
-    b = N.array([0], that_dtype)
+def range_exceeds(new_dtype, old_dtype):
+    a = N.array([0], new_dtype)
+    b = N.array([0], old_dtype)
     # easiest condition
-    if a.itemsize() < b.itemsize():
+    if a.itemsize < b.itemsize:
         return False
     type_list = ['Complex', 'Float', 'Integer', 'UnsignedInteger']
     # this is: ['Complex', 'Float', 'Integer', 'UnsignedInteger']
     for i in range(len(type_list[1:])):
         # a Float cannot represent a Complex, nor an Int a Float, etc.
-        if this_dtype.char in N.typecodes[type_list[i]] and \
-           that_dtype.char in N.typecodes[type_list[i-1]]:
+        if a.dtype.char in N.typecodes[type_list[i]] and \
+           b.dtype.char in N.typecodes[type_list[i-1]]:
             return False
 
     # other conditions, such as a float32 representing a long int,
@@ -181,22 +181,6 @@ def complex_checkerboard(rows, cols):
     return checkerboard(rows, cols) - 1.j*checkerboard(rows, cols)
  
 #-----------------------------------------------------------------------------
-## def epi_trajectory(nseg, sampling, M):
-##     if sampling == "centric":
-##         if nseg > 2:
-##             raise NotImplementedError("centric sampling not implemented for nseg > 2")
-##         a = checkerline(M)
-##         a[:M/2] *= -1
-##         b = N.arange(M)-M/2
-##         b[:M/2] = abs(b[:M/2] + 1)
-##     else:
-##         a = N.empty(M, N.int32)
-##         for n in range(nseg):
-##             a[n:M:2*nseg] = 1
-##             a[n+nseg:M:2*nseg] = -1
-##         b = N.floor((N.arange(float(M))-M/2)/float(nseg)).astype(N.int32)
-##     return (a, b)
-#-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     "apply a phase correction to k-space"
     corrector = N.exp(1.j*phase)
@@ -266,22 +250,36 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, zdim, ydim, xdim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, yvar=None): 
+def linReg(Y, X=None, yvar=None, axis=-1): 
     # find best linear line through data:
-    # solve for (b,m) = (crossing, slope)
+    # solve for (b,m,res) = (crossing, slope, residual from fit)
     # let sigma = 1, may use yvar for variance in the future
-    if X == None: X = N.arange(len(Y))
-    Npt = len(X)
-    Sx = sum(X)
-    Sy = sum(Y)
-    Sxx = sum(X**2)
-    Sxy = sum(X*Y)
-    delta = Npt*Sxx - Sx**2
+
+    if axis != -1:
+        Y = N.swapaxes(Y, axis, -1)
+    Yshape = Y.shape
+    nrows = N.product(Yshape[:-1])
+    npts = Yshape[-1]
+    # make this 2D so it's easier to think about
+    Y = N.reshape(Y, (nrows, npts))
+    if X is None:
+        # if no X provided, get the right number of rows of [0,1,2,...,N]
+        X = N.outer(N.ones((nrows,)), N.arange(npts))
+    Sx = X.sum(axis=-1)
+    Sy = Y.sum(axis=-1)
+    Sxx = N.power(X,2).sum(axis=-1)
+    Sxy = (X*Y).sum(axis=-1)
+    delta = npts*Sxx - N.power(Sx,2)
     b = (Sxx*Sy - Sx*Sxy)/delta
-    m = (Npt*Sxy - Sx*Sy)/delta
-    #res = sum((Y-(m*X+b))**2)
-    res = sum(abs(Y-(m*X+b)))/float(len(X))
-    return (b, m, res)
+    m = (npts*Sxy - Sx*Sy)/delta
+    res = abs(Y - (m[:,N.newaxis]*X+b[:,N.newaxis])).sum(axis=-1)/float(npts)
+
+    Y = N.reshape(Y, Yshape)
+    if axis != -1:
+        Y = N.swapaxes(Y, axis, -1)
+    return (N.reshape(b, Y.shape[:-1]),
+            N.reshape(m, Y.shape[:-1]),
+            N.reshape(res, Y.shape[:-1]))
 
 #-----------------------------------------------------------------------------
 def unwrap_ref_volume(vol, fe1, fe2):

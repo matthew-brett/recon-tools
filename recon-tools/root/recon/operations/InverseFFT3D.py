@@ -16,7 +16,7 @@ class InverseFFT3D (Operation):
 
     #-------------------------------------------------------------------------
     def run(self, image):
-        nslice, n_pe, n_fe = image.data.shape[-3:]
+        nslice, n_pe, n_fe = image.shape[-3:]
         mask = checkercube(nslice, n_pe, n_fe)
         from recon.tools import Recon
         if Recon._FAST_ARRAY:

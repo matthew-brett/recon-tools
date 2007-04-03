@@ -1,8 +1,5 @@
-from recon.imageio import readImage, available_readers
-from recon.operations import Operation, Parameter
-from recon.operations.WriteImage import param2dtype
-
-    
+from recon.imageio import readImage, available_readers, recon_output2dtype
+from recon.operations import Operation, Parameter    
 
 ##############################################################################
 class ReadImage (Operation):
@@ -20,20 +17,11 @@ class ReadImage (Operation):
         description="""
     Load incoming data as this data type (default is raw data type;
     only complex32 is supported for FID loading). Available datatypes:
-    %s"""%param2dtype.keys()),
+    %s"""%recon_output2dtype.keys()),
       Parameter(name="vrange", type="tuple", default=(),
         description="""
     Volume range over-ride"""))
     #-------------------------------------------------------------------------
-    def run(self):
-        if self.format not in available_readers:
-            print "Unsupported input type: %s"%self.format
-            return
-
-        new_dtype = self.datatype and \
-                    param2dtype.get(self.datatype, False) or None
-        if new_dtype is False:
-            raise ValueError("unsupported data type: %s"%self.datatype)
-        
+    def run(self):        
         return readImage(self.filename, self.format,
-                         target_dtype=new_dtype, vrange=self.vrange)
+                         datatype=self.datatype, vrange=self.vrange)
