@@ -21,12 +21,10 @@ def tuple_valuator(val):
     if not val: return ()
     if type(val) is TupleType: return tuple(val)
     # else it is a stringified tuple ill-gotten from an oplist (bah!)
-    def try_int(el):
-        try:
-            return int(el)
-        except ValueError:
-            return str(el)
-    return tuple([try_int(el) for el in val if type(try_int(el)) is type(1)])
+    n1,n2 = val.split(",")
+    n1 = n1.strip('(')
+    n2 = n2.strip(')')
+    return (int(n1), int(n2))
 
 def verify_scanner_image(op_obj, img_obj):
     if not isinstance(img_obj, ScannerImage):

@@ -271,6 +271,8 @@ class sliceview (gtk.Window):
         cset = self.sliceplot.setData(self.getSlice(), norm=self.norm)
         if self.overlay_data is not None:
             self.overlay.setData(self.getOverlaySlice(),norm=self.overlay_norm)
+        if hasattr(self, "ROI") and self.ROI is not None:
+            self.ROI.updateAx(self.sliceplot.getAxes())
         self.rowplot.setData(self.getRow())
         self.colplot.setData(self.getCol())
         self.status.cbar.setRange(self.sliceDataRange(), norm=self.norm)
@@ -346,16 +348,16 @@ class sliceview (gtk.Window):
         # (turn them back on after the rectangle-drawing handler is finished
 
         # if RS already drawn, do nothing
-        if not (hasattr(self, "RS") and self.RS):
-            
+        if not (hasattr(self, "ROI") and self.ROI):
+            self.status.toggle_button(self.clearROI)
             self.connectFigureCanvasEvents(mode="disable")
             self.sliceplot.toggleCrosshairs(mode=False)
             ax = self.sliceplot.getAxes()
             rect_props = dict(facecolor='red', edgecolor='cyan', alpha=0.25,
                               fill=True)
-            self.RS = RectangleSelector(ax, self.rectangleHandler,
-                                        drawtype="box", useblit=True,
-                                        rectprops=rect_props)
+            self.ROI = RectangleSelector(ax, self.rectangleHandler,
+                                         drawtype="box", useblit=True,
+                                         rectprops=rect_props)
             self.sliceplot.draw()
             
     #-------------------------------------------------------------------------
@@ -363,14 +365,22 @@ class sliceview (gtk.Window):
         x1,y1 = map(lambda x: int(round(x)), [event1.xdata, event1.ydata])
         x2,y2 = map(lambda x: int(round(x)), [event2.xdata, event2.ydata])
         (x1,x2,y1,y2) = (min(x1,x2),max(x1,x2),min(y1,y2),max(y1,y2))
-        self.RS.is_active(False)
+        self.ROI.is_active(False)
         self.connectFigureCanvasEvents(mode="enable")
         self.sliceplot.toggleCrosshairs(mode=True)
-        self.RS = None
+        #self.ROI = None
         avg = self.getSlice()[y1:y2,x1:x2].mean()
         text = "average in [%d,%d] to [%d,%d]: %2.4f"%(x1,y1-1,x2,y2-1,avg)
         self.status.setROILabel(text)
-        
+
+    #-------------------------------------------------------------------------
+    def clearROI(self, button):
+        self.connectFigureCanvasEvents(mode="enable")
+        self.ROI.is_active(False)
+        self.ROI.clear()
+        self.ROI = None
+        self.status.toggle_button(self.ROIHandler)
+    
     ###### Helpers for object-to-object coordination
     def connectFigureCanvasEvents(self, mode="enable"):
         if mode == "init":
@@ -379,16 +389,19 @@ class sliceview (gtk.Window):
                 "motion_notify_event", self.sliceMouseMotionHandler)
             self.sliceplot.mpl_connect(
                 "resize_event", self.sliceResizeHandler)
+            self.slice_canvas_mode = mode
             mode = "enable"
-        if mode == "enable":
+        if mode == "enable" and self.slice_canvas_mode != "enable":
             # mouse-pressing events may be disabled
             self.press_id = self.sliceplot.mpl_connect(
                 "button_press_event", self.sliceMouseDownHandler)
             self.release_id = self.sliceplot.mpl_connect(
                 "button_release_event", self.sliceMouseUpHandler)
-        else:
+            self.slice_canvas_mode = mode
+        elif mode == "disable" and self.slice_canvas_mode != "disable":
             self.sliceplot.mpl_disconnect(self.press_id)
             self.sliceplot.mpl_disconnect(self.release_id)
+            self.slice_canvas_mode = mode
     #-------------------------------------------------------------------------
     def updateCoords(self, y, x):
 
@@ -1310,8 +1323,10 @@ class ColorBar (FigureCanvas):
 
 ##############################################################################
 class StatusBar (gtk.Frame):
+
+    DRAW_MODE = 0
+    CLEAR_MODE = 1
     
-    #-------------------------------------------------------------------------
     def __init__(self, sliceplot, range, cmap, norm):
         gtk.Frame.__init__(self)
         self.set_border_width(3)
@@ -1338,6 +1353,10 @@ class StatusBar (gtk.Frame):
         #self.drawbutton.connect("clicked", self.button_handler)
         self.drawbutton.set_size_request(200,20)
         lower_hbox.add(self.drawbutton)
+        self.button_mode = StatusBar.DRAW_MODE
+
+        ## rectangle clear button
+        #self.clearbutton = gtk.Button(label="Clear ROI")
 
         # average report
         self.roi_label = gtk.Label()
@@ -1354,8 +1373,19 @@ class StatusBar (gtk.Frame):
 
     #-------------------------------------------------------------------------
     def connect_button(self, button_handler):
-        self.drawbutton.connect("clicked", button_handler)
+        self.handler_id = self.drawbutton.connect("clicked", button_handler)
     
+    #-------------------------------------------------------------------------
+    def toggle_button(self, new_handler):
+        if self.button_mode == StatusBar.DRAW_MODE:
+            self.drawbutton.set_label("clear ROI")
+        else:
+            self.drawbutton.set_label("Get ROI average")
+        self.drawbutton.disconnect(self.handler_id)
+        self.handler_id = self.drawbutton.connect("clicked", new_handler)
+        self.drawbutton.show()
+        self.button_mode = self.button_mode ^ 1
+
     #-------------------------------------------------------------------------
     def setLabel(self, text):
         self.label.set_text(text)
@@ -1441,13 +1471,13 @@ class RectangleSelector:
             self.rectprops = rectprops
             self.to_draw = Rectangle((0,0), 0, 1,visible=False,**self.rectprops)
             self.ax.add_patch(self.to_draw)
-        if drawtype == 'line':
-            if lineprops is None:
-                lineprops = dict(color='black', linestyle='-',
-                                 linewidth = 2, alpha=0.5)
-            self.lineprops = lineprops
-            self.to_draw = Line2D([0,0],[0,0],visible=False,**self.lineprops)
-            self.ax.add_line(self.to_draw)
+##         if drawtype == 'line':
+##             if lineprops is None:
+##                 lineprops = dict(color='black', linestyle='-',
+##                                  linewidth = 2, alpha=0.5)
+##             self.lineprops = lineprops
+##             self.to_draw = Line2D([0,0],[0,0],visible=False,**self.lineprops)
+##             self.ax.add_line(self.to_draw)
 
         self.onselect = onselect
         self.useblit = useblit
@@ -1455,9 +1485,9 @@ class RectangleSelector:
         self.minspany = minspany
         self.drawtype = drawtype
         # will save the data (position at mouseclick)
-        self.eventpress = None
+        self.lastpress = self.eventpress = None
         # will save the data (pos. at mouserelease)
-        self.eventrelease = None
+        self.lastrelease = self.eventrelease = None
 
     def update_background(self, event):
         'force an update of the background'
@@ -1497,6 +1527,18 @@ class RectangleSelector:
         return  (event.inaxes!=self.ax or
                  event.button != self.eventpress.button)
 
+    def updateAx(self, ax):
+        self.ax = ax
+        self.canvas = ax.figure.canvas
+        if self.to_draw not in ax.patches:
+            ax.add_patch(self.to_draw)
+        self.onselect(self.lastpress, self.lastrelease)
+        self.canvas.draw()
+
+    def clear(self):
+        self.to_draw.set_visible(False)
+        self.canvas.draw()
+
     def press(self, event):
         'on button press event'
         # Is the correct button pressed within the correct axes?
@@ -1514,8 +1556,8 @@ class RectangleSelector:
         'on button release event'
         if self.eventpress is None or self.ignore(event): return
         # make the box/line invisible again
-        self.to_draw.set_visible(False)
-        self.canvas.draw()
+        #self.to_draw.set_visible(False)
+        #self.canvas.draw()
         # release coordinates, button, ...
         self.eventrelease = event
         xmin, ymin = self.eventpress.xdata, self.eventpress.ydata
@@ -1539,6 +1581,8 @@ class RectangleSelector:
             return                 # not to small in neither x nor y-direction
         self.onselect(self.eventpress, self.eventrelease)
                                               # call desired function
+        self.lastpress = self.eventpress
+        self.lastrelease = self.eventrelease
         self.eventpress = None                # reset the variables to their
         self.eventrelease = None              #   inital values
         return False
