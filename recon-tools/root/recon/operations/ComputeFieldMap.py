@@ -98,7 +98,7 @@ class ComputeFieldMap (Operation):
         phase_map, bytemasks = unwrap_3Dphase(diff_vols, self.threshfactor)
         for vol in range(image.tdim-1):
             asym_time = asym_times[vol] - asym_times[vol+1]
-            #phase_map[vol] = (phase_map[vol]/asym_time).astype(N.float32)
+            phase_map[vol] = (phase_map[vol]/asym_time).astype(N.float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)
         # for each diff vol, write a file with vol0 = fmap, vol1 = mask
