@@ -24,7 +24,9 @@ def unwrap2D(matrix, mask=None):
     
     in_phase = len(dims) < 2 and N.reshape(matrix,(1,dims[0])) or \
                matrix.copy()
-    in_phase = (in_phase*mask).astype(N.float32)
-    ret = (mask*lpUnwrap(in_phase)).astype(dtype)
+    #in_phase = (in_phase*mask).astype(N.float32)
+    in_phase = in_phase.astype(N.float32)
+    #ret = (mask*lpUnwrap(in_phase)).astype(dtype)
+    ret = lpUnwrap(in_phase).astype(dtype)
     return ret
 

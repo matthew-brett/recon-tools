@@ -36,6 +36,7 @@ class ScannerImage (ReconImage):
         ('dFE', 'frequency-encode step size (in mm)'),
         ('dPE', 'phase-encode step size (in mm)'),
         ('dSL', 'slice direction step size (in mm)'),
+        ('path', 'path of associated scanner data file'),
     ))
 
     def __init__(self):

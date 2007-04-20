@@ -49,6 +49,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def __init__(self, datadir, vrange=None, target_dtype=N.complex64):
         ProcParImageMixin.__init__(self, datadir, vrange=vrange)
+        self.path = datadir
         self.initializeData()
         self.loadData(datadir)
         self.realizeOrientation()
