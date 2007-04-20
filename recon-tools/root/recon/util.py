@@ -250,13 +250,18 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, zdim, ydim, xdim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, yvar=None, axis=-1): 
+def linReg(Y, X=None, sigma=None, axis=-1): 
     # find best linear line through data:
     # solve for (b,m,res) = (crossing, slope, residual from fit)
-    # let sigma = 1, may use yvar for variance in the future
+    # if sigma is None, let sigma = 1 for every y-point
 
     if axis != -1:
         Y = N.swapaxes(Y, axis, -1)
+        if X is not None:
+            X = N.swapaxes(X, axis, -1)
+        if sigma is not None:
+            sigma = N.swapaxes(sigma, axis, -1)
+
     Yshape = Y.shape
     nrows = N.product(Yshape[:-1])
     npts = Yshape[-1]
@@ -265,21 +270,246 @@ def linReg(Y, X=None, yvar=None, axis=-1):
     if X is None:
         # if no X provided, get the right number of rows of [0,1,2,...,N]
         X = N.outer(N.ones((nrows,)), N.arange(npts))
-    Sx = X.sum(axis=-1)
-    Sy = Y.sum(axis=-1)
-    Sxx = N.power(X,2).sum(axis=-1)
-    Sxy = (X*Y).sum(axis=-1)
-    delta = npts*Sxx - N.power(Sx,2)
+    if sigma is None:
+        sigma = N.ones(Y.shape)
+    S = N.power(sigma, -1.0).sum(axis=-1)
+    Sx = (X/sigma).sum(axis=-1)
+    Sy = (Y/sigma).sum(axis=-1)
+    Sxx = (N.power(X,2)/sigma).sum(axis=-1)
+    Sxy = (X*Y/sigma).sum(axis=-1)
+    delta = S*Sxx - N.power(Sx,2)
     b = (Sxx*Sy - Sx*Sxy)/delta
-    m = (npts*Sxy - Sx*Sy)/delta
+    m = (S*Sxy - Sx*Sy)/delta
     res = abs(Y - (m[:,N.newaxis]*X+b[:,N.newaxis])).sum(axis=-1)/float(npts)
 
     Y = N.reshape(Y, Yshape)
     if axis != -1:
         Y = N.swapaxes(Y, axis, -1)
+        # swap these back too, even if they're just local
+        X = N.swapaxes(X, axis, -1)
+        sigma = N.swapaxes(sigma, axis, -1)
     return (N.reshape(b, Y.shape[:-1]),
             N.reshape(m, Y.shape[:-1]),
             N.reshape(res, Y.shape[:-1]))
+
+#-----------------------------------------------------------------------------
+def polyfit(x, y, deg, sigma=None, rcond=None, full=False):
+    """Least squares polynomial fit.
+
+    Yoinked from numpy and modified to minimize with respect to variance.
+
+    sigma kwarg should be VARIANCE and NOT STDEV
+
+    Required arguments
+
+        x -- vector of sample points
+        y -- vector or 2D array of values to fit
+        deg -- degree of the fitting polynomial
+
+    Keyword arguments
+
+        rcond -- relative condition number of the fit (default len(x)*eps)
+        full -- return full diagnostic output (default False)
+
+    Returns
+
+        full == False -- coefficients
+        full == True -- coefficients, residuals, rank, singular values, rcond.
+
+    Warns
+
+        RankWarning -- if rank is reduced and not full output
+
+    Do a best fit polynomial of degree 'deg' of 'x' to 'y'.  Return value is a
+    vector of polynomial coefficients [pk ... p1 p0].  Eg, for n=2
+
+      p2*x0^2 +  p1*x0 + p0 = y1
+      p2*x1^2 +  p1*x1 + p0 = y1
+      p2*x2^2 +  p1*x2 + p0 = y2
+      .....
+      p2*xk^2 +  p1*xk + p0 = yk
+
+
+    Method: if X is a the Vandermonde Matrix computed from x (see
+    http://mathworld.wolfram.com/VandermondeMatrix.html), then the
+    polynomial least squares solution is given by the 'p' in
+
+      X*p = y
+
+    where X is a len(x) x N+1 matrix, p is a N+1 length vector, and y
+    is a len(x) x 1 vector
+
+    This equation can be solved as
+
+      p = (XT*X)^-1 * XT * y
+
+    where XT is the transpose of X and -1 denotes the inverse. However, this
+    method is susceptible to rounding errors and generally the singular value
+    decomposition is preferred and that is the method used here. The singular
+    value method takes a paramenter, 'rcond', which sets a limit on the
+    relative size of the smallest singular value to be used in solving the
+    equation. This may result in lowering the rank of the Vandermonde matrix,
+    in which case a RankWarning is issued. If polyfit issues a RankWarning, try
+    a fit of lower degree or replace x by x - x.mean(), both of which will
+    generally improve the condition number. The routine already normalizes the
+    vector x by its maximum absolute value to help in this regard. The rcond
+    parameter may also be set to a value smaller than its default, but this may
+    result in bad fits. The current default value of rcond is len(x)*eps, where
+    eps is the relative precision of the floating type being used, generally
+    around 1e-7 and 2e-16 for IEEE single and double precision respectively.
+    This value of rcond is fairly conservative but works pretty well when x -
+    x.mean() is used in place of x.
+
+    The warnings can be turned off by:
+
+    >>> import numpy
+    >>> import warnings
+    >>> warnings.simplefilter('ignore',numpy.RankWarning)
+
+    DISCLAIMER: Power series fits are full of pitfalls for the unwary once the
+    degree of the fit becomes large or the interval of sample points is badly
+    centered. The basic problem is that the powers x**n are generally a poor
+    basis for the functions on the sample interval with the result that the
+    Vandermonde matrix is ill conditioned and computation of the polynomial
+    values is sensitive to coefficient error. The quality of the resulting fit
+    should be checked against the data whenever the condition number is large,
+    as the quality of polynomial fits *can not* be taken for granted. If all
+    you want to do is draw a smooth curve through the y values and polyfit is
+    not doing the job, try centering the sample range or look into
+    scipy.interpolate, which includes some nice spline fitting functions that
+    may be of use.
+
+    For more info, see
+    http://mathworld.wolfram.com/LeastSquaresFittingPolynomial.html,
+    but note that the k's and n's in the superscripts and subscripts
+    on that page.  The linear algebra is correct, however.
+
+    See also polyval
+
+    """
+    order = int(deg) + 1
+    if sigma is None:
+        sigma = N.ones(y.shape[-1])
+    inv_stdev = N.power(sigma, -0.5)
+    x = N.asarray(x) + 0.0
+    y = (N.asarray(y) + 0.0)*inv_stdev
+
+    # check arguments.
+    if deg < 0 :
+        raise ValueError, "expected deg >= 0"
+    if x.ndim != 1 or x.size == 0:
+        raise TypeError, "expected non-empty vector for x"
+    if y.ndim < 1 or y.ndim > 2 :
+        raise TypeError, "expected 1D or 2D array for y"
+    if x.shape[0] != y.shape[0] :
+        raise TypeError, "expected x and y to have same length"
+
+    # set rcond
+    if rcond is None :
+        xtype = x.dtype
+        if xtype == N.single or xtype == N.csingle :
+            rcond = len(x)*N.finfo(N.single).eps
+        else :
+            rcond = len(x)*N.finfo(N.double).eps
+
+    # scale x to improve condition number
+    scale = abs(x).max()
+    if scale != 0 :
+        x /= scale
+
+    # solve least squares equation for powers of x
+    v = N.vander(x, order)*inv_stdev[:,None]
+    c, resids, rank, s = N.linalg.lstsq(v, y, rcond)
+
+    # warn on rank reduction, which indicates an ill conditioned matrix
+    if rank != order and not full:
+        import warnings
+        msg = "Polyfit may be poorly conditioned"
+        warnings.warn(msg, RankWarning)
+
+    # scale returned coefficients
+    if scale != 0 :
+        c /= N.vander([scale], order)[0]
+
+    if full :
+        return c, resids, rank, s, rcond
+    else :
+        return c
+
+#-----------------------------------------------------------------------------
+def bivariate_fit(z, dim0, dim1, deg, sigma=None, mask=None,
+                  rcond=None, scale=None):
+    # Want to solve this problem:
+    # z[l,m] = sum_q,r (a[q,r]*dim0[l]^q*dim1[m]^r)
+    #
+    # If dim0 is L points and dim1 is M points, reorder data into an P point
+    # vector, where P = LM (p = l*L + m)
+    #
+    # also, reorder the system of equations into K = QR (k = q*Q + r) equations
+    #
+    # Now the set of equations is z[p] = sum_k (a[k]*Xk(x[p]))
+    # where a[k] -> a[q,r] and Xk[x[p]] = dim0[l]^q * dim1[m]^r
+    #
+    # So design matrix A will be structured:
+    # | X0[dim00,dim10] X1[dim00,dim10] X2[dim00,dim10] ... XQR[dim00,dim10] |
+    # | X0[dim00,dim11] X1[dim00,dim11] X2[dim00,dim11] ... XQR[dim00,dim11] |
+    # |  .         .         .             .         |
+    # |  .         .         .             .         |    
+    # | X0[dim0L,dim1M] X1[dim0L,dim1M] X2[dim0L,dim1M] ... XQR[dim0L,dim1M] |
+    #
+
+    # a little helper function to break vector or number L into two indices
+    def decompose(l,L):
+        return N.floor(l/L).astype(N.int32), (l%L).astype(N.int32)
+    
+    dim0 = N.asarray(dim0) + 0.0
+    dim1 = N.asarray(dim1) + 0.0
+    z = N.asarray(z) + 0.0
+    L,M = dim0.shape[0],dim1.shape[0]
+    if N.product(z.shape) != L*M:
+        raise ValueError("dimensions of data vector don't match the grid dimensions")
+    Q = R = int(deg) + 1
+
+    # reorder the data, variance, and mask arrays into L*M length vectors
+    if sigma is None:
+        sigma = N.ones((L,M))
+    inv_stdev = N.power(N.reshape(sigma, (L*M,)), -0.5)
+
+    if mask is None:
+        mask = N.ones(z.shape)
+    unmasked = (N.reshape(mask, (L*M,))).nonzero()[0]
+
+    z = N.reshape(z, (L*M,))*inv_stdev
+    l, m = decompose(N.arange(L*M), M)
+    q, r = decompose(N.arange(Q*R), R)
+
+    # set rcond
+    if rcond is None :
+        ztype = z.dtype
+        if ztype == N.single or ztype == N.csingle :
+            rcond = L*M*N.finfo(N.single).eps
+        else :
+            rcond = L*M*N.finfo(N.double).eps
+
+    # design matrix
+    if not scale:
+        scale = abs(dim0).max(), abs(dim1).max()
+
+    dim0 /= scale[0]
+    dim1 /= scale[1]
+    
+    A = N.power(N.outer(dim0[l], N.ones(Q*R)), q) * \
+        N.power(N.outer(dim1[m], N.ones(Q*R)), r)
+
+    A_calc = N.take(A*inv_stdev[:,None], unmasked, axis=0)
+
+    c, resids, rank, s = N.linalg.lstsq(A_calc, N.take(z, unmasked), rcond)
+
+    vec_scale = N.power(scale[0], q)*N.power(scale[1],r)
+    c /= vec_scale
+
+    return A*vec_scale, c
+    
 
 #-----------------------------------------------------------------------------
 def unwrap_ref_volume(vol, fe1, fe2):
@@ -306,6 +536,9 @@ def unwrap_ref_volume(vol, fe1, fe2):
         height = int((height+N.sign(height)*N.pi)/2/N.pi)
         uphases[:,u,:] = uphases[:,u,:] - 2*N.pi*height
 
+    #heights = N.zeros(ydim)
+    #heights[1:] = unwrap1D(uphases[zerosl,:,zeropt], return_diffs=True)
+    #uphases[:] = uphases + heights[N.newaxis,:,N.newaxis]
     return uphases[:,:,fe1:fe2]
 
 #-----------------------------------------------------------------------------
@@ -319,7 +552,7 @@ def mod(x,y):
 
 
 #scipy's unwrap (pythonication of Matlab's routine)
-def unwrap1D(p,discont=N.pi,axis=-1):
+def unwrap1D(p,discont=N.pi,axis=-1,return_diffs=False):
     """unwraps radian phase p by changing absolute jumps greater than
        discont to their 2*pi complement along the given axis.
     """
@@ -334,7 +567,10 @@ def unwrap1D(p,discont=N.pi,axis=-1):
     N.putmask(ph_correct,abs(dd)<discont,0)
     up = N.array(p,copy=1, dtype=N.float64)
     up[slice1] = p[slice1] + N.add.accumulate(ph_correct,axis)
-    return up
+    if not return_diffs:
+        return up
+    else:
+        return N.add.accumulate(ph_correct,axis)
 
 #-----------------------------------------------------------------------------
 def fftconvolve(in1, in2, mode="full", axes=None):

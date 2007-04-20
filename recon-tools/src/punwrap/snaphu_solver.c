@@ -65,12 +65,13 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
   candidatebagsize=(*candidatebagsizeptr);
   candidatelistlen=0;
   candidatebagnext=0;
-
+  
   /* set up */
   bkts->curr=bkts->maxind;
   nnodes=InitTree(source,nodes,nodesupp,ground,ngroundarcs,bkts,nflow,
 		  incrcosts,apexes,iscandidate,nnoderow,nnodesperrow,
 		  narcrow,narcsperrow,nrow,ncol,params);
+
   apexlistlen=INITARRSIZE;
   apexlist=MAlloc(apexlistlen*sizeof(nodeT *));
   groupcounter=2;
@@ -79,8 +80,8 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
   maxnewnodes=ceil(nnodes*params->maxnewnodeconst);
   nnewnodes=0;
   treesize=1;
-  //fprintf(sp3,"Treesize: %-10ld Pivots: %-11ld Improvements: %-11ld",
-	//  treesize,ipivots,inondegen);
+/*   fprintf(sp3,"Treesize: %-10ld Pivots: %-11ld Improvements: %-11ld", */
+/* 	  treesize,ipivots,inondegen); */
 
   /* loop over each entering node (note, source already on tree) */
   while(treesize<nnodes){
@@ -143,7 +144,7 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
 
     /* keep looping until no more arcs have negative reduced costs */
     while(candidatebagnext){
-
+/*       printf("candidatebagnext %d\n",candidatebagnext); */
       /* if we received SIGINT or SIGHUP signal, dump results */
       /* keep this stuff out of the signal handler so we don't risk */
       /* writing a non-feasible solution (ie, if signal during augment) */
@@ -158,6 +159,7 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
 	IntegratePhase(wrappedphase,unwrappedphase,flows,nrow,ncol);
 	FlipPhaseArraySign(unwrappedphase,params,nrow,ncol);	
  
+
 	if(requestedstop_global){
 	  //fprintf(sp0,"Program exiting\n");
 	  exit(ABNORMAL_EXIT);
@@ -710,16 +712,14 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
 	candidatebag[candidatebagnext++]=candidatelist[i];
       }
       */
-
       /* display status */
-      /*
-      fprintf(sp3,"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
-	      "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b"
-	      "\b\b\b\b\b\b"
-	      "Treesize: %-10ld Pivots: %-11ld Improvements: %-11ld",
-	      treesize,ipivots,inondegen);
-      fflush(sp3);
-      */
+      
+/*       fprintf(sp3,"\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b" */
+/* 	      "\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b\b" */
+/* 	      "\b\b\b\b\b\b" */
+/* 	      "Treesize: %-10ld Pivots: %-11ld Improvements: %-11ld", */
+/* 	      treesize,ipivots,inondegen); */
+/*       fflush(sp3); */
     } /* end of while loop on candidatebagnext */    
   } /* end while treesize<number of total nodes */
 
@@ -733,6 +733,8 @@ long TreeSolve(nodeT **nodes, nodesuppT **nodesupp, nodeT *ground,
 	  treesize,ipivots,inondegen);
   fflush(sp3);
   */
+
+
   *candidatelistptr=candidatelist;
   *candidatebagptr=candidatebag;
   *candidatelistsizeptr=candidatelistsize;
@@ -995,7 +997,7 @@ int CandidateCompare(const void *c1, const void *c2){
 
   return(((candidateT *)c1)->violation - ((candidateT *)c2)->violation);
 
-  /*
+  
   if(((candidateT *)c1)->violation > ((candidateT *)c2)->violation){
     return(1);
   }else if(((candidateT *)c1)->violation < ((candidateT *)c2)->violation){
@@ -1003,7 +1005,6 @@ int CandidateCompare(const void *c1, const void *c2){
   }else{
     return(0);
   }
-  */
 }
 
 
@@ -1824,7 +1825,6 @@ long ReCalcCost(void **costs, incrcostT **incrcosts, long flow,
 		paramT *params){
 
   long poscost, negcost, iclipped;
-
   /* calculate new positive and negative nflow costs, as long ints */
   CalcCost(costs,flow,arcrow,arccol,nflow,nrow,params,
 	   &poscost,&negcost);
@@ -2399,12 +2399,12 @@ signed char ClipFlow(signed char **residue, short **flows,
 }
 
 
-/* function: MCFInitFlows()
- * ------------------------
- * Initializes the flow on a the network using minimum cost flow
- * algorithm.  
- /* *\/ */
-/* void MCFInitFlows(float **wrappedphase, short ***flowsptr, short **mstcosts,  */
+/* function: MCFInitFlows() */
+/* ------------------------ */
+/* Initializes the flow on a the network using minimum cost flow */
+/* algorithm.   */
+/*  /\* *\/ */
+/* void MCFInitFlows(float **wrappedphase, short ***flowsptr, short **mstcosts, */
 /* 		  long nrow, long ncol, long cs2scalefactor){ */
 
 /*   signed char **residue; */

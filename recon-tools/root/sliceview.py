@@ -370,12 +370,15 @@ class sliceview (gtk.Window):
         self.sliceplot.toggleCrosshairs(mode=True)
         #self.ROI = None
         avg = self.getSlice()[y1:y2,x1:x2].mean()
-        text = "average in [%d,%d] to [%d,%d]: %2.4f"%(x1,y1-1,x2,y2-1,avg)
+        text = "average in [%d,%d] to [%d,%d]: %2.4f"%(x1,y1,x2-1,y2-1,avg)
+        #ratio = self.getSlice()[y1:y2,x1:x2].mean()/self.getSlice()[y1-32:y2-32,x1:x2].mean()
+        #text = "sig-to-ghost ratio: %2.4f"%ratio
         self.status.setROILabel(text)
 
     #-------------------------------------------------------------------------
     def clearROI(self, button):
         self.connectFigureCanvasEvents(mode="enable")
+        self.sliceplot.toggleCrosshairs(mode=True)
         self.ROI.is_active(False)
         self.ROI.clear()
         self.ROI = None
@@ -1605,8 +1608,8 @@ class RectangleSelector:
         x,y = event.xdata, event.ydata            # actual position (with
                                                   #   (button still pressed)
         if self.drawtype == 'box':
-            minx, maxx = self.eventpress.xdata, x # click-x and actual mouse-x
-            miny, maxy = self.eventpress.ydata, y # click-y and actual mouse-y
+            minx, maxx = map(round, [self.eventpress.xdata, x]) # click-x and actual mouse-x
+            miny, maxy = map(round, [self.eventpress.ydata, y]) # click-y and actual mouse-y
             if minx>maxx: minx, maxx = maxx, minx # get them in the right order
             if miny>maxy: miny, maxy = maxy, miny
             self.to_draw.xy[0] = minx             # set lower left of box

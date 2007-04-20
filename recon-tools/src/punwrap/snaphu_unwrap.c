@@ -57,8 +57,11 @@ void doUnwrap(float *wr_phase, float *uw_phase, long nrow, long ncol) {
   int l,m;
   
   SetDefaults(params);
-  params->p=2;
+  /*params->p=2;
   params->costmode=NOSTATCOSTS;
+  */
+  params->costmode=SMOOTH;
+
   CheckParams(ncol, nrow, params);
   tileparams->firstrow=params->piecefirstrow;
   tileparams->firstcol=params->piecefirstcol;
@@ -142,6 +145,7 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
 
     /* integrate the phase and write out if necessary */
   }
+
   /* initialize network variables */
   InitNetwork(flows,&ngroundarcs,&ncycle,&nflowdone,&mostflow,&nflow,
 	      &candidatebagsize,&candidatebag,&candidatelistsize,
@@ -180,7 +184,7 @@ float **UnwrapTile(float **wrappedphase, paramT *params, tileparamT *tileparams,
 		ngroundarcs,nflow,mag,wrappedphase,
 		nnoderow,nnodesperrow,narcrow,narcsperrow,nrow,ncol,
 		params);
-    
+
     /* evaluate and save the total cost (skip if first loop through nflow) */
     if(notfirstloop){
       oldtotalcost=totalcost;

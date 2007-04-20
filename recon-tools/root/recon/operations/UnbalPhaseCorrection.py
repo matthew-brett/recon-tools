@@ -20,7 +20,7 @@ class UnbalPhaseCorrection (Operation):
             description="""
     Radius of the region of greatest linearity within the magnetic field,
     in mm (normally 70-80mm)"""),
-        Parameter(name="thresh", type="float", default=1.0,
+        Parameter(name="thresh", type="float", default=0.1,
             description="""
     Mask points in the phase means whose standard deviation exceeds
     this number."""),
@@ -41,10 +41,10 @@ class UnbalPhaseCorrection (Operation):
         # needs special treatment: basically the general case is handled in
         # separated parts
         if not verify_scanner_image(self, image):
-            return
+            return -1
         if not hasattr(image, "ref_data"):
             self.log("No reference volume, quitting")
-            return
+            return -1
         if len(image.ref_vols) > 1:
             self.log("Could be performing Balanced Phase Correction!")
 
@@ -76,7 +76,7 @@ class UnbalPhaseCorrection (Operation):
             "unwrap a more linear region, or bump up the thresh param.\n"\
             "Current FOV: %fmm, Current lin_radius: %fmm"%(self.FOV,
                                                            self.lin_radius))
-            return
+            return -1
         
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
