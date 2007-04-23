@@ -84,6 +84,7 @@ def shift(matrix, axis, shift):
     dims = matrix.shape
     ndim = len(dims)
     if axis >= ndim: raise ValueError("bad axis %s"%axis)
+    if shift==0: return
     axis_dim = ndim - 1 - axis
 
     # construct slices
