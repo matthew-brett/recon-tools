@@ -15,7 +15,7 @@ class BalPhaseCorrection_new (Operation):
     """
 
     params = (
-        Parameter(name="lin_radius", type="tuple", default=(-20,20),
+        Parameter(name="lin_region", type="tuple", default=(-32,32),
                   description="""
     Radius of the region of greatest linearity within the magnetic gradient
     field, in mm (normally 70-80mm)."""),
@@ -26,14 +26,6 @@ class BalPhaseCorrection_new (Operation):
         if not verify_scanner_image(self, image):
             return -1
         
-        assoc_path = image.path
-        ref_path = assoc_path.replace("data.fid", "ref_2.fid")
-        if not os.path.exists(ref_path):
-            self.log("No associated balanced reference scan data found")
-            return -1
-        ref_fid = readImage(ref_path, "fid")
-        ReorderSlices().run(ref_fid)
-        image.ref_data = N.array([image.ref_data[0], ref_fid.ref_data[0]])
         if not hasattr(image, "ref_data") or image.ref_data.shape[0] < 2:
             self.log("Not enough reference volumes, quitting.")
             return -1
@@ -51,8 +43,8 @@ class BalPhaseCorrection_new (Operation):
 
 ##         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
 ##                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
-        (self.lin1,self.lin2) = (n_fe/2 + self.lin_radius[0],
-                                 n_fe/2 + self.lin_radius[1])
+        (self.lin1,self.lin2) = (n_fe/2 + self.lin_region[0],
+                                 n_fe/2 + self.lin_region[1])
         self.lin_fe = self.lin2-self.lin1
         self.alpha, self.beta = image.epi_trajectory()
         # comes back smaller! read direction goes from lin1:lin2
@@ -82,10 +74,10 @@ class BalPhaseCorrection_new (Operation):
 
         q1_mask = N.ones((n_slice, n_pe, self.lin_fe))
 
-##         for s in range(n_slice):
-##             for r in range(n_pe):
-##                 q1_mask[s,r] = maskbyfit(phs_vol[s,r], sigma[s,r], tol=1.5,
-##                                          tol_growth=1.25, order=2)
+        for s in range(n_slice):
+            for r in range(n_pe):
+                q1_mask[s,r] = maskbyfit(phs_vol[s,r], sigma[s,r], tol=1.5,
+                                         tol_growth=1.25, order=2)
 
         theta = N.empty(self.refShape, N.float64)
         s_line = N.arange(n_slice)
@@ -101,6 +93,8 @@ class BalPhaseCorrection_new (Operation):
         A[:,1] = s_line
         A[:,2] = 1.
         for u in range(n_pe):
+            #q1_mask[:3,u,:] = 0
+            #q1_mask[11:,u,:] = 0
             coefs = solve_phase(0.5*phs_vol[:-1,u,:], q1_mask[:-1,u,:],
                                 r_line_chop, s_line[:-1])
             B[0,:] = coefs[B1]*r_line
@@ -254,16 +248,15 @@ class BalPhaseCorrection_new (Operation):
 ##             P.title("slice %d"%(s,))
 ##             P.grid(True)
 ##             P.show()
-##         for u in range(2,n_pe,5):
+##         for u in range(2,n_pe,9):
 ##             fig = P.figure()
 ##             ax = p3.Axes3D(fig)
 ##             ax.hold(True)
 ##             ax.plot_wireframe(Rx[:-1],Sx[:-1],0.5*phs_vol[:-1,u,:],colors=red)
-##             #ax.plot_wireframe(Rx,Sx,theta[:,u,self.lin1:self.lin2])
+##             ax.plot_wireframe(Rx,Sx,theta[:,u,self.lin1:self.lin2])
 ##             ax.set_xlabel("read-out")
 ##             ax.set_ylabel("slice")
-##             ax.set_zlabel("phase")
-##             P.title("mu = %d surface"%u)
+##             ax.set_zlabel("phase mu=%d"%u)
 ##             P.show()
 
 ##         for s in [0,1,10,19,36,37]:

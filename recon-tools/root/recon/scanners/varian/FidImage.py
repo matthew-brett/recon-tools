@@ -55,8 +55,11 @@ class FidImage (ScannerImage, ProcParImageMixin):
         self.realizeOrientation()
         # scanner image will init ReconImage, which will set the data dims
         ScannerImage.__init__(self)
+        ref_path = self.path.replace("data.fid", "ref_2.fid")
+        if ref_path is not self.path and os.path.exists(ref_path):
+            ref_fid = FidImage(ref_path)
+            self.ref_data = N.array([self.ref_data[0], ref_fid.ref_data[0]])
         
-
     #-------------------------------------------------------------------------
     def logParams(self):
         "Report scan parameters to stdout."
