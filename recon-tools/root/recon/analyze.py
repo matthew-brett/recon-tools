@@ -227,8 +227,8 @@ class AnalyzeImage (ReconImage):
             byteoffset = vstart*bytepix*N.product((self.zdim,
                                                    self.ydim,self.xdim))
 
-        dims = self.tdim and (self.tdim, self.zdim, self.ydim, self.xdim) \
-                          or (self.zdim, self.ydim, self.xdim)
+        dims = self.tdim > 1 and (self.tdim, self.zdim, self.ydim, self.xdim) \
+               or (self.zdim, self.ydim, self.xdim)
         datasize = bytepix * N.product(dims)
         fp = file(filename)
         fp.seek(byteoffset, 1)
