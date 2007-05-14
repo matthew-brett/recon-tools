@@ -1,5 +1,6 @@
 import numpy as N
 from scipy.special.basic import lpmn
+from scipy.special import gammaln
 
 def _sph_harmonic_cart(m,n,l,x,y,z,r0):
     """inputs of (m,n,theta,phi) returns spherical harmonic of order
@@ -17,9 +18,9 @@ def _sph_harmonic_cart(m,n,l,x,y,z,r0):
     m,n = int(m), int(n)
     Pmn,Pmnd = lpmn(m,n,w)
     val = Pmn[-1,-1]
-##     val *= sqrt((2*n+1)/4.0/pi)
-##     val *= exp(0.5*(gammaln(n-m+1)-gammaln(n+m+1)))
-##     val *= exp(1j*m*theta)
+##     val *= N.sqrt((2*n+1)/4.0/N.pi)
+##     val *= N.exp(0.5*(gammaln(n-m+1)-gammaln(n+m+1)))
+##     #val *= N.exp(1j*m*theta)
     val *= N.power(r/r0,n)
     if l == 1: val *= N.cos(m*theta)
     if l == 2: val *= N.sin(m*theta)
@@ -106,12 +107,12 @@ def xyz_harms(xdim=64,ydim=64,zdim=20,dx=3.5,dy=3.5,dz=4.0,tab_num=300):
         '700': 0 + .06899,
         '900': 0 - .01830,
     }
-    
+    # KEEP UNITS IN MM!
     # say FOV is 224x224x80 in x, y, z
     # x,y in [-112,112), z in [-40,40)
-    x = dx*(N.arange(xdim)-xdim/2)/100.
-    y = dy*(N.arange(ydim)-ydim/2)/100.
-    z = dz*(N.arange(zdim)-zdim/2)/100
+    x = dx*(N.arange(xdim)-xdim/2)
+    y = dy*(N.arange(ydim)-ydim/2)
+    z = dz*(N.arange(zdim)-zdim/2)
     print x
     print y
     print z
@@ -119,9 +120,9 @@ def xyz_harms(xdim=64,ydim=64,zdim=20,dx=3.5,dy=3.5,dz=4.0,tab_num=300):
     hy = N.zeros((zdim,ydim,xdim))
     hz = N.zeros((zdim,ydim,xdim))
     (x_table, y_table, z_table, r0) = \
-              {300: (x_table_300, y_table_300, z_table_300, 1.5),
-               400: (x_table_400, y_table_400, z_table_400, 2.0),
-               500: (x_table_500, y_table_500, z_table_500, 2.5),
+              {300: (x_table_300, y_table_300, z_table_300, 150),
+               400: (x_table_400, y_table_400, z_table_400, 200),
+               500: (x_table_500, y_table_500, z_table_500, 250),
                }.get(tab_num, (None,)*4)
     if not r0:
         print "bad tab_num: %d"%tab_num
