@@ -192,7 +192,7 @@ void read_procpar(char *base_path, image_struct *image)
     if(strcmp(keyword, "dp") == 0){
       fgets(line, sizeof(line), fp);
       sscanf(line,"%s %s", key1, key2);
-      printf("key2: %s: \n", key2);
+      printf("double precision? %s: \n", key2);
       if(strcmp(key2,"\"y\"") == 0){
         image->precision = 4;
       }else{
@@ -211,7 +211,7 @@ void read_procpar(char *base_path, image_struct *image)
       sscanf(line, "%s %s %s", key1, key2, key3);
       image->asym_times[0] = atof(key2);
       image->asym_times[1] = atof(key3);
-      printf("asym_times: %f, %f", image->asym_times[0], image->asym_times[1]);
+      printf("asym_times: %f, %f\n", image->asym_times[0], image->asym_times[1]);
     }
   }
   image->n_refs = 1;

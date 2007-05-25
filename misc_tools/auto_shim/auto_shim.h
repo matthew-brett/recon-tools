@@ -15,6 +15,7 @@
 #include <fftw3.h>
 #include <netinet/in.h>
 #include <errno.h>
+#include <vecLib/clapack.h>
 
 //#ifndef __imageH__
 #include "image.h"
@@ -67,6 +68,10 @@ double* Carray_imag(fftw_complex *zarray, const int dsize);
 double* Carray_mag(fftw_complex *zarray, const int dsize);
 unsigned char* mask_from_mag(double *mag, const int dsize);
 int comparator(double *a, double *b);
+void eigenvals(double *a, double *e, int M);
+double condition(double *a, int M, int N);
+
+
 /* Declaration of complex number operations */
 
 //Returns the complex sum of two comp

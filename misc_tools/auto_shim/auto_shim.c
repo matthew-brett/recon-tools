@@ -2,10 +2,11 @@
 * auto_shim.c                                                               *
 *                                                                           *
 * To compile:                                                               *
-*  gcc -Wall -g auto_shim.c -o auto_shim -lm                                *
+*  gcc -Wall -g auto_shim.c data.c image.c -o auto_shim \                   *
+*              -L./punwrap -lm -lfftw -lunwrap -llapack (?)                 *
 *                                                                           *
 * To run:                                                                   *
-*  auto_shim  fid_dir tl                                                    *
+*  auto_shim  fid_dir tl outfile                                            *
 *                                                                           *
 * Where fid_dir is the path to the directory containing the procpar and fid *
 * data files, outfile is the user defined output file name, and oplist is   *
@@ -27,14 +28,6 @@ int main(int argc, char* argv[])
   float *fmap;
   unsigned char *vmask;
 
-/*   /\* Allocate memory for the op_seq struct. The members of the op_struct */
-/*   struct are assigned values in the function named read_oplist. The  */
-/*   function read_oplist reads the oplist file to determine the operations  */
-/*   the user wants to perform and the value of any extra option-specific */
-/*   parameters. When adding new operations you must make read_oplist  */
-/*   aware of them. *\/ */
-/*   op_seq = (op_struct *) calloc(1, MAX_OPS * sizeof(op_struct)); */
-
   /* Allocate memory for the image structure. The members of image_struct 
   are assigned in the function read_procpar and get_data. The data within
   image_struct is used within each of the operations. It contains the raw
@@ -52,10 +45,6 @@ int main(int argc, char* argv[])
 
   /* Parse the command line. */
   strcpy(base_path, argv[1]); 
-/*   strcpy(oplist_path, argv[3]); */
-
-/*   /\* Read the oplist file. *\/ */
-/*   read_oplist(oplist_path, op_seq); */
   
   /* Read procpar and put parameters in the image_struct. */
   read_procpar(base_path, image);
@@ -74,7 +63,6 @@ int main(int argc, char* argv[])
   compute_field_map(image, &fmap, &vmask);
 
   image_struct *fmap_im = (image_struct *) malloc(sizeof(image_struct));
-  printf("trying to copy image ... ");
   copy_image(image, fmap_im, 0);
   int k, vsize;
   vsize = image->dsize / image->n_vol;
@@ -91,7 +79,7 @@ int main(int argc, char* argv[])
   write_analyze(fmap_im, "fmap+mask.ana");
 
   find_kernels(fmap, vmask, image->n_slice_vol, 
-	       image->n_pe, image->n_fe, Tl);
+	       image->n_pe, image->n_fe, atof(argv[2]));
   
 
   write_analyze(image, argv[3]);
@@ -282,6 +270,8 @@ void find_kernels(float *fmap, unsigned char *vmask,
   int N2,N2P,M1,M2,n2,n2p,q1,q2,sl,idx;
   double re, im, zarg, tn2;
   double pi = acos(-1.0);
+  double *dp, cn;
+  fftw_complex *svals;
   fftw_complex ***basis_xform;
   fftw_complex ***kern;
   fftw_complex ***e2;
@@ -293,64 +283,79 @@ void find_kernels(float *fmap, unsigned char *vmask,
   M1 = nc;
   M2 = nr;
 
-  printf("starting kernel calc for sl=0 ... ");
-
   basis_xform = f3tensor(N2,N2P,M2);
   for(n2 = 0; n2 < N2; n2++) {
     
     for(n2p = 0; n2p < N2P; n2p++) {
       
       for(q2 = 0; q2 < M2; q2++) {
-	zarg = pi * (double) (n2p - n2) / (double) (q2 - M2/2);
-	basis_xform[n2][n2p][q2][0] = cos(zarg);
-	basis_xform[n2][n2p][q2][1] = sin(zarg);
+	zarg = (2.0 * pi * (n2p - n2) * (q2 - M2/2))/M2;
+	basis_xform[n2][n2p][q2][0] = cos(zarg)/M2;
+	basis_xform[n2][n2p][q2][1] = sin(zarg)/M2;
       }
 
     }
 
   }
-  sl = 0;
-  e2 = f3tensor(N2,M2,M1);
-  for(n2 = 0; n2 < N2; n2++) {
-    tn2 = (n2 - N2/2) * Tl;
-    for(q2 = 0; q2 < M2; q2++) {
-      
-      for(q1 = 0; q1 < M1; q1++) {
-	// nr rows per slice
-	// nc pts per row
-	idx = nc * (q2 + nr*sl) + q1;
-	zarg = tn2 * (double) fmap[idx];
-	e2[n2][q2][q1][0] = cos(zarg);
-	e2[n2][q2][q1][1] = sin(zarg);
-      }
-    }
-  }
-  
-  kern = f3tensor(M1,N2,N2P);
-  // k is (M1,N2,N2P)
-  // basis_xform is (N2,N2P,M2)
-  // e2 is (N2,M2,M1)
-  for(q1 = 0; q1 < M1; q1++) {
+
+  for(sl=0; sl < ns; sl++) {
+    printf("starting kernel calc for sl=%d ... \n", sl);
+    e2 = f3tensor(N2,M2,M1);
     for(n2 = 0; n2 < N2; n2++) {
-      for(n2p = 0; n2p < N2P; n2p++) {
-	sum[0][0] = 0.0;
-	sum[0][1] = 0.0;
-	for(q2 = 0; q2 < M2; q2++) {
-	  if(vmask[nc * (q2 + nr*sl) + q1]) {
-	    sum[0][0] += (basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][0])
-                        -(basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][1]);
-
-	    sum[0][1] += (basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][0])
-                        +(basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][1]);
+      tn2 = (n2 - N2/2) * Tl;
+      for(q2 = 0; q2 < M2; q2++) {
+      
+	for(q1 = 0; q1 < M1; q1++) {
+	  // nr rows per slice
+	  // nc pts per row
+	  idx = nc * (q2 + nr*sl) + q1;
+	  if(vmask[idx]) {
+	    zarg = tn2 * (double) fmap[idx];
+	    e2[n2][q2][q1][0] = cos(zarg);
+	    e2[n2][q2][q1][1] = sin(zarg);
+	  } else {
+	    e2[n2][q2][q1][0] = 0.0;
+	    e2[n2][q2][q1][1] = 0.0;
 	  }
 	}
-	kern[q1][n2][n2p][0] = sum[0][0];
-	kern[q1][n2][n2p][1] = sum[0][1];
       }
     }
-    //could compute eigenvalues here
+  
+    kern = f3tensor(M1,N2,N2P);
+    // k is (M1,N2,N2P)
+    // basis_xform is (N2,N2P,M2)
+    // e2 is (N2,M2,M1)
+    printf("condition numbers via SVD for sl %d ... \n", sl);
+    for(q1 = 0; q1 < M1; q1++) {
+      for(n2 = 0; n2 < N2; n2++) {
+	for(n2p = 0; n2p < N2P; n2p++) {
+	  sum[0][0] = 0.0;
+	  sum[0][1] = 0.0;
+	  for(q2 = 0; q2 < M2; q2++) {
+	    if(vmask[nc * (q2 + nr*sl) + q1]) {
+	      sum[0][0] += (basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][0])
+		          -(basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][1]);
+
+	      sum[0][1] += (basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][0])
+		          +(basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][1]);
+	    }
+	  }
+	  kern[q1][n2][n2p][0] = sum[0][0];
+	  kern[q1][n2][n2p][1] = sum[0][1];
+	}
+      }
+      //could compute eigenvalues here -- need to point to contiguous array"
+      // kern[q1] is a double **, but kern[0][0 + q1*ncol*nrow] is a double *
+      // svals should be "complex double", so fftw_complex[N2] is fine
+      dp = (double *) (kern[0][0] + q1*N2*N2P);
+      //eigenvals(dp, (double *) svals,N2);
+      printf("%1.3e ", condition(dp, N2, N2P));
+      if (q1 > 0 && ! (q1 % 8) ) printf("\n");
+      //qsort(svals, N2, sizeof(float), compar);
+    }
+    printf("\n");
+    printf("got kernel\n\n\n");
   }
-  printf("got kernel\n");
   free(basis_xform);
   free(e2);
   free(sum);
@@ -570,7 +575,50 @@ unsigned char* mask_from_mag(double *mag, const int dsize)
 
 int comparator(double *a, double *b)
 {
+  if (a[0] == b[0]) return 0;
   if (a[0] > b[0]) return 1;
   else return -1;
 }
 
+void eigenvals(double *a, double *e, int M) {
+  char JOBVL = 'N';
+  char JOBVR = 'N';
+  double *vl, *vr, *work, *rwork;
+  int N, LDA, LDVL, LDVR, LWORK, INFO;
+  
+  N = LDA = LDVL = LDVR = M;
+  LWORK = 16 * N;
+  work = (double *) malloc(sizeof(double) * 2 * LWORK);
+  rwork = (double *) malloc(sizeof(double) * 2 * N);
+  zgeev_(&JOBVL, &JOBVR, &N, a, &LDA, e, vl, &LDVL, vr, &LDVR,
+	 work, &LWORK, rwork, &INFO);
+  free(work);
+  free(rwork);
+}
+
+double condition(double *a, int M, int N) {
+  char JOBZ = 'N';
+  int LDA, LDU, LDVT, LWORK, IWORK, LRWORK, INFO, ns;
+  double *s, *u, *vt, *work, *rwork, cond;
+
+  LDA = LDU = M;
+  LDVT = N;
+  LWORK = M > N ? 2*N + M : 2*M + N;
+  IWORK = M > N ? 8*N : 8*M;
+  LRWORK = M > N ? 5*N : 5*M;
+  ns = M > N ? N : M;
+  work = (double *) malloc(2 * LWORK * sizeof(double));
+  rwork = (double *) malloc(2 * LRWORK * sizeof(double));
+  s = (double *) malloc(sizeof(double)*ns);
+  zgesdd_(&JOBZ, &M, &N, a, &LDA, s, u, &LDU, vt, &LDVT,
+	  work, &LWORK, rwork, &IWORK, &INFO);
+  if (INFO==0 && s[ns-1] > 0.0) {
+    cond = s[0]/s[ns-1];
+  } else {
+    cond = -1.0;
+  }
+  free(s);
+  free(work);
+  free(rwork);
+  return cond;
+}
