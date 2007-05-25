@@ -156,7 +156,7 @@ class spmclone (gtk.Window):
 
     #-------------------------------------------------------------------------
     def setNorm(self):
-        "sets the whitepoint and blackpoint"
+        "sets the whitepoint and blackpoint (uses raw data, not scaled)"
         ordered_image = N.sort(self.image[:].flatten())
         Npt = ordered_image.shape[0]
         p01 = ordered_image[N.round(Npt*.01)]
@@ -451,8 +451,11 @@ class spmclone (gtk.Window):
                 self.lasso_plot = None
                 self.connectCrosshairEvents()
                 #open("mask.dat", "wb").write(self.mask.tostring())
+                msk = self.image._subimage(self.mask)
+                #msk.scaling = 1.0
+                msk.writeImage("mask", format_type="analyze")
                 self.build_patches()
-                print "patches built"
+                print "patches built and volume mask written as mask.(hdr,img)"
 
         self.lasso = MyPolyDraw(event.inaxes, (event.xdata, event.ydata),
                                 mask_from_lasso)

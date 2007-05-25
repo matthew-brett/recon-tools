@@ -10,13 +10,16 @@ def viewphase(fidname, zextent=None, vrange=None, rtype="bal"):
     rvol = brs1.ref_data
     if rtype == "bal":
         inv_ref = util.ifft(rvol[0]) * N.conjugate(util.ifft(util.reverse(rvol[1], axis=-1)))
-    else:
+    elif rtype == "unbal":
         conj_order = N.arange(brs1.shape[-2])
         xleave = brs1.nseg
         util.shift(conj_order, 0, -xleave)
         inv_ref = util.ifft(rvol[0]) * \
                   N.conjugate(N.take(util.ifft(rvol[0]), conj_order, axis=-2))
+    else:
+        inv_ref = util.ifft(rvol[0])
     phs_vol = util.unwrap_ref_volume(inv_ref, 0, 64)
+    #phs_vol = N.angle(inv_ref)
     S = brs1.shape[-3]
     acq_order = brs1.acq_order
     s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(S)])
