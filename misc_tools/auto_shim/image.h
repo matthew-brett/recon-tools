@@ -5,7 +5,7 @@ typedef struct{
   short int  status;       // status word for block header
   short int  index;     // spare short word
   short int  mode;     // spare short word
-  long int   ctcount;     // spare long word
+  int   ctcount;     // spare long word
   float      lpval1;       // 2D-f2 left phase
   float      rpval1;       // 2D-f2 right phase
   float      lvl;     // spare float word

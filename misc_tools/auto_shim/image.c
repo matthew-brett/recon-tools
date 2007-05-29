@@ -98,8 +98,12 @@ int get_data(char *base_path, image_struct *image)
   for(b=0; b<nblocks; b++){
     /* Read a block of ASEMS data, which is n_slice_vol traces */
     fread(sub_hdr, sizeof(sub_hdr_struct), 1, fp_data);
-    b_real = swap_float(sub_hdr->lvl);
-    b_imag = swap_float(sub_hdr->tlt);
+    //b_real = swap_float(sub_hdr->lvl);
+    //b_imag = swap_float(sub_hdr->tlt);
+    swap_bytes((unsigned char *) &(sub_hdr->lvl), sizeof(float));
+    swap_bytes((unsigned char *) &(sub_hdr->tlt), sizeof(float));
+    b_real = sub_hdr->lvl;
+    b_imag = sub_hdr->tlt;
     num = fread(block, precision, block_data_size, fp_data);
     vol = b%2;
     pe = b/2;

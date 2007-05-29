@@ -15,7 +15,7 @@
 #include <fftw3.h>
 #include <netinet/in.h>
 #include <errno.h>
-#include <vecLib/clapack.h>
+//#include <vecLib/clapack.h>
 
 //#ifndef __imageH__
 #include "image.h"
@@ -60,6 +60,7 @@ void read_oplist(char *oplist_path, op_struct *op_seq);
 /* Declaration of helper functions */
 void time_reverse(image_struct *image);
 float swap_float(float d);
+void swap_bytes(unsigned char *a, int nbytes);
 fftw_complex* Carray_conj(fftw_complex *zarray, const int dsize);
 void Carray_mult(fftw_complex *za1, const fftw_complex *za2, const int dsize);
 double* Carray_real(fftw_complex *zarray, const int dsize);
@@ -68,9 +69,8 @@ double* Carray_imag(fftw_complex *zarray, const int dsize);
 double* Carray_mag(fftw_complex *zarray, const int dsize);
 unsigned char* mask_from_mag(double *mag, const int dsize);
 int comparator(double *a, double *b);
-void eigenvals(double *a, double *e, int M);
+/* void eigenvals(double *a, double *e, int M); */
 double condition(double *a, int M, int N);
-
 
 /* Declaration of complex number operations */
 

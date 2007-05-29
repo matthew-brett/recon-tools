@@ -18,6 +18,14 @@
 #include "data.h"
 #include "punwrap/snaphu_unwrap.h"
 
+
+
+extern int zgesdd_(char *jobz, int *m, int *n, double *a,
+		       int *lda, double *s, double *u, int *ldu,
+		       double *vt, int *ldvt, double *work, int *lwork,
+		       double *rwork, int *iwork, int *info);
+
+
 int main(int argc, char* argv[])
 {
 
@@ -58,7 +66,9 @@ int main(int argc, char* argv[])
   /* get the distortion kernels      */
   /* ????                            */
 
+  write_analyze(image, "ksp.ana");
   ifft2d(image);
+  write_analyze(image, "isp.ana");
   // fmap and vmask will both be assigned and filled here (free later)
   compute_field_map(image, &fmap, &vmask);
 
@@ -500,6 +510,47 @@ float swap_float(float d)
     return a;
 }
 
+/* void swap_bytes(unsigned char *a, int nbytes) */
+/* { */
+/*   int k; */
+/*   unsigned char tmp; */
+/*   for(k=0; k<nbytes/2; k++) { */
+/*     tmp = a[nbytes-k-1]; */
+/*     a[nbytes-k-1] = a[k]; */
+/*     a[k] = tmp; */
+/*   } */
+/* } */
+
+void swap_bytes(unsigned char *x, int size)
+{
+  unsigned char c;
+  unsigned short s;
+  unsigned long l;
+
+  switch (size)
+  {
+    case 2: /* swap two bytes */
+      c = *x;
+      *x = *(x+1);
+      *(x+1) = c;
+      break;
+    case 4: /* swap two shorts (2-byte words) */
+      s = *(unsigned short *)x;
+      *(unsigned short *)x = *((unsigned short *)x + 1);
+      *((unsigned short *)x + 1) = s;
+      swap_bytes ((char *)x, 2);
+      swap_bytes ((char *)((unsigned short *)x+1), 2);
+      break;
+    case 8: /* swap two longs (4-bytes words) */
+      l = *(unsigned long *)x;
+      *(unsigned long *)x = *((unsigned long *)x + 1);
+      *((unsigned long *)x + 1) = l;
+      swap_bytes ((char *)x, 4);
+      swap_bytes ((char *)((unsigned long *)x+1), 4);
+      break;
+  }
+}
+
 fftw_complex* Carray_conj(fftw_complex *zarray, const int dsize)
 {
   int k;
@@ -580,21 +631,21 @@ int comparator(double *a, double *b)
   else return -1;
 }
 
-void eigenvals(double *a, double *e, int M) {
-  char JOBVL = 'N';
-  char JOBVR = 'N';
-  double *vl, *vr, *work, *rwork;
-  int N, LDA, LDVL, LDVR, LWORK, INFO;
+/* void eigenvals(double *a, double *e, int M) { */
+/*   char JOBVL = 'N'; */
+/*   char JOBVR = 'N'; */
+/*   double *vl, *vr, *work, *rwork; */
+/*   int N, LDA, LDVL, LDVR, LWORK, INFO; */
   
-  N = LDA = LDVL = LDVR = M;
-  LWORK = 16 * N;
-  work = (double *) malloc(sizeof(double) * 2 * LWORK);
-  rwork = (double *) malloc(sizeof(double) * 2 * N);
-  zgeev_(&JOBVL, &JOBVR, &N, a, &LDA, e, vl, &LDVL, vr, &LDVR,
-	 work, &LWORK, rwork, &INFO);
-  free(work);
-  free(rwork);
-}
+/*   N = LDA = LDVL = LDVR = M; */
+/*   LWORK = 16 * N; */
+/*   work = (double *) malloc(sizeof(double) * 2 * LWORK); */
+/*   rwork = (double *) malloc(sizeof(double) * 2 * N); */
+/*   zgeev_(&JOBVL, &JOBVR, &N, a, &LDA, e, vl, &LDVL, vr, &LDVR, */
+/* 	 work, &LWORK, rwork, &INFO); */
+/*   free(work); */
+/*   free(rwork); */
+/* } */
 
 double condition(double *a, int M, int N) {
   char JOBZ = 'N';
