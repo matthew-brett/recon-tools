@@ -16,8 +16,11 @@ void free_dvector(double *v, long nl, long nh);
 void free_matrix(float **m, long nrl, long nrh, long ncl, long nch);
 void free_dmatrix(double **m, long nrl, long nrh, long ncl, long nch);
 void free_submatrix(float **b, long nrl, long nrh, long ncl, long nch);
-void free_f3tensor(float ***t, long nr, long nc, long nd);
+void free_f3tensor(fftw_complex ***t);
+void free_f4tensor(fftw_complex ****t);
 void free_zarray(fftw_complex *t);
 
-fftw_complex ***f3tensor(long nr, long nc, long nd);
+fftw_complex ***f3tensor(long nsl, long nrow, long ncol);
+fftw_complex ****f4tensor(long nvol, long nsl, long nrow, long ncol);
+
 fftw_complex *zarray(long dsize);
