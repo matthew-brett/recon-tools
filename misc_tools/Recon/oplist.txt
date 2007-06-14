@@ -1,0 +1,8 @@
+read_image brs_10ms_delay_data.fid
+#read_image asems_TRANS.fid
+#bal_phs_corr    25
+
+#geo_undistort
+ifft2d
+#viewer
+write_image epidw.isp mag 4
