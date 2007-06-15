@@ -131,8 +131,8 @@ int get_multislice_data(char *base_path, image_struct *img)
       swap_bytes((unsigned char *) &(sub_hdr->tlt), sizeof(float));
     }
     fread(block, precision, block_data_size, fp_data);
-    vol = b%2;
-    pe = b/2;
+    vol = b%img->n_vol_total;
+    pe = b/img->n_vol_total;
     for(t=0; t<ntraces; t++){
       s = acq_order[t];
       for(fe=0; fe<n_fe; fe++){
@@ -441,6 +441,7 @@ void read_procpar(char *base_path, image_struct *image)
     }
 
   }
+  /* pslabel "somestring" (with quotes), can't seem to strip that! */
   if( !strcmp(image->pslabel, "\"epidw\"") ) {
     image->n_refs = 1;
     image->n_vol = image->n_vol_total - 1;
@@ -471,13 +472,12 @@ void write_analyze(image_struct *image, double *xform (),
   data_history *datahist;
   char hdr[220], img[220];//, image_type[20];//, out_type[20];
   int n_vol, n_slice, n_pe, n_fe, vol, slice, pe, fe, slice_sz, val_1;
-  int l, m, n, chunk_sz, offset;
+  int l, m, n, chunk_sz, offset, loop_sz;
   double im1, im2, re1, re2, mag;
   double *data_chunk;
   FILE *fp;
  
   printf("Writing Analyze file to disk. \n");
-  //strcpy(image_type,"r_image"); // THESE TWO STRINGS SHOULD BE OBTAINED
   n_vol = image->n_vol;
   n_slice = image->n_slice;
   n_pe = image->n_pe;
@@ -523,61 +523,25 @@ void write_analyze(image_struct *image, double *xform (),
     exit(1);
   }
 
-  /* THIS could stand a major reduction by looping on a single variable
-     that changes with "iterates_on"
-  */
-
   if (iterates_on == 2) {
-    printf("writing data line-wise\n");
     chunk_sz = n_fe;
-    if (xform != NULL) data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
-    for (l = 0; l < n_vol; l++) {
-      for (m = 0; m < n_slice; m++) {
-	for (n = 0; n < n_pe; n++) {
-	  offset = ((l*n_slice + m)*n_pe + n)*chunk_sz;
-	  if (xform != NULL) {
-	    xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
-	    fwrite(data_chunk, chunk_sz, sizeof(double), fp);
-	  } else {
-	    printf("skipping complex write for now!\n");
-	  }
-	}
-      }
-    }
+    loop_sz = n_vol*n_slice*n_pe;
   } else if (iterates_on == 3) {
-    printf("writing data slice-wise\n");
-    chunk_sz = n_pe*n_fe;
-    if (xform != NULL) data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
-    for(l = 0; l < n_vol; l++) {
-      for(m = 0; m < n_slice; m++) {
-	offset = (l*n_slice + m)*chunk_sz;
-	if (xform != NULL) {
-	  xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
-	  fwrite(data_chunk, chunk_sz, sizeof(double), fp);
-	} else {
-	  printf("skipping complex write for now!\n");
-	}
-      }
-    }
-  } else if(iterates_on == 4) {
-    printf("writing data volume-wise\n");
-    chunk_sz = n_slice*n_pe*n_fe;
-    if (xform != NULL) data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
-    for(l = 0; l < n_vol; l++) {
-      offset = l*n_slice*chunk_sz;
-      if (xform != NULL) {
-	xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
-	fwrite(data_chunk, chunk_sz, sizeof(double), fp);
-      } else {
-	printf("skipping complex write for now!\n");
-      }
-    }
-  } else {
-    printf("writing all data\n");
+    chunk_sz = n_pe*n_pe;
+    loop_sz = n_vol*n_slice;
+  } else if (iterates_on == 5) {
     chunk_sz = n_vol*n_slice*n_pe*n_fe;
+    loop_sz = 1;
+  } else {
+    /* make this the catch-all case: volume-by-volume */
+    chunk_sz = n_slice*n_pe*n_fe;
+    loop_sz = n_vol;
+  }
+  if (xform != NULL) data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
+  for (l = 0; l < loop_sz; l++) {
+    offset = l*chunk_sz;
     if (xform != NULL) {
-      data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
-      xform(data_chunk, (const fftw_complex*) ***image->data, chunk_sz);
+      xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
       fwrite(data_chunk, chunk_sz, sizeof(double), fp);
     } else {
       printf("skipping complex write for now!\n");

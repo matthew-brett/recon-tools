@@ -1,8 +1,12 @@
 read_image brs_10ms_delay_data.fid
 #read_image asems_TRANS.fid
+#read_image gems_anat.fid
 #bal_phs_corr    25
 
 #geo_undistort
 ifft2d
+
+get_fieldmap asems_TRANS.fid
+
 #viewer
-write_image epidw.isp mag 4
+write_image gems.isp mag 2
