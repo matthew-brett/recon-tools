@@ -459,13 +459,16 @@ void read_procpar(char *base_path, image_struct *image)
  * write an analyze file *
  * analyze output types are uint8, int16, int32, float, double, and       *
  * complex float (2 adjacent floats). We'll use double or complex only.   *
- * The function xform will convert imaginary data to real data (doubles), *
- * or if it's null, we'll know to write out the complex type. The arg     *
+ * The function xform will convert imaginary data to real data (doubles). *
+ * If it's null, check altdata (there for general debugging output). If   *
+ * BOTH are null, then we know to write a complex image by transforming   *
+ * the adjacent doubles into adjacent floats.                             *
+ *                                                                        *
  * iterates_on says which dimension the xform works on (eg 3 = slicewise) *
  **************************************************************************/
 
 void write_analyze(image_struct *image, double *xform (), 
-		   char *out_file, int iterates_on)
+		   char *out_file, int iterates_on, double *altdata)
 {
   header_key *hdrkey;
   image_dimension *imgdim;
@@ -496,7 +499,7 @@ void write_analyze(image_struct *image, double *xform (),
   imgdim->dim[2] = n_pe;
   imgdim->dim[1] = n_fe;
   imgdim->dim[0] = 4;
-  imgdim->datatype = (xform==NULL) ? DT_COMPLEX : DT_DOUBLE;
+  imgdim->datatype = (xform==NULL && altdata==NULL) ? DT_COMPLEX : DT_DOUBLE;
   imgdim->bitpix = 64;  /* this is 64 in any case, I think (double or complex) */
   imgdim->pixdim[4] = 1.0;
   imgdim->pixdim[3] = image->thk;
@@ -544,13 +547,13 @@ void write_analyze(image_struct *image, double *xform (),
       xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
       fwrite(data_chunk, chunk_sz, sizeof(double), fp);
     } else {
-      printf("skipping complex write for now!\n");
+      fwrite((altdata + offset), chunk_sz, sizeof(double), fp);
     }
   }
 
   fclose(fp);
   
-  free(data_chunk);
+  if (xform != NULL) free(data_chunk);
   free(hdrkey);
   free(imgdim);
   free(datahist);

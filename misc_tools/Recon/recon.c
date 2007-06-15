@@ -255,8 +255,41 @@ void read_image(image_struct *image, op_struct op)
  **************************************************************************/
 void write_image(image_struct *image, op_struct op)
 {
-  // just write magnitude for now
-  write_analyze(image, &mag, op.param_1, atoi(op.param_3));
+  image_struct *im2;
+  if( !strcmp(op.param_2, "mag") ) {
+    write_analyze(image, mag, op.param_1, atoi(op.param_3), NULL);
+    return;
+  } else if( !strcmp(op.param_2, "real") ) {
+    write_analyze(image, real, op.param_1, atoi(op.param_3), NULL);
+    return;
+  } else if( !strcmp(op.param_2, "imag") ) {
+    write_analyze(image, imag, op.param_1, atoi(op.param_3), NULL);
+    return;
+  } else if( !strcmp(op.param_2, "angle") ) {
+    write_analyze(image, angle, op.param_1, atoi(op.param_3), NULL);
+    return;
+  } else if( !strcmp(op.param_2, "complex") ) {
+    write_analyze(image, NULL, op.param_1, atoi(op.param_3), NULL);
+    return;
+  }
+  /* if none of the above were tried, move onto the debug stuff */
+  im2 = (image_struct *) malloc(sizeof(image_struct));
+  memmove(im2, image, sizeof(image_struct));
+  im2->n_vol = 1;
+  if( !strcmp(op.param_2, "fmap") ) {
+    if (image->fmap)
+      write_analyze(im2, NULL, op.param_1, atoi(op.param_3), **image->fmap);
+    else
+      printf("fieldmap was never computed!\n");
+    return;
+  } else if( !strcmp(op.param_2, "mask") ) {
+    if (image->mask)
+      write_analyze(im2, NULL, op.param_1, atoi(op.param_3), **image->mask);
+    else
+      printf("mask was never computed!\n");
+    return;
+  }
+  printf("requested output type not recognized: %s\n", op.param_2);
 }
 
 /**************************************************************************
