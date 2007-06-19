@@ -48,50 +48,62 @@ double *dvector(long np)
 	return v;
 }
 
-float **matrix(long nrl, long nrh, long ncl, long nch)
-/* allocate a float matrix with subscript range m[nrl..nrh][ncl..nch] */
+float **matrix(long nrow, long ncol)
+
 {
-	long i, nrow=nrh-nrl+1,ncol=nch-ncl+1;
+        long i;
 	float **m;
 
 	/* allocate pointers to rows */
 	m=(float **) malloc((size_t)((nrow)*sizeof(float*)));
 	if (!m) nrerror("allocation failure 1 in matrix()");
-	m -= nrl;
+
 
 	/* allocate rows and set pointers to them */
-	m[nrl]=(float *) malloc((size_t)((nrow*ncol)*sizeof(float)));
-	if (!m[nrl]) nrerror("allocation failure 2 in matrix()");
-	m[nrl] -= ncl;
+	m[0]=(float *) malloc((size_t)((nrow*ncol)*sizeof(float)));
+	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
-	for(i=nrl+1;i<=nrh;i++) m[i]=m[i-1]+ncol;
+	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
 
 	/* return pointer to array of pointers to rows */
 	return m;
 }
 
-double **dmatrix(long nrl, long nrh, long ncl, long nch)
-/* allocate a double matrix with subscript range m[nrl..nrh][ncl..nch] */
+double **dmatrix(long nrow, long ncol)
 {
-	long i, nrow=nrh-nrl+1,ncol=nch-ncl+1;
+	long i;
 	double **m;
 
 	/* allocate pointers to rows */
 	m=(double **) malloc((size_t)((nrow)*sizeof(double*)));
 	if (!m) nrerror("allocation failure 1 in matrix()");
-	m -= nrl;
 
 	/* allocate rows and set pointers to them */
-	m[nrl]=(double *) malloc((size_t)((nrow*ncol)*sizeof(double)));
-	if (!m[nrl]) nrerror("allocation failure 2 in matrix()");
-	m[nrl] -= ncl;
+	m[0]=(double *) malloc((size_t)((nrow*ncol)*sizeof(double)));
+	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
-	for(i=nrl+1;i<=nrh;i++) m[i]=m[i-1]+ncol;
+	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
 
 	/* return pointer to array of pointers to rows */
 	return m;
 }
 
+/* gives a column major matrix for LAPACK use.. 
+   it will have to be indexed [x,y] instead of normal [y,x] */
+double **dmatrix_colmajor(int nrow, int ncol)
+{
+  int i;
+  double **m;
+  m = (double **) malloc(ncol * sizeof(double*));
+  if (!m) nrerror("allocation failure in dim 1 in dmatrix_colmajor()");
+
+  m[0] = (double *) malloc((ncol*nrow) * sizeof(double));
+  if (!m[0]) nrerror("allocation failure in dim 2 in dmatrix_colmajor()");
+
+  for(i=1; i<ncol; i++) m[i] = m[i-1]+nrow;
+
+  return m;
+}
 
 float **submatrix(float **a, long oldrl, long oldrh, long oldcl, long oldch,
 	long newrl, long newcl)
@@ -282,18 +294,18 @@ void free_dvector(double *v, long nl, long nh)
 	free((FREE_ARG) (v+nl));
 }
 
-void free_matrix(float **m, long nrl, long nrh, long ncl, long nch)
+void free_matrix(float **m)
 /* free a float matrix allocated by matrix() */
 {
-	free((FREE_ARG) (m[nrl]+ncl));
-	free((FREE_ARG) (m+nrl));
+	free((FREE_ARG) m[0]);
+	free((FREE_ARG) m);
 }
 
-void free_dmatrix(double **m, long nrl, long nrh, long ncl, long nch)
+void free_dmatrix(double **m)
 /* free a double matrix allocated by dmatrix() */
 {
-	free((FREE_ARG) (m[nrl]+ncl));
-	free((FREE_ARG) (m+nrl));
+	free((FREE_ARG) m[0]);
+	free((FREE_ARG) m);
 }
 
 

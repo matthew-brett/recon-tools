@@ -95,7 +95,7 @@ typedef struct{
 void read_image(image_struct *image, op_struct op);
 void write_image(image_struct *image, op_struct op);
 void ifft2d(image_struct *image, op_struct op);
-void bal_phs_corr(image_struct *image, op_struct op);
+//void bal_phs_corr(image_struct *image, op_struct op);
 void get_fieldmap(image_struct *image, op_struct op);
 void geo_undistort(image_struct *image, op_struct op);
 void get_fmap(image_struct *image, op_struct op);

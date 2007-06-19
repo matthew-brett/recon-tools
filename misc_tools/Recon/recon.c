@@ -16,6 +16,7 @@
 
 #include "recon.h"
 #include "data.h"
+#include "bpc.h"
 
 int main(int argc, char* argv[])
 {
@@ -297,21 +298,21 @@ void write_image(image_struct *image, op_struct op)
 *                                                                         *
 *  An operation on k-space data                                           *
 **************************************************************************/ 
-void bal_phs_corr(image_struct *image, op_struct op_seq)
-{                        
+/* void bal_phs_corr(image_struct *image, op_struct op_seq) */
+/* {                         */
 
-  printf("Hello from bal_phs_corr \n");
-  printf("Number of Ref scans %d\n", image->n_refs);
+/*   printf("Hello from bal_phs_corr \n"); */
+/*   printf("Number of Ref scans %d\n", image->n_refs); */
 
-  /* Multiply ref scan 1 data array elements by the complex conjugate
-    of ref scan 2 data array elements */
+/*   /\* Multiply ref scan 1 data array elements by the complex conjugate */
+/*     of ref scan 2 data array elements *\/ */
 
-  /* Calculate the angle nd divide by 2.0 */
+/*   /\* Calculate the angle nd divide by 2.0 *\/ */
 
-  /* Correct the data */
+/*   /\* Correct the data *\/ */
 
-  return;
-}        
+/*   return; */
+/* }         */
 
 /**************************************************************************
 * ifft2d                                                                  *
@@ -330,7 +331,7 @@ void ifft2d(image_struct *image, op_struct op)
   npe = image->n_pe;
   nfe = image->n_fe;
   dsize = npe * nfe;
-  imspc_vec = (fftw_complex *) malloc(dsize * sizeof(fftw_complex));
+  imspc_vec = (fftw_complex *) fftw_malloc(dsize * sizeof(fftw_complex));
   
   for(slice=0; slice < image->n_slice*image->n_vol; slice++) {
     dp = ***(image->data) + slice*dsize;
@@ -344,6 +345,7 @@ void ifft2d(image_struct *image, op_struct op)
       }
     }
     fftw_execute(IFT2D);
+    fftw_destroy_plan(IFT2D);
     tog = 1.0;
     for(k=0; k<dsize; k++) {
       dp[k][0] = imspc_vec[k][0]*tog/(double) dsize;
@@ -353,9 +355,7 @@ void ifft2d(image_struct *image, op_struct op)
       }
     }
   }
-
-  free(imspc_vec);
-
+  fftw_free(imspc_vec);
   printf("Finished calculating the FFT. \n\n");
 }
 
