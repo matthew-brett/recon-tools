@@ -475,8 +475,9 @@ void write_analyze(image_struct *image, double *xform (),
   data_history *datahist;
   char hdr[220], img[220];//, image_type[20];//, out_type[20];
   int n_vol, n_slice, n_pe, n_fe, vol, slice, pe, fe, slice_sz, val_1;
-  int l, m, n, chunk_sz, offset, loop_sz;
+  int l, m, chunk_sz, offset, loop_sz;
   double im1, im2, re1, re2, mag;
+  float *cplx_data_chunk;
   double *data_chunk;
   FILE *fp;
  
@@ -540,20 +541,33 @@ void write_analyze(image_struct *image, double *xform (),
     chunk_sz = n_slice*n_pe*n_fe;
     loop_sz = n_vol;
   }
-  if (xform != NULL) data_chunk = (double *) malloc(sizeof(double)*chunk_sz);
+  /* allocate data chunks if necessary (don't do anything fancy for complex,
+     just make room for 2*chunk_sz floats) */
+  if (xform != NULL) data_chunk = (double *) malloc(chunk_sz * sizeof(double));
+  if (xform == NULL && altdata == NULL)
+    cplx_data_chunk = (float *) malloc(chunk_sz * 2*sizeof(float));
+
   for (l = 0; l < loop_sz; l++) {
     offset = l*chunk_sz;
     if (xform != NULL) {
       xform(data_chunk, (const fftw_complex *) ***image->data + offset, chunk_sz);
       fwrite(data_chunk, chunk_sz, sizeof(double), fp);
-    } else {
+    } else if(altdata != NULL) {
       fwrite((altdata + offset), chunk_sz, sizeof(double), fp);
+    } else {
+      for(m=0; m<chunk_sz; m++) {
+	cplx_data_chunk[2*m] = (float) (***image->data + offset)[m][0];
+	cplx_data_chunk[2*m+1] = (float) (***image->data + offset)[m][1];
+      }
+      fwrite(cplx_data_chunk, chunk_sz, 2*sizeof(float), fp);
     }
   }
+  
 
   fclose(fp);
   
   if (xform != NULL) free(data_chunk);
+  if (xform == NULL && altdata == NULL) free(cplx_data_chunk);
   free(hdrkey);
   free(imgdim);
   free(datahist);
