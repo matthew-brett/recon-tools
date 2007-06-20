@@ -65,6 +65,7 @@ typedef struct{
   int n_vol_total;  /* Number of image volume plus ref vols */
   float fov;         /* Field of View */
   float *pss;
+  double Tl;          /* time lag from PE to PE */
   float asym_times[2];
   char pslabel[30];
 

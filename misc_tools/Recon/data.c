@@ -105,6 +105,42 @@ double **dmatrix_colmajor(int nrow, int ncol)
   return m;
 }
 
+fftw_complex **cmatrix(long nrow, long ncol)
+{
+	long i;
+	fftw_complex **m;
+
+	/* allocate pointers to rows */
+	m=(fftw_complex **) malloc((size_t)((nrow)*sizeof(fftw_complex*)));
+	if (!m) nrerror("allocation failure 1 in matrix()");
+
+	/* allocate rows and set pointers to them */
+	m[0]=(fftw_complex *) fftw_malloc((size_t)((nrow*ncol)*sizeof(fftw_complex)));
+	if (!m[0]) nrerror("allocation failure 2 in matrix()");
+
+	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
+
+	/* return pointer to array of pointers to rows */
+	return m;
+}
+
+/* gives a column major matrix for LAPACK use.. 
+   it will have to be indexed [x,y] instead of normal [y,x] */
+fftw_complex **cmatrix_colmajor(long nrow, long ncol)
+{
+  int i;
+  fftw_complex **m;
+  m = (fftw_complex **) malloc(ncol * sizeof(fftw_complex*));
+  if (!m) nrerror("allocation failure in dim 1 in dmatrix_colmajor()");
+
+  m[0] = (fftw_complex *) fftw_malloc((ncol*nrow) * sizeof(fftw_complex));
+  if (!m[0]) nrerror("allocation failure in dim 2 in dmatrix_colmajor()");
+
+  for(i=1; i<ncol; i++) m[i] = m[i-1]+nrow;
+
+  return m;
+}
+
 float **submatrix(float **a, long oldrl, long oldrh, long oldcl, long oldch,
 	long newrl, long newcl)
 /* point a submatrix [newrl..][newcl..] to a[oldrl..oldrh][oldcl..oldch] */
@@ -224,7 +260,6 @@ fftw_complex ****c4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
   return t;
 }
 
-
 double ****d4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
 /* allocate a double 4D array */
 {
@@ -309,6 +344,11 @@ void free_dmatrix(double **m)
 	free((FREE_ARG) m);
 }
 
+void free_cmatrix(fftw_complex **m)
+{
+  fftw_free(m[0]);
+  fftw_free(m);
+}
 
 void free_submatrix(float **b, long nrl, long nrh, long ncl, long nch)
 /* free a submatrix allocated by submatrix() */

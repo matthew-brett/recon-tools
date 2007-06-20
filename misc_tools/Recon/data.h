@@ -9,6 +9,8 @@ double *dvector(long np);
 float **matrix(long nrow, long ncol);
 double **dmatrix(long nrow, long ncol);
 double **dmatrix_colmajor(int nrow, int ncol);
+fftw_complex **cmatrix(long nrow, long ncol);
+fftw_complex **cmatrix_colmajor(long nrow, long ncol);
 float **submatrix(float **a, long oldrl, long oldrh, long oldcl, long oldch,
 		  long newrl, long newcl);
 void free_vector(float *v, long nl, long nh);
@@ -16,6 +18,7 @@ void free_ivector(int *v, long nl, long nh);
 void free_dvector(double *v, long nl, long nh);
 void free_matrix(float **m);
 void free_dmatrix(double **m);
+void free_cmatrix(fftw_complex **m);
 void free_submatrix(float **b, long nrl, long nrh, long ncl, long nch);
 void free_d3tensor(double ***t);
 void free_c3tensor(fftw_complex ***t);

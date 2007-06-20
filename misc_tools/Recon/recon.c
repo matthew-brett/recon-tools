@@ -16,7 +16,7 @@
 
 #include "recon.h"
 #include "data.h"
-#include "bpc.h"
+#include "ops.h"
 
 int main(int argc, char* argv[])
 {

@@ -1,5 +1,5 @@
 #include "recon.h"
-#include "bpc.h"
+#include "ops.h"
 #include "data.h"
 
 #define SIGN(x) ( (x)>=0  ? +1 : -1 )
@@ -130,7 +130,7 @@ void bal_phs_corr(image_struct *image, op_struct op)
       }
     }
 
-    svd_solve(*A, col, soln, nrows, 3);
+    dsolve_svd(*A, col, soln, nrows, 3);
     /* do stuff with soln here */
     for(k=0; k<n_slice; k++) {
       for(m=0; m<n_fe; m++) {
@@ -315,7 +315,7 @@ double var(double *points, int npts)
    contiguous in memory)
 */
 
-void svd_solve(double *A, double *y, double *x, int M, int N)
+void dsolve_svd(double *A, double *y, double *x, int M, int N)
 {
   char JOBZ = 'S';
   int LDA, LDU, LDVT, LWORK, IWORK, LRWORK, INFO, ns, k;

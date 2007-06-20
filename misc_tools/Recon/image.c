@@ -439,6 +439,12 @@ void read_procpar(char *base_path, image_struct *image)
       image->n_vol_total = atoi(key2);
       printf("n_vol_total: %d\n", image->n_vol_total);
     }
+    if(strcmp(keyword, "at_calc") == 0) {
+      fgets(line, sizeof(line), fp);
+      sscanf(line, "%s %s", key1, key2);
+      image->Tl = atof(key2);
+      printf("Tl: %1.6f s", image->Tl);
+    }
 
   }
   /* pslabel "somestring" (with quotes), can't seem to strip that! */
