@@ -383,22 +383,6 @@ void get_fieldmap(image_struct *image, op_struct op)
   free(asems);
 }
 
-/**************************************************************************
-* geo_undistort                                                           *
-*                                                                         *
-*  An operation on k-space data                                           *
-**************************************************************************/
- 
-void geo_undistort(image_struct *image, op_struct op)
-{                        
-
-  printf("Hello from geo_undistort \n");
-  //printf("Number of FE points %d\n", image->n_fe);
-
-  return;
-}        
-
-
 
 /**************************************************************************
 * viewer                                                                  *

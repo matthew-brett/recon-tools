@@ -12,3 +12,8 @@ void fft1d(fftw_complex *zin, fftw_complex *zout,
 	   int len_xform, int len_z, int direction);
 double var(double *points, int npts);
 void svd_solve(double *A, double *y, double *x, int M, int N);
+void linReg(double *y, double *x, double *sigma, int len, 
+	    double *m, double *b, double *res);
+void maskbyfit(double *line, double *sigma, double *mask, double tol, 
+	       double tol_growth, int len);
+

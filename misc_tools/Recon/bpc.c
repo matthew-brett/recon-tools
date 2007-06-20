@@ -3,8 +3,9 @@
 #include "data.h"
 
 #define SIGN(x) ( (x)>=0  ? +1 : -1 )
-#define MAX(x,y) (x) > (y) ? (x) : (y)
-#define MIN(x,y) (x) > (y) ? (y) : (x)
+#define MAX(x,y) ( (x) > (y) ? (x) : (y) )
+#define MIN(x,y) ( (x) > (y) ? (y) : (x) )
+#define ABS(x) ( ((x) < 0.0) ? -(x) : (x) )
 
 extern int dgesdd_(char *jobz, int *m, int *n, double *a,
 		       int *lda, double *s, double *u, int *ldu,
@@ -16,8 +17,9 @@ void bal_phs_corr(image_struct *image, op_struct op)
 {
   fftw_complex ***invref, ***invref1, ***invref2, *ir1, *ir2, *ir, ***pcor_vol;
   double ***phsvol, ***sigma, ***q1_mask, **A, *col, *soln;
-  double re1, re2, im1, im2, zarg;
+  double re1, re2, im1, im2, zarg, mask_tol, mask_tolgrowth;
   int k, l, m, n, n_fe, n_pe, n_slice, dsize, nrows, rc;
+  FILE *fp;
 
   n_fe = image->n_fe;
   n_pe = image->n_pe;
@@ -65,10 +67,6 @@ void bal_phs_corr(image_struct *image, op_struct op)
   /* Should set up variance and mask arrays too.. */
   /* The variance is wrt even and odd read-outs.. ie: what's the variance
      of a point across similarly polarized read-outs. */
-  for(k=0; k<n_slice; k++)
-    for(l=0; l<n_pe; l++)
-      for(m=0; m<n_fe; m++)
-	q1_mask[k][l][m] = 1.0;
 
   col = (double *) malloc(n_pe/2 * sizeof(double));
   for(k=0; k<n_slice; k++) {
@@ -91,7 +89,17 @@ void bal_phs_corr(image_struct *image, op_struct op)
   }
   /* free col to reuse soon */
   free(col);
-
+  /* MASK BY PSS HERE ONE DAY! */
+  mask_tol = 1.25;
+  mask_tolgrowth = 1.25;
+  for(k=0; k<n_slice; k++) {
+    for(l=0; l<n_pe; l++) {
+      for(m=0; m<n_fe; m++) q1_mask[k][l][m] = 1.0;
+      maskbyfit(phsvol[k][l], sigma[k][l], q1_mask[k][l],
+		mask_tol, mask_tolgrowth, n_fe);
+    }
+  }
+  
   /* For each mu in n_pe, solve for the planar fit of the surface. */
   for(l=0; l<n_pe; l++) {
     
@@ -102,6 +110,7 @@ void bal_phs_corr(image_struct *image, op_struct op)
 	nrows += (int) q1_mask[k][l][m];
       }
     }
+
     /* start SVD matrix HERE */
     /* since the number of points change for each plane, we have to 
        re-allocate memory on each pass
@@ -210,7 +219,6 @@ void unwrap_ref_volume(double *uphase, fftw_complex ***vol,
     doUnwrap(wrplane, uwplane, zdim, xdim);
     /* find height at the zerosl (found above) row, and where x = 0; */
     height = uwplane[zerosl*xdim + xdim/2];
-    //height = floor((height + SIGN(height)*pi)/(2*pi));
     height = (double) ( (int) ((height + SIGN(height)*pi)/(2*pi)) );
     for(k=0; k<zdim; k++) {
       for(m=0; m<xdim; m++) {
@@ -302,11 +310,9 @@ double var(double *points, int npts)
 /* solves Ax = y for x
    M is the number of rows in A (also the length of y)
    N is the number of cols in A (also the length of x)
-
-   dgesdd should return the SVD of A in terms of U.<s-vals>.Vt ,
-   but since the routine is coded for FORTRAN column-major arrays,
-   the returned data will be the SVD of At ( V.<s-vals>.Ut ) ..
-   This is ok because it is already the inverse of the components.
+   
+   matrix A is assumed to be in column major format (columns are 
+   contiguous in memory)
 */
 
 void svd_solve(double *A, double *y, double *x, int M, int N)
@@ -341,12 +347,13 @@ void svd_solve(double *A, double *y, double *x, int M, int N)
     printf("some error in SVD routine\n");
     exit(1);
   }
-  /* vt and u are in column major */
+
   /* So U is shaped (M, MIN(M,N))
      and Vt is shaped (MIN(M,N), N)
   */
-  /* now x = dot(v, dot(inv(s), dot(ut, y))) */
-  
+
+  /* now x = dot(v, dot(inv(s), dot(ut, y)))
+     we can send the CBLAS the order to transpose the matrices if needed */
   is = (double *) calloc((ns*ns), sizeof(double));
   for(k=0; k<ns; k++) is[k + k*ns] = 1.0/s[k];
   
@@ -373,3 +380,82 @@ void svd_solve(double *A, double *y, double *x, int M, int N)
   free(is);
 }
      
+/* Linear Regression routine:
+   Arguments y (samples), len, m, b, and res should be valid pointers.
+   Arguments x (points of samples) and sigma (variance of samples) may be
+   provided, but will be assumed otherwise.
+*/
+void linReg(double *y, double *x, double *sigma, int len, 
+	    double *m, double *b, double *res)
+{
+  
+  int k, local_x = 0, local_sigma = 0;
+  double s, sx, sy, sxx, sxy, delta, v, pt;
+  
+  s = 0.0; sx = 0.0; sy = 0.0; sxx = 0.0; sxy = 0.0;
+  
+  if(x==NULL) local_x = 1;
+  if(sigma==NULL) local_sigma = 1;
+      
+  for(k=0; k<len; k++) {
+    pt = local_x ? (double) k : x[k];
+    v = local_sigma ? 1.0 : sigma[k];
+    sx += pt/v;
+    sy += y[k]/v;
+    sxx += (pt * pt)/v;
+    sxy += (pt * y[k])/v;
+    s += 1.0/v;
+  }
+  delta = sxx * s - (sx * sx);
+  *b = (sxx * sy - sx * sxy)/delta;
+  *m = (s * sxy - sx * sy)/delta;
+  *res = 0.0;
+  for(k=0; k<len; k++) {
+    pt = local_x ? (double) k : x[k];
+    *res += ABS( y[k] - ((*m)*pt + (*b)) )/(double) len;
+  }
+}
+
+void maskbyfit(double *line, double *sigma, double *mask, double tol, 
+	       double tol_growth, int len)
+{
+  
+  int k, n;
+  double m, b, res, mask_start, mask_end, fit;
+  double *line_um, *sigma_um, *x_um;
+  
+  mask_start = cblas_dasum(len, mask, 1);
+  if (!mask_start) {
+    return;
+  }
+  line_um = (double *) malloc(mask_start * sizeof(double));
+  sigma_um = (double *) malloc(mask_start * sizeof(double));
+  x_um = (double *) malloc(mask_start * sizeof(double));
+  n=0;
+  for(k=0; k<len; k++) {
+    if(mask[k]) {
+      line_um[n] = line[k];
+      sigma_um[n] = sigma[k];
+      x_um[n++] = (double) k;
+    }
+  }
+  linReg(line_um, x_um, sigma_um, (int) mask_start, &m, &b, &res);
+  
+  free(line_um);
+  free(sigma_um);
+  free(x_um);
+  
+  /* so wherever the diff between line and the fit are greater than
+     (tol * res), mask that point */
+  for(k=0; k<len; k++) {
+    fit = ((double) k)*m + b;
+    if ( ABS(line[k] - fit) > tol*res ) mask[k] = 0.0;
+  }
+  mask_end = cblas_dasum(len, mask, 1);
+  /* limiting case */
+  if (mask_end == mask_start) return;
+  /* recursive case */
+  else maskbyfit(line, sigma, mask, tol*tol_growth, tol_growth, len);
+}
+
+
