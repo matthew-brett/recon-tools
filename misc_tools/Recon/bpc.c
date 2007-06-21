@@ -2,16 +2,10 @@
 #include "ops.h"
 #include "data.h"
 
-#define SIGN(x) ( (x)>=0  ? +1 : -1 )
-#define MAX(x,y) ( (x) > (y) ? (x) : (y) )
-#define MIN(x,y) ( (x) > (y) ? (y) : (x) )
-#define ABS(x) ( ((x) < 0.0) ? -(x) : (x) )
-
 extern int dgesdd_(char *jobz, int *m, int *n, double *a,
 		       int *lda, double *s, double *u, int *ldu,
 		       double *vt, int *ldvt, double *work, int *lwork,
 		       int *iwork, int *info);
-enum ftdirections {FORWARD=-1, INVERSE=+1};
 
 void bal_phs_corr(image_struct *image, op_struct op)
 {
@@ -269,29 +263,36 @@ void fft1d(fftw_complex *zin, fftw_complex *zout,
   double tog = 1.0;
   fftw_complex *dp_in, *dp_out;
   int x, k, nxforms = len_z/len_xform;
+
+  FT1D = fftw_plan_dft_1d(len_xform, zin, zout, direction, 
+			  FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   
   for(x=0; x<nxforms; x++) {
     dp_in = zin + x*len_xform;
     dp_out = zout + x*len_xform;
-    FT1D = fftw_plan_dft_1d(len_xform, dp_in, dp_out, direction, 
-			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+/*     FT1D = fftw_plan_dft_1d(len_xform, dp_in, dp_out, direction,  */
+/* 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); */
     for(k=0; k<len_xform; k++) {
       dp_in[k][0] *= tog;
       dp_in[k][1] *= tog;
       tog *= -1.0;
     }
-    fftw_execute(FT1D);
-    fftw_destroy_plan(FT1D);   
+    fftw_execute_dft(FT1D, dp_in, dp_out);
+/*     fftw_destroy_plan(FT1D);    */
     tog = 1.0;
     for(k=0; k<len_xform; k++) {
       /* undo the modulation in both spaces */
-      dp_in[k][0] *= tog;
-      dp_in[k][1] *= tog;
+      if(dp_in != dp_out) {
+	dp_in[k][0] *= tog;
+	dp_in[k][1] *= tog;
+      }
       dp_out[k][0] *= (tog/ (double) len_xform);
       dp_out[k][1] *= (tog/ (double) len_xform);
       tog *= -1.0;
     }
   }
+  fftw_destroy_plan(FT1D);
+  fftw_cleanup();
 }
 
 double var(double *points, int npts) 

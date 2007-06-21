@@ -331,12 +331,17 @@ void ifft2d(image_struct *image, op_struct op)
   npe = image->n_pe;
   nfe = image->n_fe;
   dsize = npe * nfe;
+  /* it's not really necessary to have buffer space */
   imspc_vec = (fftw_complex *) fftw_malloc(dsize * sizeof(fftw_complex));
+
+  IFT2D = fftw_plan_dft_2d(nfe, npe, ***(image->data), imspc_vec, +1,
+			   FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+
   
   for(slice=0; slice < image->n_slice*image->n_vol; slice++) {
     dp = ***(image->data) + slice*dsize;
-    IFT2D = fftw_plan_dft_2d(nfe, npe, dp, imspc_vec, +1,
-			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+/*     IFT2D = fftw_plan_dft_2d(nfe, npe, dp, imspc_vec, +1, */
+/* 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); */
     for(k=0; k<dsize; k++) {
       dp[k][0] *= tog;
       dp[k][1] *= tog;
@@ -344,8 +349,8 @@ void ifft2d(image_struct *image, op_struct op)
 	tog *= -1.0;
       }
     }
-    fftw_execute(IFT2D);
-    fftw_destroy_plan(IFT2D);
+    fftw_execute_dft(IFT2D, dp, imspc_vec);
+/*     fftw_destroy_plan(IFT2D); */
     tog = 1.0;
     for(k=0; k<dsize; k++) {
       dp[k][0] = imspc_vec[k][0]*tog/(double) dsize;
@@ -356,6 +361,8 @@ void ifft2d(image_struct *image, op_struct op)
     }
   }
   fftw_free(imspc_vec);
+  fftw_destroy_plan(IFT2D);
+  fftw_cleanup();
   printf("Finished calculating the FFT. \n\n");
 }
 

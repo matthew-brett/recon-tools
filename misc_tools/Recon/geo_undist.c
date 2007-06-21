@@ -2,34 +2,137 @@
 #include "data.h"
 #include "ops.h"
 
+/* useful constants for cblas_zgemm */
+static const double oneD[2] = {1.0, 0.0};
+static const double zeroD[2] = {0.0, 0.0};
+
+/* the LAPACK linear solver */
 extern int zgesv_(int *n, int *nrhs, fftw_complex *a, 
 		  int *lda, int *ipiv, fftw_complex *b, int *ldb, int *info);
-
 
 /**************************************************************************
 * geo_undistort                                                           *
 *                                                                         *
 *  An operation on k-space data                                           *
 **************************************************************************/
- 
+
 void geo_undistort(image_struct *image, op_struct op)
 {                        
-  fftw_complex ****kern;
+  fftw_complex ****kern, *id, *dchunk, *dist_chunk, *soln_chunk;
   double lambda;
-  printf("Hello from geo_undistort \n");
+  int k, l, m, n, n_vol, n_slice, n_pe, n_fe;
+  FILE *fp;
+
+  n_vol = image->n_vol;
+  n_slice = image->n_slice;
+  n_pe = image->n_pe;
+  n_fe = image->n_fe;
   
   lambda = atof(op.param_1);
   printf("lambda is %2.3f ... \n", lambda);
+  
   /* CHECK for existence of fieldmap before going anywhere */
-  kern = c4tensor_alloc(image->n_slice, image->n_fe, 
-			image->n_pe, image->n_pe);
+  if (!image->fmap) {
+    printf("fieldmap never was computed! doing nothing...\n");
+    return;
+  }
   
-  get_kernel(kern, image->fmap, image->mask, image->Tl, 
-	     image->n_slice, image->n_fe, image->n_pe);
+  /* MEMORY allocation */
+  kern = c4tensor_alloc(n_slice, n_fe, n_pe, n_pe);
+  //dchunk = c3tensor_alloc(n_vol, n_pe, n_fe);
+  dchunk = (fftw_complex *) fftw_malloc(n_vol*n_pe*n_fe * sizeof(fftw_complex));
+  dist_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
+  soln_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
+  id = (fftw_complex *) fftw_malloc((n_pe*n_pe) * sizeof(fftw_complex));
+  /* FREE THESE */
 
+  bzero(id, (n_pe*n_pe*sizeof(fftw_complex)));
+  for(k=0; k<n_pe; k++) id[k + k*n_pe][0] = 1.0;
 
+  get_kernel(kern, image->fmap, image->mask, image->Tl, n_slice, n_fe, n_pe);
+/*   fp = fopen("kern", "wb"); */
+/*   fwrite(***kern, n_slice*n_fe*n_pe*n_pe, sizeof(fftw_complex), fp); */
+/*   fclose(fp); */
+/*   fp = fopen("fmap", "wb"); */
+/*   fwrite(**image->fmap, n_slice*n_fe*n_pe, sizeof(double), fp); */
+/*   fclose(fp); */
+/*   fp = fopen("mask", "wb"); */
+/*   fwrite(**image->mask, n_slice*n_fe*n_pe, sizeof(double), fp); */
+/*   fclose(fp); */
+  printf("computing inverse operators...");
+  for(k=0; k<n_slice; k++) {
+    for(l=0; l<n_fe; l++) {
+      zsolve_regularized(*(kern[k][l]), id, *(kern[k][l]), n_pe, n_pe,
+			 n_pe, lambda);
+    }
+  }
+  printf(" done\n");
   /* do solutions here! */
-  
+
+  /* work one plane (slice) at a time:
+     1) (inverse) xform data along n1->q1 (ksp->isp)
+     2) for each column of data[:][q1] say col <-- dot(iK[sl][q1], data[:][q1])
+     3) (forward) xform data back to ksp
+     4) 
+  */
+  for(l=0; l<n_slice; l++) {
+    /* slice across array at slice=l and put the data in dchunk */
+    for(k=0; k<n_vol; k++) {
+      memmove(dchunk + (k*n_pe*n_fe),
+	      *(image->data[k][l]),
+	      n_pe*n_fe*sizeof(fftw_complex));
+    }
+    /* inverse transform along the FE dimension */
+    fft1d(dchunk, dchunk, n_fe, n_vol*n_pe*n_fe, INVERSE);
+    /* for every FE point, apply the inverse operator.. 
+       do this by making a matrix that is shaped (n_pe x n_vol) and
+       left-multiplying it by the (n_pe x n_pe) operator */
+    for(n=0; n<n_fe; n++) {
+      
+      for(m=0; m<n_pe; m++) {
+	for(k=0; k<n_vol; k++) {
+	  /* this is equivalently soln_chunk[m][k] = dchunk[k][m][n] */
+	  memmove(dist_chunk + (m*n_vol + k),
+		  dchunk + ((k*n_pe + m)*n_fe + n),
+		  sizeof(fftw_complex));
+	}
+      }
+      /* apply op (NPExNPE)x(NPExNVOL) --> (M,N,K) are (NPE,NPE,NPE) */
+      if (n_vol > 1) {
+	cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+		    n_pe, n_pe, n_pe, oneD,
+		    (void *) *(kern[l][n]), n_pe,
+		    (void *) dist_chunk, n_pe,
+		    zeroD, (void *) soln_chunk, n_pe);
+      } else {
+	cblas_zgemv(CblasRowMajor, CblasNoTrans,
+		    n_pe, n_pe, oneD,
+		    (void *) *(kern[l][n]), n_pe,
+		    (void *) dist_chunk, 1, 
+		    zeroD, (void *) soln_chunk, 1);
+      }
+      /* put solution back into dchunk */
+      for(m=0; m<n_pe; m++) {
+	for(k=0; k<n_vol; k++) {
+	  memmove(dchunk + ((k*n_pe + m)*n_fe + n),
+		  soln_chunk + (m*n_vol + k),
+		  sizeof(fftw_complex));
+	}
+      } 
+    }
+    printf("solved slice %d\n", l);
+    fft1d(dchunk, dchunk, n_fe, n_vol*n_pe*n_fe, FORWARD);
+    for(k=0; k<n_vol; k++) {
+      memmove(*(image->data[k][l]),
+	      dchunk + (k*n_pe*n_fe),
+	      n_pe*n_fe*sizeof(fftw_complex));
+    }
+  }
+
+  fftw_free(soln_chunk);
+  fftw_free(dist_chunk);
+  fftw_free(dchunk);
+  fftw_free(id);
   free_c4tensor(kern);
 
   return;
@@ -121,56 +224,87 @@ void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
   free(sum);
 }
 
-
+/* data shapes:
+   A is MxN (usually square) (row-major)
+   y is MxNRHS (row-major)
+   x is NxNRHS (row-major)
+*/
 
 void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
-			int M, int N, double lambda)
+			int M, int N, int NRHS, double lambda)
 {
   
-  fftw_complex *A2, *Atmp1;
-  int k, INFO;
-  static const double oneD[2] = {1.0, 0.0};
-  static const double zeroD[2] = {0.0, 0.0};
+  fftw_complex *A2, *A2_cm, *x_cm;
+  int k, l, INFO, *IPIV;
   double lm_sq[2] = {0.0, 0.0};
-  enum CBLAS_ORDER order;
-  enum CBLAS_TRANSPOSE trans1, trans2;
-  
+
   lm_sq[0] = lambda*lambda;
   
-  trans1 = CblasConjTrans;
-  trans2 = CblasNoTrans;
-  order = CblasColMajor;
-
-  Atmp1 = (fftw_complex *) fftw_malloc((M*N) * sizeof(fftw_complex));
+  //Atmp1 = (fftw_complex *) fftw_malloc((M*N) * sizeof(fftw_complex));
   /* use A2 as the identity matrix for right now */
   A2 = (fftw_complex *) fftw_malloc((N*N) * sizeof(fftw_complex));
+  A2_cm = (fftw_complex *) fftw_malloc((N*N) * sizeof(fftw_complex));
+  x_cm = (fftw_complex *) fftw_malloc((NRHS*N) * sizeof(fftw_complex));
+  IPIV = (int *) malloc(N * sizeof(int));
+  /* guess we need temp space for xpose */
+  
+
   //y2 = (fftw_complex *) fftw_malloc(N * sizeof(fftw_complex));
 
   bzero(A2, (N*N)*sizeof(fftw_complex));
-  for(k=0; k<N*N; k++) A2[k][0] = 1.0;
+  for(k=0; k<N; k++) A2[k + k*N][0] = 1.0;
   
-  memmove(Atmp1, A, M*N*sizeof(fftw_complex));
-  /* want to get A2 <-- (A')x(A) + (lm_sq)*I ... 
-     also want to leave the result in
-     column major so it can be used by LAPACK! Therefore, since A is already
-     A' from a column-major perspective, do the operation in col-major, 
-     don't transpose the left-hand matrix, and do transpose the right-hand 
-     matrix. (DOES THIS WORK WITH HERMITIAN XPOSE?? I THINK YES)
+  /* want to get A2 <-- (A*)x(A) + (lm_sq)*I ... 
   */
-  cblas_zgemm(order, trans1, trans2, 
-	      N, M, N, oneD, 
-	      (void *) A, N, 
-	      (void *) Atmp1, M,
-	      lm_sq, (void *) A2, N);
-  /* multiply data vector y by A', stick it in x*/
-  cblas_zgemv(order, trans1, 
-	      N, M, oneD,
+
+  /* this only gives back the upper triangular part!! */
+/*   cblas_zherk(CblasRowMajor, CblasUpper, CblasConjTrans, */
+/* 	      N, N, 1.0, */
+/* 	      (void *) A, M, */
+/* 	      0.0, (void *) A2, N); */
+	      
+  cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
+	      N, M, N, oneD,
 	      (void *) A, N,
-	      (void *) y, 1, zeroD, (void *) x, 1);
-  /* solve the system! */
-  zgesv_(&N, &N, A, &N, &N, x, &N, &INFO);
-  
-  fftw_free(Atmp1);
+	      (void *) A, M,
+	      lm_sq, (void *) A2, N);
+  /* multiply data vector/matrix y by A*, stick it in x*/
+  /* DOES THIS WORK WITH NRHS = 1? */
+  cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
+	      N, M, N, oneD,
+	      (void *) A, M,
+	      (void *) y, M, 
+	      zeroD, (void *) x, N);
+  /* solve the system! need to xpose ante and post to get into col-major:
+     A2 is NxN, and x is NxNRHS
+  */
+  /* can this be done faster? */
+  /* could we use the solution for hermitian positive definite matrix?? */
+  for(k=0; k<N; k++) {
+    for(l=0; l<N; l++) {
+      /* rm idx = k*N + l; cm idx = l*N + k */
+      memmove(A2_cm+(l*N+k), A2+(k*N+l), sizeof(fftw_complex));
+    }
+  }
+  for(k=0; k<N; k++) {
+    for(l=0; l<NRHS; l++) {
+      memmove(x_cm+(l*N+k), x+(k*NRHS+l), sizeof(fftw_complex));
+    }
+  }
+    
+  zgesv_(&N, &NRHS, A2_cm, &N, IPIV, x_cm, &N, &INFO);
+
+  /* only xpose back x (A2 was temporary) */
+  for(k=0; k<N; k++) {
+    for(l=0; l<NRHS; l++) {
+      memmove(x+(k*NRHS+l), x_cm+(l*N+k), sizeof(fftw_complex));
+    }
+  }
+
+
+  free(IPIV);
+  fftw_free(x_cm);
+  fftw_free(A2_cm);
   fftw_free(A2);
 }
 

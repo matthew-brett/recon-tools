@@ -1,6 +1,14 @@
 #include <fftw3.h>
 #include <vecLib/cblas.h>
 
+
+#define SIGN(x) ( (x)>=0  ? +1 : -1 )
+#define MAX(x,y) ( (x) > (y) ? (x) : (y) )
+#define MIN(x,y) ( (x) > (y) ? (y) : (x) )
+#define ABS(x) ( ((x) < 0.0) ? -(x) : (x) )
+
+enum ftdirections {FORWARD=-1, INVERSE=+1};
+
 void geo_undistort(image_struct *image, op_struct op);
 void bal_phs_corr(image_struct *image, op_struct op);
 void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
@@ -21,5 +29,5 @@ void maskbyfit(double *line, double *sigma, double *mask, double tol,
 void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
 		double Tl, int ns, int nr, int nc);
 void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
-			int M, int N, double lambda);
+			int M, int N, int NRHS, double lambda);
 //void dsolve_regularized(double *A, double *y, double *x, int M, int N, double lambda);
