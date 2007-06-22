@@ -93,7 +93,6 @@ void bal_phs_corr(image_struct *image, op_struct op)
 		mask_tol, mask_tolgrowth, n_fe);
     }
   }
-  
   /* For each mu in n_pe, solve for the planar fit of the surface. */
   for(l=0; l<n_pe; l++) {
     
@@ -104,7 +103,7 @@ void bal_phs_corr(image_struct *image, op_struct op)
 	nrows += (int) q1_mask[k][l][m];
       }
     }
-
+    //printf("nrows: %d\n", nrows);
     /* start SVD matrix HERE */
     /* since the number of points change for each plane, we have to 
        re-allocate memory on each pass
@@ -286,8 +285,13 @@ void fft1d(fftw_complex *zin, fftw_complex *zout,
 	dp_in[k][0] *= tog;
 	dp_in[k][1] *= tog;
       }
-      dp_out[k][0] *= (tog/ (double) len_xform);
-      dp_out[k][1] *= (tog/ (double) len_xform);
+      if(direction == INVERSE) {
+	dp_out[k][0] *= (tog/ (double) len_xform);
+	dp_out[k][1] *= (tog/ (double) len_xform);
+      } else {
+	dp_out[k][0] *= tog;
+	dp_out[k][1] *= tog;
+      }
       tog *= -1.0;
     }
   }

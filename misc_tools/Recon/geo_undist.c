@@ -18,7 +18,7 @@ extern int zgesv_(int *n, int *nrhs, fftw_complex *a,
 
 void geo_undistort(image_struct *image, op_struct op)
 {                        
-  fftw_complex ****kern, *id, *dchunk, *dist_chunk, *soln_chunk;
+  fftw_complex ****kern, *id, *invK, *dchunk, *dist_chunk, *soln_chunk;
   double lambda;
   int k, l, m, n, n_vol, n_slice, n_pe, n_fe;
   FILE *fp;
@@ -44,29 +44,26 @@ void geo_undistort(image_struct *image, op_struct op)
   dist_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
   soln_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
   id = (fftw_complex *) fftw_malloc((n_pe*n_pe) * sizeof(fftw_complex));
+  invK = (fftw_complex *) fftw_malloc((n_pe*n_pe) * sizeof(fftw_complex));
   /* FREE THESE */
 
   bzero(id, (n_pe*n_pe*sizeof(fftw_complex)));
   for(k=0; k<n_pe; k++) id[k + k*n_pe][0] = 1.0;
 
   get_kernel(kern, image->fmap, image->mask, image->Tl, n_slice, n_fe, n_pe);
-/*   fp = fopen("kern", "wb"); */
-/*   fwrite(***kern, n_slice*n_fe*n_pe*n_pe, sizeof(fftw_complex), fp); */
-/*   fclose(fp); */
-/*   fp = fopen("fmap", "wb"); */
-/*   fwrite(**image->fmap, n_slice*n_fe*n_pe, sizeof(double), fp); */
-/*   fclose(fp); */
-/*   fp = fopen("mask", "wb"); */
-/*   fwrite(**image->mask, n_slice*n_fe*n_pe, sizeof(double), fp); */
-/*   fclose(fp); */
+
   printf("computing inverse operators...");
   for(k=0; k<n_slice; k++) {
     for(l=0; l<n_fe; l++) {
-      zsolve_regularized(*(kern[k][l]), id, *(kern[k][l]), n_pe, n_pe,
+      zsolve_regularized(*(kern[k][l]), id, invK, n_pe, n_pe,
 			 n_pe, lambda);
+      memmove(*(kern[k][l]), invK, n_pe*n_pe*sizeof(fftw_complex));
     }
   }
   printf(" done\n");
+  /* done with this */
+  fftw_free(invK);
+
   /* do solutions here! */
 
   /* work one plane (slice) at a time:
@@ -120,7 +117,6 @@ void geo_undistort(image_struct *image, op_struct op)
 	}
       } 
     }
-    printf("solved slice %d\n", l);
     fft1d(dchunk, dchunk, n_fe, n_vol*n_pe*n_fe, FORWARD);
     for(k=0; k<n_vol; k++) {
       memmove(*(image->data[k][l]),
@@ -165,8 +161,8 @@ void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
       
       for(q2 = 0; q2 < M2; q2++) {
 	zarg = (2.0 * pi * (n2p - n2) * (q2 - M2/2))/(double) M2;
-	basis_xform[n2][n2p][q2][0] = cos(zarg)/M2;
-	basis_xform[n2][n2p][q2][1] = sin(zarg)/M2;
+	basis_xform[n2][n2p][q2][0] = cos(zarg)/(double) M2;
+	basis_xform[n2][n2p][q2][1] = sin(zarg)/(double) M2;
       }
 
     }
@@ -264,17 +260,18 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
 /* 	      0.0, (void *) A2, N); */
 	      
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-	      N, M, N, oneD,
-	      (void *) A, N,
+	      N, N, M, oneD,
+	      (void *) A, M,
 	      (void *) A, M,
 	      lm_sq, (void *) A2, N);
   /* multiply data vector/matrix y by A*, stick it in x*/
   /* DOES THIS WORK WITH NRHS = 1? */
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
-	      N, M, N, oneD,
+	      N, NRHS, M, oneD,
 	      (void *) A, M,
 	      (void *) y, M, 
 	      zeroD, (void *) x, N);
+
   /* solve the system! need to xpose ante and post to get into col-major:
      A2 is NxN, and x is NxNRHS
   */

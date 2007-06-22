@@ -46,12 +46,9 @@ int main(int argc, char* argv[])
   bzero(img, sizeof(image_struct));
 
   if(argc < 2){
-    printf("\n Error: Expecting 3 arguments to recon. \n\n");
-    printf(" Usage: recon fid_dir outfile oplist \n\n");
-    printf("   Where fid_dir is the path to the directory containing the\n");
-    printf("   procpar and fid data files (leave off the _ref2 or _data)\n"); 
-    printf("   outfile is the user defined output file name, and oplist is \n");
-    printf("   the path to the oplist  file. \n\n");
+    printf("\n Error: Expecting 1 arguments to recon. \n\n");
+    printf(" Usage: recon oplist\n\n");
+    printf("   Where fid_dir oplist is the path to the oplist  file. \n\n");
     exit(0);
   }
 
@@ -73,9 +70,10 @@ int main(int argc, char* argv[])
   /* Perform the operations. */
   n = 0;
   while(op_seq[n].op_active == 1){
-    op_seq[n].op(img, op_seq[n]);
     printf("op name: %s\n", op_seq[n].op_name);
+    op_seq[n].op(img, op_seq[n]);
     n ++;
+    printf("\n");
   }
 
   /* Release resources. */
@@ -571,7 +569,7 @@ void compute_field_map(image_struct *img)
   float delta_te;
   float *pwr, *puw;
   double re, im, re1, re2, im1, im2;
-
+  fftw_complex ***conj_vol;
   printf("Calculating the field map. \n");
 
   // Make some assignments for convenience.
@@ -589,16 +587,16 @@ void compute_field_map(image_struct *img)
   //printf(" Delta TE = %f\n", delta_te);
 
   // At all points in the image volume calculate the phase angle of the
-  // product of ASEMS image 1 times the complex conjugate of ASEMS image 2.
+  // product of ASEMS image 2 times the complex conjugate of ASEMS image 1.
   for(sl=0; sl<n_slice; sl++){
     for(pe=0; pe<n_pe; pe++){
       for(fe=0; fe<n_fe; fe++){
         re1 = img->data[0][sl][pe][fe][0];
-        im1 = img->data[0][sl][pe][fe][1];
+        im1 = -img->data[0][sl][pe][fe][1];
         re2 = img->data[1][sl][pe][fe][0];
         im2 = img->data[1][sl][pe][fe][1];
-        re = re1*re2 + im1*im2; 
-        im = re1*im2 - re2*im1; 
+        re = re1*re2 - im1*im2; 
+        im = re1*im2 + re2*im1;
         img->fmap[sl][pe][fe] = atan2(im, re); 
        }
     }
@@ -628,7 +626,7 @@ void compute_field_map(image_struct *img)
       }
     }
   }
-
+  
   free(puw);
   free(pwr);
 
@@ -643,7 +641,7 @@ unsigned char* create_mask(image_struct *img)
 {
   int sl, pe, fe, n_pe, n_fe, n_slice, slice_sz, dsize;
   int (*compar) ();
-  double p02, p98, thresh, re1, re2, im1, im2;;
+  double p02, p98, thresh, re1, re2, im1, im2, cr, ci;
   double *tmp_1d;
 
   //printf("Entering function create_mask. \n");
@@ -659,20 +657,23 @@ unsigned char* create_mask(image_struct *img)
   for(sl=0; sl<n_slice; sl++){
     for(pe=0; pe<n_pe; pe++){
       for(fe=0; fe<n_fe; fe++){
-        re1 = img->data[0][sl][pe][fe][0];
-        im1 = img->data[0][sl][pe][fe][1];
+	re1 = img->data[0][sl][pe][fe][0];
+        im1 = -img->data[0][sl][pe][fe][1];
         re2 = img->data[1][sl][pe][fe][0];
         im2 = img->data[1][sl][pe][fe][1];
-        // Calculate the magnitude of first volume. Used in finding the mask.
-        img->mask[sl][pe][fe] = sqrt(re1*re1 + im1*im1); 
-      }        
+        // Calculate the mag of the conj volume. Used in finding the mask.
+	cr = (re1*re2 - im1*im2);
+	ci = (re1*im2 + re2*im1);
+	//img->mask[sl][pe][fe] = sqrt(cr*cr + ci*ci);
+	img->mask[sl][pe][fe] = pow(cr*cr + ci*ci, 0.25);
+      }
     }
   }
 
 
   // Put magnitude data into a 1D array to be passed to qsort below.
   tmp_1d = (double *) malloc(dsize * sizeof(double));
-  memcpy(tmp_1d, **(img->mask), dsize);
+  memmove(tmp_1d, **(img->mask), dsize*sizeof(double));
 
   // Find the 98th and 2th percentiles. Calculate the threshold value.
   compar = &comparator;
@@ -681,6 +682,9 @@ unsigned char* create_mask(image_struct *img)
   p98 = tmp_1d[ (int) (.98 * dsize) ]; // EXPERIMENT WITH p98
   //thresh = 0.35*(p98 - p02) + p02;
   thresh = 0.1*(p98 - p02) + p02;      // EXPERIMENT WITH 0.1
+  thresh = thresh;
+  printf("%2.7f, %2.7f\n", tmp_1d[0], tmp_1d[dsize-1]);
+  printf("%2.7f, %2.7f, %2.7f\n", p98, p02, thresh);
 
   // Create the mask from the threshold value and the 3D magnitude data array.
   for(sl=0; sl<n_slice; sl++){

@@ -443,7 +443,7 @@ void read_procpar(char *base_path, image_struct *image)
       fgets(line, sizeof(line), fp);
       sscanf(line, "%s %s", key1, key2);
       image->Tl = atof(key2);
-      printf("Tl: %1.6f s", image->Tl);
+      printf("Tl: %1.6f s\n", image->Tl);
     }
 
   }
