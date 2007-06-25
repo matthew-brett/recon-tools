@@ -68,8 +68,13 @@ class Recon (ConsoleTool):
              help="Sets the number of dimensions per output file "\
              "(defaults to 3)"),
 
-      Option("-u", "--opusage", dest="opname", action="store", default=None,
-             help="gives info on an operation and its parameters"))
+      Option("-u", "--opusage", dest="ophelp", action="store", default=None,
+             help="gives info on an operation and its parameters"),
+
+      Option("-e", "--opsexample", dest="opsexample", default=False,
+             action="store_true",
+             help="For a given fid, print an example oplist to the screen. "\
+             "Usage: recon -e[--opsexample] somedata.fid"))
 
       
 
@@ -102,7 +107,12 @@ class Recon (ConsoleTool):
         else:
             print "help for %s"%opname            
             self._opmanager.getOperation(opname)().opHelp()
-        sys.exit(0)
+
+    #-------------------------------------------------------------------------
+    def _printOplistEx(self, oplist):
+        ops = open(oplist).read()
+        print "\nBasic reconstruction sequence (copy & paste into oplist):\n"
+        print ops
         
     #-------------------------------------------------------------------------
     def _findOplist(self, datadir):
@@ -212,8 +222,19 @@ class Recon (ConsoleTool):
     
         options, args = self.parse_args()
         options.vrange = self.parseVolRange(options.vol_range)
-        if options.opname is not None:
-            self._printOpHelp(options.opname)
+
+        # Two usages are special cases:
+        # oplist example will be handled after an oplist is found..
+        # operation help doesn't require arguments, so handle it here
+        if options.ophelp is not None:
+            self._printOpHelp(options.ophelp)
+            sys.exit(0)
+        if options.opsexample:
+            if not args:
+                self.error("You must provide a fid-directory to get an example oplist")
+            # just append a false output file name to be safe
+            args.append("foo")
+        
         # Recon can be run with these combos defined:
         # (_, _) (first logic stage, try to find fid files in pwd)
         # (args, _) (2nd logic stage, try to find default oplist)
@@ -278,6 +299,10 @@ class Recon (ConsoleTool):
 
         # Parse command-line options.
         options = self.getOptions()
+
+        if options.opsexample:
+            self._printOplistEx(options.oplist)
+            sys.exit(0)
 
         runlogger = RunLogger(file(options.log_file,'w'))
 

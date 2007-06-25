@@ -464,13 +464,18 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     ###### Handlers and helpers for menubar actions
     def launch_contour_tool(self, action):
-        self.contour_tools = ContourToolWin(self.sliceplot, self)
+        if self.contour_tools is not None:
+            self.contour_tools.present()
+        else:
+            self.contour_tools = ContourToolWin(self.sliceplot, self)
 
     #-------------------------------------------------------------------------
     def launch_overlay_toolbox(self, action):
         if self.overlay_data is not None:
             if not hasattr(self, "overlay_tools") or not self.overlay_tools:
                 self.overlay_tools = OverlayToolWin(self.overlay, self)
+            else:
+                self.overlay_tools.present()
             
     #-------------------------------------------------------------------------
     def ask_fname(self, prompt, action="save", filter=None):

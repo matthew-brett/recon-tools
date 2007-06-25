@@ -7,11 +7,13 @@ from recon.util import unwrap1D, shift
 
 def build_3Dmask(vol, threshfactor):
     mask = N.ones(vol.shape, N.int8)
-    p = N.sort(abs(vol.flatten()))
+    p = N.sort(vol.flatten())
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
     thresh = threshfactor*(t98 - t2) + t2
-    N.putmask(mask, abs(vol)<thresh, 0)
+    print p[0], p[-1]
+    print t98, t2, thresh
+    N.putmask(mask, vol<thresh, 0)
     return mask
 
 def unwrap_3Dphase(vols, threshfactor):
@@ -94,10 +96,10 @@ class ComputeFieldMap (Operation):
         diffshape = (image.tdim-1, image.zdim, image.ydim, image.xdim)
         diff_vols = N.zeros(diffshape, N.complex128)
         for vol in range(image.tdim-1):
-            diff_vols[vol] = N.conjugate(image[vol+1])*image[vol]
+            diff_vols[vol] = N.conjugate(image[vol])*image[vol+1]
         phase_map, bytemasks = unwrap_3Dphase(diff_vols, self.threshfactor)
         for vol in range(image.tdim-1):
-            asym_time = asym_times[vol] - asym_times[vol+1]
+            asym_time = asym_times[vol+1] - asym_times[vol]
             phase_map[vol] = (phase_map[vol]/asym_time).astype(N.float32)
         fmap_im = image._subimage(phase_map)
         bmask_im = image._subimage(bytemasks)

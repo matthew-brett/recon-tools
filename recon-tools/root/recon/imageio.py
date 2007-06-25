@@ -288,7 +288,7 @@ def get_writer(format_type):
     if writerspec is None:
         raise ValueError("Writer method for '%s' not found. "\
                          "Avaliable writers are: %s"%\
-                         (format, ", ".join(available_writers)))
+                         (format_type, ", ".join(available_writers)))
     return import_from(*writerspec)
 #-----------------------------------------------------------------------------
 def _write(image, filestem, format_type, dtype=None, targetdim=None,
@@ -329,7 +329,7 @@ def clean_name(fname):
     pruned_exts = ['nii', 'hdr', 'img']
     if fname.rsplit('.')[-1] in pruned_exts:
         return fname.rsplit('.',1)[0]
-    return fname
+    return fname.rstrip('.')
 #-----------------------------------------------------------------------------
 def _concatenate(listoflists):
     "Flatten a list of lists by one degree."

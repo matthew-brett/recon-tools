@@ -401,13 +401,6 @@ class FidImage (ScannerImage, ProcParImageMixin):
           "asems_nccnn":  self._read_asems_nccnn_volume
         }[fidformat]
 
-        # determine if time reversal needs to be performed
-##         time_reverse = \
-##           pulse_sequence not in ("gems", "mp_flash3d", "box3d_v2") and \
-##           (fidformat=="compressed" and not(pulse_sequence == "epi"\
-##            and self.spinecho) or \
-##           (fidformat=="uncompressed" and pulse_sequence != "epidw"))
-
         time_reverse = pulse_sequence in ("epi","epidw","testbrs2") and \
                        fidformat == "compressed"
 
@@ -427,18 +420,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
             # read the next image volume
             volume = volreader(fidfile, vol)
 
-
-            # reverse ENTIRE negative-gradient read (??)
-            #if vol in self.ref_vols and vol==1:
-                #volume[:] = N.take(volume, time_rev, axis=(len(volume.shape)-1))
-
-            # time-reverse the data
             if time_reverse:
-                f = self.pe_per_seg*nslice
-                for seg in range(self.nseg):
-                    base = seg*f
-                    for pe in range(base+1, base+f, 2): 
-                        volume[pe] = N.take(volume[pe], time_rev, axis=-1)
+                flips = range(1, volume.shape[-2], 2)
+                volume[flips] = reverse(volume[flips], axis=-1)
 
             # Reorder data according to phase encode table and separate
             # k-space data from navigator echos
@@ -456,13 +440,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
             # The time-reversal section above reflects the odd slices through
             # the pe-axis. This section puts all slices in the same orientation.
             if time_reverse and self.isravi:
-                for slice in range(0,nslice,2):
-                    for pe in range(n_pe_true):
-                        ksp_image[slice,pe] = \
-                          N.take(ksp_image[slice,pe], time_rev, axis=-1)
-                    for pe in range(nav_per_slice):
-                        navigators[slice,pe] = \
-                          N.take(navigators[slice,pe], time_rev, axis=-1)
+                for sl in range(0,nslice,2):
+                    ksp_image[sl] = reverse(ksp_image[sl], axis=-1)
+                    navigators[sl] = reverse(navigators[sl], axis=-1)
 
 ##             # Make a correction for mpflash data
 ##             if pulse_sequence == "mp_flash3d" and not self.flash_converted:

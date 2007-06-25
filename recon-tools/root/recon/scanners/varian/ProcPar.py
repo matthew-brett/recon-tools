@@ -125,14 +125,13 @@ class CachedReadOnlyProperty (property):
         CachedReadOnlyProperty._id += 1
         property.__init__(self, fget=cached_getter, doc=doc)
 
-
 ##############################################################################
 class ProcParImageMixin (object):
     """
-    Knows how to extract basic MRIImage parameters from a Varian procpar file.
+    Knows how to extract basic MR image parameters from a Varian procpar file.
     
     ProcParImageMixin keeps a local ProcPar object, and then redefines some
-    ProcPar parameters into image parameters.
+    ProcPar parameters into useful image properties.
     """
 
     n_fe = CachedReadOnlyProperty(lambda self: self._procpar.np[0], "")
@@ -241,6 +240,8 @@ class ProcParImageMixin (object):
     slice_positions = CachedReadOnlyProperty(
         lambda self: 10.*N.asarray(self._procpar.pss), "")
 
+    gss = CachedReadOnlyProperty(lambda self: self._procpar.gss[0], "")
+
     ### Not exactly in procpar, but useful still
     acq_order = CachedReadOnlyProperty(
         lambda self: N.asarray(range(self.nslice-1,-1,-2) +
@@ -296,12 +297,6 @@ class ProcParImageMixin (object):
 
     tr = CachedReadOnlyProperty(lambda self: self.nseg*self._procpar.tr[0], "")
 
-    #x0 = CachedReadOnlyProperty(lambda self: self.dFE*self.n_fe_true/2., "")
-
-    #y0 = CachedReadOnlyProperty(lambda self: self.dPE*self.n_pe_true/2., "")
-
-    #z0 = CachedReadOnlyProperty(lambda self: self.dSL*self.nslice/2., "")
-
     phi = CachedReadOnlyProperty(lambda self: self._procpar.phi[0], "")
 
     psi = CachedReadOnlyProperty(lambda self: self._procpar.psi[0], "")
@@ -318,8 +313,6 @@ class ProcParImageMixin (object):
 
     dSL = CachedReadOnlyProperty(
         lambda self: float(self.thk) + self.slice_gap, "")
-
-    #tsize = CachedReadOnlyProperty(lambda self: self.tr, "")
 
     datasize = CachedReadOnlyProperty(
         lambda self: self._procpar.dp[0]=="y" and 4 or 2, "")

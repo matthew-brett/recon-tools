@@ -65,6 +65,11 @@ class UnbalPhaseCorrection (Operation):
         iscentric = image.sampstyle is "centric"
         self.xleave = iscentric and 1 or image.nseg
         self.alpha, self.beta = image.epi_trajectory()
+        # get slice positions (in order) so we can throw out the ones
+        # too close to the backplane of the headcoil
+        acq_order = image.acq_order
+        s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(n_slice)])
+        self.pss = N.take(image.slice_positions, s_ind)        
         # want to fork the code based on sampling style
         if iscentric:
             theta = self.run_centric(ifft(refVol))
@@ -101,11 +106,17 @@ class UnbalPhaseCorrection (Operation):
         phs_vol = unwrap_ref_volume(inv_ref, self.lin1, self.lin2)
         phs_pos = N.empty((n_slice, self.lin_fe), N.float64)
         phs_neg = N.empty((n_slice, self.lin_fe), N.float64)
-        s_mask = N.zeros(n_slice)
+        s_mask = N.ones(n_slice)
         r_mask = N.zeros((n_slice, self.lin_fe))
-        res = N.zeros((n_slice,), N.float64)
+
+        # 1st mask out all slices where pss is below -25mm
+        # (too close to the backplane of the headcoil)
+        #print self.pss
+        N.putmask(s_mask, self.pss < -25.0, 0)
+        # make initial residuals something ridiculously large
+        res = N.ones((n_slice,), N.float64)*1.e10
         ### FIND THE MEANS FOR EACH SLICE
-        for s in range(n_slice):
+        for s in s_mask.nonzero()[0]:        
             # for pos_order, skip 1st 2 for xleave=2
             # for neg_order, skip last 2 for xleave=2
             phs_pos[s], mask_p, res_p = \
@@ -123,11 +134,13 @@ class UnbalPhaseCorrection (Operation):
         # find 4 slices with smallest residual
         sres = N.sort(res)
         selected = [N.nonzero(res==c)[0] for c in sres[:4]]
+        s_mask = N.zeros(n_slice)
         for c in selected:
             s_mask[c] = 1
             if(r_mask[c].sum() == 0):
                 # if best slice's means are masked, simply return empty
                 return
+            
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         self.coefs = self.solve_phase(phs_pos, phs_neg, r_mask, s_mask)
         print self.coefs
@@ -153,10 +166,16 @@ class UnbalPhaseCorrection (Operation):
         phs_pos_lower = N.empty((n_slice, self.lin_fe), N.float64)
         phs_neg_upper = N.empty((n_slice, self.lin_fe), N.float64)
         phs_neg_lower = N.empty((n_slice, self.lin_fe), N.float64)
-        s_mask = N.zeros(n_slice)
+        s_mask = N.ones(n_slice)
         r_mask = N.zeros((n_slice, self.lin_fe))
-        res = N.zeros((n_slice,), N.float64)
-        for s in range(n_slice):
+
+        # 1st mask out all slices where pss is below -25mm
+        # (too close to the backplane of the headcoil)
+        N.putmask(s_mask, self.pss < -25.0, 0)
+        # make initial residuals something ridiculously large
+        res = N.ones((n_slice,), N.float64)*1.e10
+        ### FIND THE MEANS FOR EACH SLICE
+        for s in s_mask.nonzero()[0]:
             # seems that for upper, skip 1st pos and last neg; 
             #            for lower, skip 1st pos and last neg
             phs_pos_upper[s], mask_pu, res_pu = \
@@ -183,6 +202,7 @@ class UnbalPhaseCorrection (Operation):
         # find 4 slices with smallest residual
         sres = N.sort(res)
         selected = [N.nonzero(res==c)[0] for c in sres[:4]]
+        s_mask = N.zeros(n_slice)
         for c in selected:
             s_mask[c] = 1
             if(r_mask[c].sum() == 0):

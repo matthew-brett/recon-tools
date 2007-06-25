@@ -7,15 +7,24 @@ from punwrap import unwrap2D
 
 # maximum numeric range for some smaller data types
 integer_ranges = {
-  N.dtype(N.int8):  127.,
-  N.dtype(N.uint8): 255.,
-  N.dtype(N.int16): 32767.,
-  N.dtype(N.uint16): 65535.,
-  # even though (integer) precision is greater for (U)Int32 than Float32,
-  # we would want to encode small gradations in small real-like numbers
-  # in the great range of integers available.
-  N.dtype(N.int32): 2147483647.,
-  N.dtype(N.uint32): 4294967295.,
+  N.dtype(N.int8):  N.float32(127),
+  N.dtype(N.uint8): N.float32(255),
+  N.dtype(N.int16): N.float32(32767),
+  N.dtype(N.uint16): N.float32(65535),
+  # These next max ints are special.. they are modified so that their
+  # inverses are precisely specified in floating point.
+  #
+  # IE: 2**-31 and 1.0/(2**31 - 1) are identical in floating point:
+  # '00110000000000000000000000000000'
+  # This can lead to overflow errors, since (1.0 / 2**-31) = 2**31, an
+  # invalid signed 32bit integer value!
+  #
+  # The inverses of the following numbers are created by adding the
+  # least significant value into the fixed precision fraction.
+  # In notation, this is
+  # (1.0 + 2**-23) * 2**-31 = '00110000000000000000000000000001'
+  N.dtype(N.int32): 2147483392.,
+  N.dtype(N.uint32): 4294966784.,
   }
 
 # struct byte order constants
@@ -50,7 +59,10 @@ def scale_data(data, new_dtype):
     if new_dtype in integer_ranges.keys():
         maxval = volume_max(abs(data))
         maxrange = integer_ranges[new_dtype]
-        scl = maxval/maxrange or 1.
+        scl = (maxval/maxrange).astype(maxval.dtype) or \
+              N.array([1.], maxval.dtype)
+##         if new_dtype in (N.dtype(N.int32), N.dtype(N.int64)):
+##             scl = scl * N.float32(1.0 + 2**-23)
     return scl
 
 #-----------------------------------------------------------------------------

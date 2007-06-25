@@ -1,5 +1,5 @@
 try:
-    from _punwrap import lpUnwrap
+    from _punwrap import Unwrap
 except ImportError:
     raise ImportError("Please compile the punwrap extension to use this module")
 
@@ -21,12 +21,14 @@ def unwrap2D(matrix, mask=None):
     else:
         if dims != mask.shape:
             raise ValueError("mask dimensions do not match matrix dimensions!")
-    
-    in_phase = len(dims) < 2 and N.reshape(matrix,(1,dims[0])) or \
-               matrix.copy()
-    #in_phase = (in_phase*mask).astype(N.float32)
-    in_phase = in_phase.astype(N.float32)
-    #ret = (mask*lpUnwrap(in_phase)).astype(dtype)
-    ret = lpUnwrap(in_phase).astype(dtype)
+
+    # mark this for in_phase = this if True else that (for Python 2.5)
+    if len(dims) < 2:
+        in_phase = N.reshape(matrix, (1,dims[0]))
+    else:
+        in_phase = matrix.copy()
+    # actually this seems better pre-masked (confirm??)
+    in_phase = (mask*in_phase).astype(N.float32)
+    ret = Unwrap(in_phase).astype(dtype)
     return ret
 

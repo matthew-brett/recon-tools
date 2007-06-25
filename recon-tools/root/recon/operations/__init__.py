@@ -21,6 +21,7 @@ def tuple_valuator(val):
     if not val: return ()
     if type(val) is TupleType: return tuple(val)
     # else it is a stringified tuple ill-gotten from an oplist (bah!)
+    if val == "()": return ()
     n1,n2 = val.split(",")
     n1 = n1.strip('(')
     n2 = n2.strip(')')

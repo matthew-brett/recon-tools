@@ -74,7 +74,7 @@ xforms = {
 def canonical_orient(xform):
     N.putmask(xform, abs(xform) < .0001, 0)
     for k,v in xforms.items():
-        if (abs(v) - abs(xform)).sum() == 0:
+        if (xform==v).all():
             return k
     return ""
 
@@ -291,11 +291,13 @@ class AnalyzeWriter (object):
         imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
-          'ndim': image.ndim,
+          # should be 4 for (z,y,x) and (t,z,y,x) ...
+          # should be 3 for (y,x) ??
+          'ndim': (image.ndim >= 3 and 4 or image.ndim),
           'xdim': image.xdim,
           'ydim': image.ydim,
           'zdim': image.zdim,
-          'tdim': image.tdim,
+          'tdim': (image.tdim or 1),
           'xsize': image.xsize,
           'ysize': image.ysize,
           'zsize': image.zsize,
@@ -307,7 +309,10 @@ class AnalyzeWriter (object):
           # I suppose these should be set to pre-scaled values?
           'glmin': int(round(volume_min(abs(image[:])))),
           'glmax': int(round(volume_max(abs(image[:])))),
-          'orient': orientname2orientcode.get(image.orientation,-1),}
+          'cal_min': self._dataview(self.image[:]).min(),
+          'cal_max': self._dataview(self.image[:]).max(),
+          'orient': orientname2orientcode.get(image.orientation,255),
+        }
 
         def fieldvalue(fieldname, fieldformat):
             if imagevalues.has_key(fieldname):

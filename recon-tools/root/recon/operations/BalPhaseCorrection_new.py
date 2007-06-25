@@ -34,7 +34,7 @@ class BalPhaseCorrection_new (Operation):
         
         inv_ref0 = ifft(image.ref_data[0])
         inv_ref1 = ifft(reverse(image.ref_data[1], axis=-1))
-        #inv_ref1 = ifft(image.ref_data[1])
+
         inv_ref = inv_ref0*N.conjugate(inv_ref1)
         
         n_slice, n_pe, n_fe = self.refShape = inv_ref0.shape
@@ -74,11 +74,19 @@ class BalPhaseCorrection_new (Operation):
 
         q1_mask = N.ones((n_slice, n_pe, self.lin_fe))
 
-        for s in range(n_slice):
+        # get slice positions (in order) so we can throw out the ones
+        # too close to the backplane of the headcoil
+        acq_order = image.acq_order
+        s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(n_slice)])
+        pss = N.take(image.slice_positions, s_ind)
+        #last_good_slice = n_slice
+        last_good_slice = (pss < -25.0).nonzero()[0][0]
+        q1_mask[last_good_slice:] = 0.0
+        for s in range(0,last_good_slice):
             for r in range(n_pe):
-                q1_mask[s,r] = maskbyfit(phs_vol[s,r], sigma[s,r], tol=1.5,
-                                         tol_growth=1.25, order=2)
-
+                q1_mask[s,r] = maskbyfit(phs_vol[s,r], sigma[s,r], 1.25,
+                                         1.25, q1_mask[s,r], order=1)
+        
         theta = N.empty(self.refShape, N.float64)
         s_line = N.arange(n_slice)
         r_line = N.arange(n_fe) - n_fe/2
@@ -103,6 +111,44 @@ class BalPhaseCorrection_new (Operation):
             B[2,:] = coefs[B3]
             theta[:,u,:] = N.dot(A,B)
 
+##         # planar solution 2
+##         q1_mask[:,0,:] = 0
+##         q1_mask[:,1,:] = 0
+##         print q1_mask.sum(), phs_vol.sum()
+##         print r_line_chop
+##         coefs = solve_phase2(phs_vol, q1_mask, r_line_chop, s_line)
+##         b1,b2,a1,a3,a4 = coefs[:]
+##         print coefs
+        
+##         A = N.empty((self.refShape[-2], 3), N.float64)
+##         B = N.empty((3, self.refShape[-1]), N.float64)
+##         zigzag = checkerline(self.refShape[-2])
+##         B[0,:] = r_line*a1
+##         B[1,:] = a3
+##         B[2,:] = a4
+##         A[:,0] = zigzag
+##         A[:,2] = zigzag
+##         for s in range(self.refShape[0]):
+##             A[:,1] = s*zigzag
+##             theta[s] = N.dot(A,B)
+
+##         print theta.sum()
+            
+##         # planar solution 3
+##         q1_mask[:,0,:] = 0
+##         q1_mask[:,1,:] = 0
+##         A = N.empty((n_pe, 2), N.float64)
+##         B = N.empty((2, n_fe), N.float64)
+##         zigzag = checkerline(n_pe)
+##         for s in range(phs_vol.shape[0]):
+##             coefs = solve_phase3(phs_vol[s], q1_mask[s], r_line_chop)
+##             a1,a4 = coefs[2:]
+##             B[0,:] = r_line*a1
+##             B[1,:] = a4
+##             A[:,0] = zigzag
+##             A[:,1] = zigzag
+##             theta[s] = N.dot(A,B)
+        
 ##         # one line for the whole surface solution
 ##         sl = 13
 ##         for mu in range(n_pe):
@@ -204,30 +250,30 @@ class BalPhaseCorrection_new (Operation):
 ##         theta[:] = 0.5*phs_vol
 
 
-        import matplotlib.axes3d as p3
-        import pylab as P
-        from matplotlib.colors import colorConverter
-        colors = ['b','g','r','c','y','m','k']
-        Rx,Sx = P.meshgrid(r_line_chop, s_line)
-        red = colorConverter.to_rgba_list('r')
-        mid = (self.lin2-self.lin1)/3
+##         import matplotlib.axes3d as p3
+##         import pylab as P
+##         from matplotlib.colors import colorConverter
+##         colors = ['b','g','r','c','y','m','k']
+##         Rx,Sx = P.meshgrid(r_line_chop, s_line)
+##         red = colorConverter.to_rgba_list('r')
+##         mid = (self.lin2-self.lin1)/3
 
-        evn_diff_mu = N.diff(phs_vol[:,::2,mid],axis=-1)
-        odd_diff_mu = N.diff(phs_vol[:,1::2,mid],axis=-1)
+##         evn_diff_mu = N.diff(phs_vol[:,::2,mid],axis=-1)
+##         odd_diff_mu = N.diff(phs_vol[:,1::2,mid],axis=-1)
 
-        evn_diff_fe = N.diff(phs_vol[:,::2,:],axis=-1)
-        odd_diff_fe = N.diff(phs_vol[:,1::2,:],axis=-1)
+##         evn_diff_fe = N.diff(phs_vol[:,::2,:],axis=-1)
+##         odd_diff_fe = N.diff(phs_vol[:,1::2,:],axis=-1)
 
-        evn_diff_fe2 = phs_vol[:,::2,2:] - phs_vol[:,::2,:-2]
-        odd_diff_fe2 = phs_vol[:,1::2,2:] - phs_vol[:,1::2,:-2]
+##         evn_diff_fe2 = phs_vol[:,::2,2:] - phs_vol[:,::2,:-2]
+##         odd_diff_fe2 = phs_vol[:,1::2,2:] - phs_vol[:,1::2,:-2]
 
-        (_,evn_slopes,_) = linReg(phs_vol[:,::2,:])
-        (_,odd_slopes,_) = linReg(phs_vol[:,1::2,:])
+##         (_,evn_slopes,_) = linReg(phs_vol[:,::2,:])
+##         (_,odd_slopes,_) = linReg(phs_vol[:,1::2,:])
 
-##         bins = N.linspace(min(evn_diff_mu.min(),odd_diff_mu.min()),
-##                           max(evn_diff_mu.max(),odd_diff_mu.max()),20)
-        bins = N.linspace(min(evn_slopes.min(),odd_slopes.min()),
-                          max(evn_slopes.max(),odd_slopes.max()),20)
+## ##         bins = N.linspace(min(evn_diff_mu.min(),odd_diff_mu.min()),
+## ##                           max(evn_diff_mu.max(),odd_diff_mu.max()),20)
+##         bins = N.linspace(min(evn_slopes.min(),odd_slopes.min()),
+##                           max(evn_slopes.max(),odd_slopes.max()),20)
         
 ##         for s in range(n_slice):
 ##         #for s in [16,17,18,19]:
@@ -248,12 +294,13 @@ class BalPhaseCorrection_new (Operation):
 ##             P.title("slice %d"%(s,))
 ##             P.grid(True)
 ##             P.show()
-##         for u in range(2,n_pe,9):
+
+##         for u in range(2,n_pe,11):
 ##             fig = P.figure()
 ##             ax = p3.Axes3D(fig)
 ##             ax.hold(True)
-##             ax.plot_wireframe(Rx[:-1],Sx[:-1],0.5*phs_vol[:-1,u,:],colors=red)
-##             ax.plot_wireframe(Rx,Sx,theta[:,u,self.lin1:self.lin2])
+##             ax.plot_wireframe(Rx[:-1],Sx[:-1],0.5*phs_vol[:-1,u,:])
+##             ax.plot_wireframe(Rx,Sx,theta[:,u,self.lin1:self.lin2], colors=red)
 ##             ax.set_xlabel("read-out")
 ##             ax.set_ylabel("slice")
 ##             ax.set_zlabel("phase mu=%d"%u)
@@ -266,7 +313,8 @@ class BalPhaseCorrection_new (Operation):
 ##             P.plot(phs_vol[s,1], 'g.')
 ##             P.title("slice %d"%s)
 ##             P.show()
-        
+
+
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
             image[:] = apply_phase_correction(image[:], -theta)
@@ -303,6 +351,61 @@ def solve_phase(pvol, surf_mask, r_line, s_line):
         
     return N.transpose(V)[0] 
 
+def solve_phase2(pvol, surf_mask, r_line, s_line):
+    (B1,B2,A1,A3,A4) = range(5)
+    nrows = surf_mask.sum()
+    #surf_mask = N.reshape(surf_mask, (S*U, R))
+    A = N.empty((nrows, 5), N.float64)
+    P = N.empty((nrows, 1), N.float64)
+    row_start, row_end = 0, 0
+    b = checkerline(pvol.shape[-2])
+    for s in range(pvol.shape[0]):
+        for u in range(pvol.shape[1]):
+            nrows = surf_mask[s,u].sum()
+            if not nrows:
+                continue
+            r_ind = surf_mask[s,u].nonzero()[0]
+            row_start = row_end
+            row_end = row_start + nrows
+            P[row_start:row_end,0] = pvol[s,u,r_ind]
+            A[row_start:row_end,B1] = r_line[r_ind]
+            A[row_start:row_end,B2] = 1.
+            A[row_start:row_end,A1] = b[u]*(2.*r_line[r_ind])
+            A[row_start:row_end,A3] = b[u]*(2.*s)
+            A[row_start:row_end,A4] = b[u]*(2.)
+
+    [u,s,vt] = N.linalg.svd(A, full_matrices=0) 
+    print "cond # = %f"%(s[0]/s[-1])
+    invS = N.diag(1/s)
+    invS[-1,-1] = 0.0
+    V = N.dot(N.transpose(vt), N.dot(invS, N.dot(N.transpose(u),P)))
+    return N.transpose(V)[0]
+
+def solve_phase3(pvol, surf_mask, r_line):
+    (B1,B2,A1,A4) = range(4)
+    nrows = surf_mask.sum()
+    A = N.empty((nrows, 4), N.float64)
+    P = N.empty((nrows, 1), N.float64)
+    row_start, row_end = 0, 0
+    b = checkerline(pvol.shape[-2])
+    for u in range(pvol.shape[-2]):
+        nrows = surf_mask[u].sum()
+        if not nrows:
+            continue
+        r_ind = surf_mask[u].nonzero()[0]
+        row_start = row_end
+        row_end = row_start + nrows
+        P[row_start:row_end,0] = pvol[u,r_ind]
+        A[row_start:row_end,B1] = r_line[r_ind]
+        A[row_start:row_end,B2] = 1.
+        A[row_start:row_end,A1] = b[u]*(2.*r_line[r_ind])
+        A[row_start:row_end,A4] = b[u]*(2.)
+
+    [u,s,vt] = N.linalg.svd(A, full_matrices=0)
+    print "cond # = %f"%(s[0]/s[-1])
+    V = N.dot(N.transpose(vt), N.dot(N.diag(1/s), N.dot(N.transpose(u),P)))
+    return N.transpose(V)[0]
+
 
 def composite_mask(M):
     mask = maskbyslope(M)
@@ -326,23 +429,61 @@ def maskbyslope(M):
             mask[n+1] = 0
     return mask
 
-def maskbyfit(M, sigma, tol=None, tol_growth=None,
-              mask=None, plot=False, order=1):
-    if len(M)==0:
+## def maskbyfit(M, sigma, tol=None, tol_growth=None,
+##               mask=None, plot=False, order=1):
+##     if len(M)==0:
+##         print "all masked"
+##         return mask
+##     if mask is None:
+##         mask = N.ones(M.shape, N.int32)
+##     if tol is None:
+##         tol = 2.0
+##     if tol_growth is None:
+##         tol_growth = 1.1
+##     if order > 2 or order < 1:
+##         order = 1
+##     new_mask = N.empty(mask.shape)
+##     new_mask[:] = mask
+##     unmasked = new_mask.nonzero()[0]
+##     xax = N.arange(M.shape[-1])    
+##     if order == 1:
+##         (b,m,res) = linReg(M[unmasked], X=unmasked, sigma=sigma[unmasked])
+##         fitted = xax*m + b
+##     else:
+##         poly_c = polyfit(unmasked, M[unmasked], 2, sigma=sigma[unmasked])
+##         fitted = N.power(xax,2.0)*poly_c[0] + xax*poly_c[1] + poly_c[2]
+##         res = abs(M[unmasked]-fitted[unmasked]).sum()/unmasked.shape[-1]
+##     N.putmask(new_mask, abs(M - fitted) > tol*res, 0)
+##     unmasked = new_mask.nonzero()[0]
+##     if plot:
+##         unmasked = new_mask.nonzero()[0]
+##         (b2,m2,res2) = linReg(M[unmasked], X=xax[unmasked],
+##                                    sigma=sigma[unmasked])
+##         P.plot(xax,M)
+##         P.plot(xax[unmasked], M[unmasked], 'b.')
+##         P.plot(xax*m + b, 'g')
+##         P.plot(xax*m2 + b2, 'r')
+##         P.title("tolerance = %2.4f, avg res = %2.4f, final res = %2.4f"%(tol*res, res, res2))
+##         P.show()
+
+##     if new_mask.all():
+##         #print "limiting case"
+##         #print unmasked, new_mask
+##         return new_mask
+##     else:
+##         new_mask[unmasked] = maskbyfit(M[unmasked], sigma[unmasked],
+##                                        mask=mask[unmasked], order=order,
+##                                        plot=plot, tol=tol*tol_growth,
+##                                        tol_growth=tol_growth)
+##     return new_mask
+
+def maskbyfit(M, sigma, tol, tol_growth, mask, order=1):
+    mask_start = mask.sum(axis=-1)
+    if not mask_start:
         print "all masked"
         return mask
-    if mask is None:
-        mask = N.ones(M.shape, N.int32)
-    if tol is None:
-        tol = 2.0
-    if tol_growth is None:
-        tol_growth = 1.1
-    if order > 2 or order < 1:
-        order = 1
-    new_mask = N.empty(mask.shape)
-    new_mask[:] = mask
-    unmasked = new_mask.nonzero()[0]
-    xax = N.arange(M.shape[-1])    
+    xax = N.arange(M.shape[-1])
+    unmasked = mask.nonzero()[0]
     if order == 1:
         (b,m,res) = linReg(M[unmasked], X=unmasked, sigma=sigma[unmasked])
         fitted = xax*m + b
@@ -350,26 +491,10 @@ def maskbyfit(M, sigma, tol=None, tol_growth=None,
         poly_c = polyfit(unmasked, M[unmasked], 2, sigma=sigma[unmasked])
         fitted = N.power(xax,2.0)*poly_c[0] + xax*poly_c[1] + poly_c[2]
         res = abs(M[unmasked]-fitted[unmasked]).sum()/unmasked.shape[-1]
-    N.putmask(new_mask, abs(M - fitted) > tol*res, 0)
-    unmasked = new_mask.nonzero()[0]
-    if plot:
-        unmasked = new_mask.nonzero()[0]
-        (b2,m2,res2) = linReg(M[unmasked], X=xax[unmasked],
-                                   sigma=sigma[unmasked])
-        P.plot(xax,M)
-        P.plot(xax[unmasked], M[unmasked], 'b.')
-        P.plot(xax*m + b, 'g')
-        P.plot(xax*m2 + b2, 'r')
-        P.title("tolerance = %2.4f, avg res = %2.4f, final res = %2.4f"%(tol*res, res, res2))
-        P.show()
-
-    if new_mask.all():
-        #print "limiting case"
-        #print unmasked, new_mask
-        return new_mask
+    N.putmask(mask, abs(M-fitted) > tol*res, 0)
+    if(mask.sum() == mask_start):
+        return mask
     else:
-        new_mask[unmasked] = maskbyfit(M[unmasked], sigma[unmasked],
-                                       mask=mask[unmasked], order=order,
-                                       plot=plot, tol=tol*tol_growth,
-                                       tol_growth=tol_growth)
-    return new_mask
+        return maskbyfit(M, sigma, tol*tol_growth, tol_growth, mask, order=order)
+    
+    
