@@ -113,6 +113,7 @@ class Recon (ConsoleTool):
         ops = open(oplist).read()
         print "\nBasic reconstruction sequence (copy & paste into oplist):\n"
         print ops
+        print "For instructions for a given op, run recon -u(--opusage) opname"
         
     #-------------------------------------------------------------------------
     def _findOplist(self, datadir):

@@ -35,18 +35,21 @@ class RotPlane (Operation):
             self.log("no xform available for %s"%self.orient_target)
             return
         if self.orient_target == "recon_epi":
-            dest_xform = N.array([[ 0., 1., 0.],
-                                  [ 1., 0., 0.],
-                                  [ 0., 0., 1.],])
+            # always swap -x to +y, and -y to +x
+            Ts = N.array([[ 0.,-1., 0.],
+                          [-1., 0., 0.],
+                          [ 0., 0., 1.],])
+            dest_xform = N.dot(image.orientation_xform.tomatrix(),
+                               N.linalg.inv(Ts))
         else:
             dest_xform = xforms.get(self.orient_target, None)
-
-        Tr = image.orientation_xform.tomatrix()
-        # Tr already maps [x,y,z]^T into [R,A,S] ...
-        # Here I want to change coordinates with this relationship:
-        # Tr*[x',y',z']^T = dest_xform*[x,y,z]^T
-        # So inv(dest_xform)*Tr*[x',y',z'] = [x,y,z] = orientation of choice!
-        Ts = N.dot(N.linalg.inv(dest_xform), Tr)
+            Tr = image.orientation_xform.tomatrix()
+            # Tr already maps [x,y,z]^T into [R,A,S] ...
+            # Here I want to change coordinates with this relationship:
+            # Tr*[x',y',z']^T = dest_xform*[x,y,z]^T
+            # So inv(dest_xform)*Tr*[x',y',z'] = [x,y,z] = orientation of choice!
+            Ts = N.dot(N.linalg.inv(dest_xform), Tr)
+            
         if not Ts[-1,-1]:
             raise ValueError("This operation only makes in-plane rotations. "\
                              "EG you cannot use the saggital transform for "\

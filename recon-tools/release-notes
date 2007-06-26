@@ -1,3 +1,15 @@
+recon-tools-0.5-r2  (beta)                                         06/26/2007
+- a new BalPhaseCorrection routine is available
+- several new features in sliceviewer, including image overlays
+- new option -e, --opsexample in main recon script: if you're not sure how
+  to reconstruct an image, type "recon -e some-data.fid" to print 
+  an example oplist to the screen
+- NIFTI orientation descriptions in RotPlane fixed, also fixed "recon_epi"
+  mode, which is equivalent to neurological orientation in the axial plane.
+  (You no longer need to follow RotPlane by FlipSlices.)
+- UnbalPhaseCorrection "thresh" parameter is 0.1 by default (was 1.0)
+
+
 recon-tools-0.5-r1  (beta)                                         02/26/2007
 - switching numerical routines to use numpy library for speedup
 - major overhaul of image class
