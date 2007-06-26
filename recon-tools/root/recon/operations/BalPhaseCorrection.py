@@ -14,13 +14,6 @@ class BalPhaseCorrection (Operation):
     "balanced" pair of reference scans.
     """
 
-    params = (
-        Parameter(name="lin_region", type="tuple", default=(-32,32),
-                  description="""
-    Radius of the region of greatest linearity within the magnetic gradient
-    field, in mm (normally 70-80mm)."""),
-        )
-
     def run(self, image):
         
         if not verify_scanner_image(self, image):
@@ -43,8 +36,8 @@ class BalPhaseCorrection (Operation):
 
 ##         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
 ##                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
-        (self.lin1,self.lin2) = (n_fe/2 + self.lin_region[0],
-                                 n_fe/2 + self.lin_region[1])
+        # let's hardwire this currently??
+        (self.lin1,self.lin2) = (0, n_fe)
         self.lin_fe = self.lin2-self.lin1
         self.alpha, self.beta = image.epi_trajectory()
         # comes back smaller! read direction goes from lin1:lin2

@@ -4,14 +4,12 @@ import gtk
 import gobject
 import os
 import pylab as P
-#from matplotlib.widgets import RectangleSelector
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.patches import Rectangle
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
 import matplotlib
-#ASPECT = matplotlib.__version__.find('0.87') > -1 and 'auto' or 'equal'
 
 from recon.imageio import readImage
 from odict import odict
@@ -1324,7 +1322,7 @@ class ColorBar (FigureCanvas):
         ax.clear()
         ax.imshow(data, interpolation="nearest",
                   cmap=self.cmap, norm=norm,
-                  extent=(r_pts[0], r_pts[-1], 0, 1))
+                  extent=(r_pts[0], r_pts[-1], 0, 1), aspect="auto")
         #ax.images[0].set_data(data)
         ax.xaxis.set_ticks(tx)
         for tk in ax.xaxis.get_ticklabels(): tk.set_size(10.0)

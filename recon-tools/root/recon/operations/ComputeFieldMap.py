@@ -11,8 +11,6 @@ def build_3Dmask(vol, threshfactor):
     t2 = p[int(round(.02*len(p)))]
     t98 = p[int(round(.98*len(p)))]
     thresh = threshfactor*(t98 - t2) + t2
-    print p[0], p[-1]
-    print t98, t2, thresh
     N.putmask(mask, vol<thresh, 0)
     return mask
 
