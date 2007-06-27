@@ -1,5 +1,4 @@
 #include <fftw3.h>
-#include <vecLib/cblas.h>
 
 enum ftdirections {FORWARD=-1, INVERSE=+1};
 

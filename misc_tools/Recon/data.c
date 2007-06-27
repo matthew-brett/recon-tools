@@ -17,7 +17,7 @@ void nrerror(char error_text[])
 	exit(1);
 }
 
-float *vector(long np)
+float *vector(int np)
 /* allocate a float vector with subscript range v[nl..nh] */
 {
 	float *v;
@@ -27,7 +27,7 @@ float *vector(long np)
 	return v;
 }
 
-int *ivector(long np)
+int *ivector(int np)
 /* allocate an int vector with subscript range v[nl..nh] */
 {
 	int *v;
@@ -38,7 +38,7 @@ int *ivector(long np)
 }
 
 
-double *dvector(long np)
+double *dvector(int np)
 /* allocate a double vector with subscript range v[nl..nh] */
 {
 	double *v;
@@ -48,10 +48,10 @@ double *dvector(long np)
 	return v;
 }
 
-float **matrix(long nrow, long ncol)
+float **matrix(int nrow, int ncol)
 
 {
-        long i;
+        int i;
 	float **m;
 
 	/* allocate pointers to rows */
@@ -63,15 +63,15 @@ float **matrix(long nrow, long ncol)
 	m[0]=(float *) malloc((size_t)((nrow*ncol)*sizeof(float)));
 	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
-	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
+	for(i=1;i<nrow;i++) m[i]=m[i-1]+ncol;
 
 	/* return pointer to array of pointers to rows */
 	return m;
 }
 
-double **dmatrix(long nrow, long ncol)
+double **dmatrix(int nrow, int ncol)
 {
-	long i;
+	int i;
 	double **m;
 
 	/* allocate pointers to rows */
@@ -82,7 +82,7 @@ double **dmatrix(long nrow, long ncol)
 	m[0]=(double *) malloc((size_t)((nrow*ncol)*sizeof(double)));
 	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
-	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
+	for(i=1;i<nrow;i++) m[i]=m[i-1]+ncol;
 
 	/* return pointer to array of pointers to rows */
 	return m;
@@ -105,9 +105,9 @@ double **dmatrix_colmajor(int nrow, int ncol)
   return m;
 }
 
-fftw_complex **cmatrix(long nrow, long ncol)
+fftw_complex **cmatrix(int nrow, int ncol)
 {
-	long i;
+	int i;
 	fftw_complex **m;
 
 	/* allocate pointers to rows */
@@ -118,7 +118,7 @@ fftw_complex **cmatrix(long nrow, long ncol)
 	m[0]=(fftw_complex *) fftw_malloc((size_t)((nrow*ncol)*sizeof(fftw_complex)));
 	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
-	for(i=1;i<=nrow;i++) m[i]=m[i-1]+ncol;
+	for(i=1;i<nrow;i++) m[i]=m[i-1]+ncol;
 
 	/* return pointer to array of pointers to rows */
 	return m;
@@ -126,7 +126,7 @@ fftw_complex **cmatrix(long nrow, long ncol)
 
 /* gives a column major matrix for LAPACK use.. 
    it will have to be indexed [x,y] instead of normal [y,x] */
-fftw_complex **cmatrix_colmajor(long nrow, long ncol)
+fftw_complex **cmatrix_colmajor(int nrow, int ncol)
 {
   int i;
   fftw_complex **m;
@@ -141,11 +141,11 @@ fftw_complex **cmatrix_colmajor(long nrow, long ncol)
   return m;
 }
 
-float **submatrix(float **a, long oldrl, long oldrh, long oldcl, long oldch,
-	long newrl, long newcl)
+float **submatrix(float **a, int oldrl, int oldrh, int oldcl, int oldch,
+	int newrl, int newcl)
 /* point a submatrix [newrl..][newcl..] to a[oldrl..oldrh][oldcl..oldch] */
 {
-	long i,j,nrow=oldrh-oldrl+1,ncol=oldcl-newcl;
+	int i,j,nrow=oldrh-oldrl+1,ncol=oldcl-newcl;
 	float **m;
 
 	/* allocate array of pointers to rows */
@@ -160,10 +160,10 @@ float **submatrix(float **a, long oldrl, long oldrh, long oldcl, long oldch,
 	return m;
 }
 
-fftw_complex ***c3tensor_alloc(long nsl, long nrow, long ncol)
+fftw_complex ***c3tensor_alloc(int nsl, int nrow, int ncol)
 /* allocate a fftw_complex 3tensor with dimensions (nsl, nrow, ncol) */
 {
-        long i,j;
+        int i,j;
 	fftw_complex ***t;
 
 	/* allocate pointers to pointers to rows */
@@ -189,10 +189,10 @@ fftw_complex ***c3tensor_alloc(long nsl, long nrow, long ncol)
 	return t;
 }
 
-double ***d3tensor_alloc(long nsl, long nrow, long ncol)
+double ***d3tensor_alloc(int nsl, int nrow, int ncol)
 /* allocate a double type 3tensor with dimensions (nsl, nrow, ncol) */
 {
-        long i,j;
+        int i,j;
 	double ***t;
 
 	/* allocate pointers to pointers to rows */
@@ -220,10 +220,10 @@ double ***d3tensor_alloc(long nsl, long nrow, long ncol)
 }
 
 
-fftw_complex ****c4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
+fftw_complex ****c4tensor_alloc(int nvol, int nsl, int nrow, int ncol)
 /* allocate a fftw_complex 4D array */
 {
-  long k, l, m;
+  int k, l, m;
   fftw_complex ****t;
   t = (fftw_complex ****) malloc( nvol * sizeof(fftw_complex ***) );
   if (!t) nrerror("dimension 0 allocation failed c4tensor()");
@@ -260,10 +260,10 @@ fftw_complex ****c4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
   return t;
 }
 
-double ****d4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
+double ****d4tensor_alloc(int nvol, int nsl, int nrow, int ncol)
 /* allocate a double 4D array */
 {
-  long k, l, m;
+  int k, l, m;
   double ****t;
   t = (double ****) malloc( nvol * sizeof(double ***) );
   if (!t) nrerror("dimension 0 allocation failed c4tensor()");
@@ -301,7 +301,7 @@ double ****d4tensor_alloc(long nvol, long nsl, long nrow, long ncol)
 }
 
 
-fftw_complex *zarray(long dsize)
+fftw_complex *zarray(int dsize)
 /* allocate a complex array linear in memory, required by fftw */
 {
 	fftw_complex *t;
@@ -311,20 +311,20 @@ fftw_complex *zarray(long dsize)
 }
 
 
-void free_vector(float *v, long nl, long nh)
+void free_vector(float *v, int nl, int nh)
 /* free a float vector allocated with vector() */
 {
 	free((FREE_ARG) (v+nl));
 }
 
-void free_ivector(int *v, long nl, long nh)
+void free_ivector(int *v, int nl, int nh)
 /* free an int vector allocated with ivector() */
 {
 	free((FREE_ARG) (v+nl));
 }
 
 
-void free_dvector(double *v, long nl, long nh)
+void free_dvector(double *v, int nl, int nh)
 /* free a double vector allocated with dvector() */
 {
 	free((FREE_ARG) (v+nl));
@@ -340,17 +340,17 @@ void free_matrix(float **m)
 void free_dmatrix(double **m)
 /* free a double matrix allocated by dmatrix() */
 {
-	free((FREE_ARG) m[0]);
-	free((FREE_ARG) m);
+  free((FREE_ARG) m[0]);
+  free((FREE_ARG) m);
 }
 
 void free_cmatrix(fftw_complex **m)
 {
   fftw_free(m[0]);
-  fftw_free(m);
+  free(m);
 }
 
-void free_submatrix(float **b, long nrl, long nrh, long ncl, long nch)
+void free_submatrix(float **b, int nrl, int nrh, int ncl, int nch)
 /* free a submatrix allocated by submatrix() */
 {
 	free((FREE_ARG) (b+nrl));
@@ -396,7 +396,7 @@ void free_zarray(fftw_complex *t)
 }
 
 
-double *mag(double *r, const fftw_complex *z, long N) 
+double *mag(double *r, const fftw_complex *z, int N) 
 {
   int k;
   double re, im;
@@ -407,19 +407,19 @@ double *mag(double *r, const fftw_complex *z, long N)
   }
 }
 
-double *angle(double *r, const fftw_complex *z, long N)
+double *angle(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = atan2(z[k][1], z[k][0]);
 }
 
-double *real(double *r, const fftw_complex *z, long N)
+double *real(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = z[k][0];
 }
 
-double *imag(double *r, const fftw_complex *z, long N)
+double *imag(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = z[k][1];

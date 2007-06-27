@@ -1,7 +1,7 @@
 This code is compiling on Linux and Mac with f77 lapack, cblas, fftw3,
 and the unwrap (included) libraries linking.
 
-For Linux, change the cblas.h include in "ops.h" to <atlas/cblas.h>
+For Linux, change the cblas.h include in "recon.h" to <atlas/cblas.h>
 
 To compile libunwrap:
 cd punwrap
@@ -11,7 +11,8 @@ ranlib libunwrap.a
 cd ..
 
 To compile recon:
-gcc -g -o recon recon.c image.c data.c bpc.c geo_undist.c -L./punwrap \
+gcc -g -o recon recon.c image.c data.c bpc.c geo_undist.c -I/usr/include/atlas \
+    -L./punwrap \
     -L/usr/lib/atlas (if stuff isn't sym-linked to /usr/lib) \
     -lm -lfftw3 -lunwrap -lcblas -llapack
 

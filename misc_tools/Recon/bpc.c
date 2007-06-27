@@ -1,5 +1,4 @@
 #include "recon.h"
-//#include "ops.h"
 #include "util.h"
 #include "data.h"
 
@@ -97,6 +96,9 @@ void bal_phs_corr(image_struct *image, op_struct op)
     /* since the number of points change for each plane, we have to 
        re-allocate memory on each pass
     */
+    if (nrows < 10) {
+      printf("uhoh");
+    }
     A = dmatrix(nrows, 3);
     col = (double *) calloc(nrows, sizeof(double));
     rc = 0;
@@ -170,7 +172,7 @@ void unwrap_ref_volume(double *uphase, fftw_complex ***vol,
   
   int k, l, m;
   int zerosl;
-  double *scut, re, im, foo, height;
+  double *s_line, re, im, foo, height;
   double pi = acos(-1.0);
   float *wrplane, *uwplane;
   double ***phase;
@@ -204,13 +206,11 @@ void unwrap_ref_volume(double *uphase, fftw_complex ***vol,
     */
     height = uwplane[zerosl*xdim + xdim/2];
     height = (double) ( (int) ((height + SIGN(height)*pi)/(2*pi)) );
-    if(height) {
-      for(k=0; k<zdim; k++) {
-	for(m=0; m<xdim; m++) {
-	  uphase[(k*ydim + l)*xdim + m] = uwplane[k*xdim + m] - 2*pi*height;
-	}
+    for(k=0; k<zdim; k++) {
+      for(m=0; m<xdim; m++) {
+	uphase[(k*ydim + l)*xdim + m] = uwplane[k*xdim + m] - 2*pi*height;
       }
-    }
+    } 
   }
   
 }

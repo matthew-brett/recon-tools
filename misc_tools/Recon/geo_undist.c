@@ -287,16 +287,17 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
   fftw_free(A2);
 }
 
-/* This computes the (regularized) inverse of A through a regularized
-   solution: (Ah*A + lm^2*I)*C = Ah*I
+/* This computes the (regularized) gereralized inverse of A through a 
+   regularized solution: (Ah*A + lm^2*I)*C = Ah*I
 
    use CBLAS to get the of (Ah*A + lm^2*I) in A2,
    and then use LAPACK to solve for C. 
 
-   Note: in column-major, A is conj(Ah), and A2 is the upper-triangular
-   portion of conj(Ah*A + lm^2*I)
+   Note: in column-major, A is conj(Ah), and A2 is conj(Ah*A + lm^2*I)
 
-   If conj(A2)*C = conj(Ah)
+   If conj(AhA + (lm^2)I)*C = conj(Ah), then conj(C) (the conjugate of
+   the LAPACK solution, which is in col-major) is the transpose of the 
+   desired solution. So the final answer is the hermitian transpose of C
    
 */
 void zregularized_inverse(fftw_complex *A,

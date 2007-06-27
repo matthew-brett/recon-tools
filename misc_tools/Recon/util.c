@@ -109,19 +109,19 @@ void dsolve_svd(double *A, double *y, double *x, int M, int N)
   /* number of singular values is min(M,N) */
   ns = MIN(M,N);
   /* u should be (n,ncol) ncol == ns */
-  u = (double *) malloc(LDU*ns * sizeof(double));
+  u = (double *) calloc(LDU*ns, sizeof(double));
   LDVT = ns;
   /* vt should be shaped (ldvt, M) */
-  vt = (double *) malloc(LDVT * M * sizeof(double));
+  vt = (double *) calloc(LDVT*M, sizeof(double));
   LWORK = -1;
   IWORK = 8*ns;
-  work = (double *) malloc(1 * sizeof(double));
-  s = (double *) malloc(ns * sizeof(double));
+  work = (double *) calloc(1, sizeof(double));
+  s = (double *) calloc(ns, sizeof(double));
   dgesdd_(&JOBZ, &N, &M, A, &LDA, s, u, &LDU, vt, &LDVT,
 	  work, &LWORK, &IWORK, &INFO);
   LWORK = (int) work[0];
   free(work);
-  work = (double *) malloc(LWORK * sizeof(double));
+  work = (double *) calloc(LWORK, sizeof(double));
   dgesdd_(&JOBZ, &N, &M, A, &LDA, s, u, &LDU, vt, &LDVT,
 	  work, &LWORK, &IWORK, &INFO);
   if(INFO != 0) {

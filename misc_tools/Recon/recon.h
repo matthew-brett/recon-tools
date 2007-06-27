@@ -15,7 +15,7 @@
 //#include <gtk/gtk.h>
 #include <fftw3.h>
 #include <netinet/in.h>
-#include <vecLib/cblas.h>
+#include <atlas/cblas.h>
 
 
 #define   MAX_OPS                    100 
