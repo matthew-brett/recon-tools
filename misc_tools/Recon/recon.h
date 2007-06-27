@@ -15,12 +15,18 @@
 //#include <gtk/gtk.h>
 #include <fftw3.h>
 #include <netinet/in.h>
+#include <vecLib/cblas.h>
 
 
 #define   MAX_OPS                    100 
 #define MULTISLICE 0
 #define COMPRESSED 1
 #define UNCOMPRESSED 2
+
+#define SIGN(x) ( (x)>=0  ? +1 : -1 )
+#define MAX(x,y) ( (x) > (y) ? (x) : (y) )
+#define MIN(x,y) ( (x) > (y) ? (y) : (x) )
+#define ABS(x) ( ((x) < 0.0) ? -(x) : (x) )
 
 /* Define the FID file sub-header */
 typedef struct{
@@ -96,10 +102,9 @@ typedef struct{
 void read_image(image_struct *image, op_struct op);
 void write_image(image_struct *image, op_struct op);
 void ifft2d(image_struct *image, op_struct op);
-//void bal_phs_corr(image_struct *image, op_struct op);
+void bal_phs_corr(image_struct *image, op_struct op);
 void get_fieldmap(image_struct *image, op_struct op);
 void geo_undistort(image_struct *image, op_struct op);
-void get_fmap(image_struct *image, op_struct op);
 void viewer(image_struct *image, op_struct op);
 void surf_plot(image_struct *image, op_struct op);
 //void gtk_viewer(image_struct *image, op_struct op);
@@ -114,3 +119,22 @@ void swap_bytes(unsigned char *x, int size);
 unsigned char* create_mask(image_struct *img);
 int comparator(double *a, double *b);
 void compute_field_map(image_struct *image);
+
+/* Helper functions auxiliary to Balanced Phase Correction
+   (defined in bpc.c)
+*/
+void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
+			    int rowsize, int volsize, int nvols);
+void unwrap_ref_volume(double *uphase, fftw_complex ***vol, 
+		       int zdim, int ydim, int xdim, int xstart, int xstop);
+void maskbyfit(double *line, double *sigma, double *mask, double tol, 
+	       double tol_growth, int len);
+
+/* Helper functions auxiliary to Geometric Undistortion
+   (defined in geo_undist.c
+*/
+void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
+		double Tl, int ns, int nr, int nc);
+void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
+			int M, int N, int NRHS, double lambda);
+void zregularized_inverse(fftw_complex *A, int M, int N, double lambda);

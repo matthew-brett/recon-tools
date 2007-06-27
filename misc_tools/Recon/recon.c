@@ -2,11 +2,17 @@
 * recon.c                                                                   *
 *                                                                           *
 * To compile:                                                               *
-*  gcc -Wall -g recon.c -o recon `pkg-config --cflags gtk+-2.0`             *
-*     `pkg-config --libs gtk+-2.0`                                          *
+*  gcc -Wall -g recon.c image.c util.c bpc.c geo_undist.c -o recon \        *
+*             -lm -lfftw3 -lunwrap -llapack -lcblas                         *
+*                                                                           *
+* Linker/Include flags: -I/path-to-blas/lapack-header                       *
+*                       -I/path-to-fftw3-header                             *
+*                       -L/path-to-cblas-lapack-libs                        *
+*                       -L/path-to-fftw3-libs                               *
+*                       -L./punwrap                                         *
 *                                                                           *
 * To run:                                                                   *
-*   recon fid_dir outfile oplist                                            *
+*   recon oplist                                                            *
 *                                                                           *
 * Where fid_dir is the path to the directory containing the procpar and fid *
 * data files, outfile is the user defined output file name, and oplist is   *
@@ -16,7 +22,6 @@
 
 #include "recon.h"
 #include "data.h"
-#include "ops.h"
 
 int main(int argc, char* argv[])
 {
@@ -57,15 +62,6 @@ int main(int argc, char* argv[])
 
   /* Read the oplist file. */
   read_oplist(oplist_path, op_seq);
-  
-/*   /\* Read procpar and put parameters in the image_struct. *\/ */
-/*   read_procpar(base_path, img); */
-/*   img->data = c4tensor_alloc(img->n_vol, img->n_slice, img->n_pe, img->n_fe); */
-/*   img->ref1 = c3tensor_alloc(img->n_slice, img->n_pe, img->n_fe); */
-/*   img->ref2 = c3tensor_alloc(img->n_slice, img->n_pe, img->n_fe); */
-
-/*   /\* Read the k-space data into memory and assign pointers to that data. *\/ */
-/*   get_epibrs_data(base_path, img); */
   
   /* Perform the operations. */
   n = 0;
@@ -294,28 +290,20 @@ void write_image(image_struct *image, op_struct op)
 /**************************************************************************
 * bal_phs_corr                                                            *
 *                                                                         *
-*  An operation on k-space data                                           *
+*  Corrects phase errors in EPI data (defined in bpc.c)                   *
 **************************************************************************/ 
-/* void bal_phs_corr(image_struct *image, op_struct op_seq) */
-/* {                         */
 
-/*   printf("Hello from bal_phs_corr \n"); */
-/*   printf("Number of Ref scans %d\n", image->n_refs); */
-
-/*   /\* Multiply ref scan 1 data array elements by the complex conjugate */
-/*     of ref scan 2 data array elements *\/ */
-
-/*   /\* Calculate the angle nd divide by 2.0 *\/ */
-
-/*   /\* Correct the data *\/ */
-
-/*   return; */
-/* }         */
+/**************************************************************************
+* geo_undistort                                                           *
+*                                                                         *
+*  Corrects susceptibility errors in EPI data (defined in geo_undist.c)   *
+**************************************************************************/
 
 /**************************************************************************
 * ifft2d                                                                  *
 *                                                                         *
-*  An operation on k-space data                                           *
+* Transforms the kspace slices to image-space slices. Quadrant "shifting" *
+* a la fftshift in Matlab is done by modulation in both domains.          *
 **************************************************************************/
 void ifft2d(image_struct *image, op_struct op)
 {

@@ -1,6 +1,6 @@
 #include "recon.h"
 #include "data.h"
-#include "ops.h"
+#include "util.h"
 
 /* useful constants for cblas_zgemm */
 static const double oneD[2] = {1.0, 0.0};
@@ -10,15 +10,18 @@ static const double zeroD[2] = {0.0, 0.0};
 extern int zgesv_(int *n, int *nrhs, fftw_complex *a, 
 		  int *lda, int *ipiv, fftw_complex *b, int *ldb, int *info);
 
+extern int zposv_(char *UPLO, int *N, int *NRHS, fftw_complex *a, int *LDA,
+		  fftw_complex *b, int *LDB, int *INFO);
+
 /**************************************************************************
 * geo_undistort                                                           *
 *                                                                         *
-*  An operation on k-space data                                           *
+*  Corrects susceptibility errors in EPI data                             *
 **************************************************************************/
 
 void geo_undistort(image_struct *image, op_struct op)
 {                        
-  fftw_complex ****kern, *id, *invK, *dchunk, *dist_chunk, *soln_chunk;
+  fftw_complex ****kern, *dchunk, *dist_chunk, *soln_chunk;
   double lambda;
   int k, l, m, n, n_vol, n_slice, n_pe, n_fe;
   FILE *fp;
@@ -43,26 +46,16 @@ void geo_undistort(image_struct *image, op_struct op)
   dchunk = (fftw_complex *) fftw_malloc(n_vol*n_pe*n_fe * sizeof(fftw_complex));
   dist_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
   soln_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
-  id = (fftw_complex *) fftw_malloc((n_pe*n_pe) * sizeof(fftw_complex));
-  invK = (fftw_complex *) fftw_malloc((n_pe*n_pe) * sizeof(fftw_complex));
-  /* FREE THESE */
-
-  bzero(id, (n_pe*n_pe*sizeof(fftw_complex)));
-  for(k=0; k<n_pe; k++) id[k + k*n_pe][0] = 1.0;
+  /* ^^^ FREE THESE ^^^*/
 
   get_kernel(kern, image->fmap, image->mask, image->Tl, n_slice, n_fe, n_pe);
-
   printf("computing inverse operators...");
   for(k=0; k<n_slice; k++) {
     for(l=0; l<n_fe; l++) {
-      zsolve_regularized(*(kern[k][l]), id, invK, n_pe, n_pe,
-			 n_pe, lambda);
-      memmove(*(kern[k][l]), invK, n_pe*n_pe*sizeof(fftw_complex));
+      zregularized_inverse(*(kern[k][l]), n_pe, n_pe, lambda);
     }
   }
   printf(" done\n");
-  /* done with this */
-  fftw_free(invK);
 
   /* do solutions here! */
 
@@ -94,7 +87,7 @@ void geo_undistort(image_struct *image, op_struct op)
 		  sizeof(fftw_complex));
 	}
       }
-      /* apply op (NPExNPE)x(NPExNVOL) --> (M,N,K) are (NPE,NPE,NPE) */
+      /* apply inv. op (NPExNPE)x(NPExNVOL) --> (M,N,K) are (NPE,NPE,NPE) */
       if (n_vol > 1) {
 	cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
 		    n_pe, n_pe, n_pe, oneD,
@@ -128,7 +121,6 @@ void geo_undistort(image_struct *image, op_struct op)
   fftw_free(soln_chunk);
   fftw_free(dist_chunk);
   fftw_free(dchunk);
-  fftw_free(id);
   free_c4tensor(kern);
 
   return;
@@ -220,12 +212,15 @@ void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
   free(sum);
 }
 
-/* data shapes:
+/* zsolve_regularized takes the equation Ax = y and solves a regularized
+   version (AhA + (lm^2)I)x = (Ah)y
+   data shapes:
    A is MxN (usually square) (row-major)
    y is MxNRHS (row-major)
    x is NxNRHS (row-major)
-*/
 
+   THIS could be refactored to not use as many transposes!
+*/
 void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
 			int M, int N, int NRHS, double lambda)
 {
@@ -236,29 +231,17 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
 
   lm_sq[0] = lambda*lambda;
   
-  //Atmp1 = (fftw_complex *) fftw_malloc((M*N) * sizeof(fftw_complex));
   /* use A2 as the identity matrix for right now */
   A2 = (fftw_complex *) fftw_malloc((N*N) * sizeof(fftw_complex));
   A2_cm = (fftw_complex *) fftw_malloc((N*N) * sizeof(fftw_complex));
   x_cm = (fftw_complex *) fftw_malloc((NRHS*N) * sizeof(fftw_complex));
   IPIV = (int *) malloc(N * sizeof(int));
-  /* guess we need temp space for xpose */
   
-
-  //y2 = (fftw_complex *) fftw_malloc(N * sizeof(fftw_complex));
 
   bzero(A2, (N*N)*sizeof(fftw_complex));
   for(k=0; k<N; k++) A2[k + k*N][0] = 1.0;
   
-  /* want to get A2 <-- (A*)x(A) + (lm_sq)*I ... 
-  */
-
-  /* this only gives back the upper triangular part!! */
-/*   cblas_zherk(CblasRowMajor, CblasUpper, CblasConjTrans, */
-/* 	      N, N, 1.0, */
-/* 	      (void *) A, M, */
-/* 	      0.0, (void *) A2, N); */
-	      
+  /* want to get A2 <-- (A*)x(A) + (lm_sq)*I ... */
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
 	      N, N, M, oneD,
 	      (void *) A, M,
@@ -276,10 +259,9 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
      A2 is NxN, and x is NxNRHS
   */
   /* can this be done faster? */
-  /* could we use the solution for hermitian positive definite matrix?? */
   for(k=0; k<N; k++) {
     for(l=0; l<N; l++) {
-      /* rm idx = k*N + l; cm idx = l*N + k */
+      /* row-maj idx = k*N + l; col-maj idx = l*N + k */
       memmove(A2_cm+(l*N+k), A2+(k*N+l), sizeof(fftw_complex));
     }
   }
@@ -305,4 +287,65 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
   fftw_free(A2);
 }
 
-  
+/* This computes the (regularized) inverse of A through a regularized
+   solution: (Ah*A + lm^2*I)*C = Ah*I
+
+   use CBLAS to get the of (Ah*A + lm^2*I) in A2,
+   and then use LAPACK to solve for C. 
+
+   Note: in column-major, A is conj(Ah), and A2 is the upper-triangular
+   portion of conj(Ah*A + lm^2*I)
+
+   If conj(A2)*C = conj(Ah)
+   
+*/
+void zregularized_inverse(fftw_complex *A,
+			  int M, int N, double lambda)
+{
+  char UPLO='U';
+  fftw_complex *A2;
+  int INFO, *IPIV, k, l, idx, idx_xp, sum = 0;
+  double re, im, lmsq = lambda*lambda;
+
+  for(k=0; k<N; k++) sum += k;
+  /* memory allocating */
+  A2 = (fftw_complex *) calloc((N*N), sizeof(fftw_complex));
+  IPIV = (int *) malloc(N * sizeof(int));
+  for(k=0; k<N; k++) {
+    A2[k + k*N][0] = lmsq;
+  }
+  /* This gives us the lower triangular part of (Ah)A + (lm^2)*I
+     (which will be like conjugate upper triangular if it were col-major)
+  */
+/*   cblas_zherk(CblasRowMajor, CblasLower, CblasConjTrans, */
+/* 	      N, M, 1.0, */
+/* 	      (void *) A, M, */
+/* 	      1.0, (void *) A2, N); */
+
+  cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
+	      N, N, M, oneD,
+	      (void *) A, M,
+	      (void *) A, M,
+	      oneD, (void *) A2, N);
+  //zposv_(&UPLO, &N, &M, A2, &N, A, &N, &INFO);
+  zgesv_(&N, &M, A2, &N, IPIV, A, &N, &INFO);
+
+  /* A is now the hermitian transpose of the desired solution MxN*/
+  for(k=0; k<M; k++) {
+    l = 0;
+    while(l <= k) {
+      idx = k*N + l;
+      idx_xp = l*M + k;
+      re = A[idx][0];
+      im = A[idx][1];
+      A[idx][0] = A[idx_xp][0];
+      A[idx][1] = -A[idx_xp][1];
+      A[idx_xp][0] = re;
+      A[idx_xp][1] = -im;
+      l++;
+    }
+  }
+
+  free(A2);
+  free(IPIV);
+}
