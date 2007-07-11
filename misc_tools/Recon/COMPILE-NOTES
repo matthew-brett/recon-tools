@@ -11,7 +11,7 @@ ranlib libunwrap.a
 cd ..
 
 To compile recon:
-gcc -g -o recon recon.c image.c data.c bpc.c geo_undist.c -I/usr/include/atlas \
+gcc -g -o recon recon.c image.c data.c util.c bpc.c geo_undist.c \
     -L./punwrap \
     -L/usr/lib/atlas (if stuff isn't sym-linked to /usr/lib) \
     -lm -lfftw3 -lunwrap -lcblas -llapack
