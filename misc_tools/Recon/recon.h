@@ -15,7 +15,7 @@
 //#include <gtk/gtk.h>
 #include <fftw3.h>
 #include <netinet/in.h>
-#include <atlas/cblas.h>
+#include <vecLib/cblas.h>
 
 
 #define   MAX_OPS                    100 
@@ -116,9 +116,9 @@ int get_data(char *data_path, image_struct *image);
 
 /* Declaration of helper functions */
 void swap_bytes(unsigned char *x, int size);
-unsigned char* create_mask(image_struct *img);
+unsigned char* create_mask(image_struct *img, double thresh_fact);
 int comparator(double *a, double *b);
-void compute_field_map(image_struct *image);
+void compute_field_map(image_struct *image, double threshold);
 
 /* Helper functions auxiliary to Balanced Phase Correction
    (defined in bpc.c)

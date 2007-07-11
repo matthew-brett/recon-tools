@@ -26,46 +26,84 @@ double array_max(double *array, int len, int *max_idx) {
 /* repeatedly takes a 1D FFT of length len_xform by advancing the zin and
    zout pointers len_z/len_xform times. "direction" indices whether the
    transform is a forward of reverse FFT */
+/* void fft1d(fftw_complex *zin, fftw_complex *zout,  */
+/* 	   int len_xform, int len_z, int direction) */
+/* { */
+/*   fftw_plan FT1D; */
+/*   double tog = 1.0; */
+/*   fftw_complex *dp_in, *dp_out; */
+/*   int x, k, nxforms = len_z/len_xform; */
+
+/*   FT1D = fftw_plan_dft_1d(len_xform, zin, zout, direction,  */
+/* 			  FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); */
+  
+/*   for(x=0; x<nxforms; x++) { */
+/*     dp_in = zin + x*len_xform; */
+/*     dp_out = zout + x*len_xform; */
+/* /\*     FT1D = fftw_plan_dft_1d(len_xform, dp_in, dp_out, direction,  *\/ */
+/* /\* 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); *\/ */
+/*     for(k=0; k<len_xform; k++) { */
+/*       dp_in[k][0] *= tog; */
+/*       dp_in[k][1] *= tog; */
+/*       tog *= -1.0; */
+/*     } */
+/*     fftw_execute_dft(FT1D, dp_in, dp_out); */
+/* /\*     fftw_destroy_plan(FT1D);    *\/ */
+/*     tog = 1.0; */
+/*     for(k=0; k<len_xform; k++) { */
+/*       /\* undo the modulation in both spaces *\/ */
+/*       if(dp_in != dp_out) { */
+/* 	dp_in[k][0] *= tog; */
+/* 	dp_in[k][1] *= tog; */
+/*       } */
+/*       /\* FFTW does not normalize on the inverse, so do it here *\/ */
+/*       if(direction == INVERSE) { */
+/* 	dp_out[k][0] *= (tog/ (double) len_xform); */
+/* 	dp_out[k][1] *= (tog/ (double) len_xform); */
+/*       } else { */
+/* 	dp_out[k][0] *= tog; */
+/* 	dp_out[k][1] *= tog; */
+/*       } */
+/*       tog *= -1.0; */
+/*     } */
+/*   } */
+/*   fftw_destroy_plan(FT1D); */
+/*   fftw_cleanup(); */
+/* } */
+
 void fft1d(fftw_complex *zin, fftw_complex *zout, 
 	   int len_xform, int len_z, int direction)
 {
   fftw_plan FT1D;
   double tog = 1.0;
-  fftw_complex *dp_in, *dp_out;
   int x, k, nxforms = len_z/len_xform;
-
-  FT1D = fftw_plan_dft_1d(len_xform, zin, zout, direction, 
-			  FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
-  
-  for(x=0; x<nxforms; x++) {
-    dp_in = zin + x*len_xform;
-    dp_out = zout + x*len_xform;
-/*     FT1D = fftw_plan_dft_1d(len_xform, dp_in, dp_out, direction,  */
-/* 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); */
-    for(k=0; k<len_xform; k++) {
-      dp_in[k][0] *= tog;
-      dp_in[k][1] *= tog;
-      tog *= -1.0;
+  //n[0] = len_xform;
+  // n[0] = N; howmany = nxforms; idist=N; istride=1; inembed = NULL
+  FT1D = fftw_plan_many_dft(1, &len_xform, nxforms, zin, NULL, 1, len_xform,
+			    zout, NULL, 1, len_xform, direction,
+			    FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
+  // modulate the input
+  for(k=0; k<len_z; k++) {
+    zin[k][0] *= tog;
+    zin[k][1] *= tog;
+    tog *= -1.0;
+  }
+  fftw_execute(FT1D);
+  tog = 1.0;
+  // demodulate output (and restore input if it's a separate array)
+  for(k=0; k<len_z; k++) {
+    if(zin != zout) {
+      zin[k][0] *= tog;
+      zin[k][1] *= tog;
     }
-    fftw_execute_dft(FT1D, dp_in, dp_out);
-/*     fftw_destroy_plan(FT1D);    */
-    tog = 1.0;
-    for(k=0; k<len_xform; k++) {
-      /* undo the modulation in both spaces */
-      if(dp_in != dp_out) {
-	dp_in[k][0] *= tog;
-	dp_in[k][1] *= tog;
-      }
-      /* FFTW does not normalize on the inverse, so do it here */
-      if(direction == INVERSE) {
-	dp_out[k][0] *= (tog/ (double) len_xform);
-	dp_out[k][1] *= (tog/ (double) len_xform);
-      } else {
-	dp_out[k][0] *= tog;
-	dp_out[k][1] *= tog;
-      }
-      tog *= -1.0;
+    if(direction == INVERSE) {
+      zout[k][0] *= (tog/ (double) len_xform);
+      zout[k][1] *= (tog/ (double) len_xform);
+    } else {
+      zout[k][0] *= tog;
+      zout[k][1] *= tog;
     }
+    tog *= -1.0;
   }
   fftw_destroy_plan(FT1D);
   fftw_cleanup();
@@ -141,6 +179,7 @@ void dsolve_svd(double *A, double *y, double *x, int M, int N)
   vec1 = (double *) calloc(ns, sizeof(double));
   /* this holds the product dot(inv(s), vec1), has length ns */
   vec2 = (double *) calloc(ns, sizeof(double));
+  
   cblas_dgemv(CblasColMajor, CblasNoTrans, 
 	      ns, M, 1.0, vt, ns, 
 	      y, 1, 0.0, vec1, 1);

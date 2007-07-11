@@ -137,34 +137,57 @@ void bal_phs_corr(image_struct *image, op_struct op)
   return;
 }
 
+/* /\* Applies a complex volume corrector to the data, row by row. *\/ */
+/* void apply_phase_correction(fftw_complex *data, fftw_complex *corrector, */
+/* 			    int rowsize, int volsize, int nvols) */
+/* { */
+/*   int k, l, m, nrows = volsize/rowsize; */
+/*   fftw_complex *d, *c, *irow; */
+/*   double re1, re2, im1, im2; */
+/*   irow = (fftw_complex *) fftw_malloc(rowsize * sizeof(fftw_complex)); */
+/*   for(k=0; k<nrows; k++) { */
+/*     printf("k=%d..",k); */
+/*     fflush(stdout); */
+/*     c = corrector + k*rowsize; */
+/*     for(l=0; l<nvols; l++) { */
+/*       d = data + (l*volsize) + k*rowsize; */
+/*       fft1d(d, irow, rowsize, rowsize, INVERSE); */
+/*       for(m=0; m<rowsize; m++) { */
+/* 	re1 = irow[m][0]; */
+/* 	im1 = irow[m][1]; */
+/* 	re2 = c[m][0]; */
+/* 	im2 = c[m][1]; */
+/* 	irow[m][0] = re1*re2 - im1*im2; */
+/* 	irow[m][1] = re1*im2 + re2*im1; */
+/*       } */
+/*       /\* transform the corrected data back into kspace (directly into d) *\/ */
+/*       fft1d(irow, d, rowsize, rowsize, FORWARD); */
+/*     } */
+/*   } */
+/*   fftw_free(irow); */
+/* } */
+
 /* Applies a complex volume corrector to the data, row by row. */
 void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
 			    int rowsize, int volsize, int nvols)
 {
   int k, l, m, nrows = volsize/rowsize;
-  fftw_complex *d, *c, *irow;
+  fftw_complex *d;
   double re1, re2, im1, im2;
-  irow = (fftw_complex *) fftw_malloc(rowsize * sizeof(fftw_complex));
-  for(k=0; k<nrows; k++) {
-    c = corrector + k*rowsize;
+  fft1d(data, data, rowsize, volsize*nvols, INVERSE);
+  for(m=0; m<volsize; m++) {
+    re2 = corrector[m][0];
+    im2 = corrector[m][1];
     for(l=0; l<nvols; l++) {
-      d = data + (l*volsize) + k*rowsize;
-      fft1d(d, irow, rowsize, rowsize, INVERSE);
-      for(m=0; m<rowsize; m++) {
-	re1 = irow[m][0];
-	im1 = irow[m][1];
-	re2 = c[m][0];
-	im2 = c[m][1];
-	irow[m][0] = re1*re2 - im1*im2;
-	irow[m][1] = re1*im2 + re2*im1;
-      }
-      /* transform the corrected data back into kspace (directly into d) */
-      fft1d(irow, d, rowsize, rowsize, FORWARD);
+      d = data + l*volsize;
+      re1 = d[m][0];
+      im1 = d[m][1];
+      d[m][0] = re1*re2 - im1*im2;
+      d[m][1] = re1*im2 + re2*im1;
     }
   }
-  fftw_free(irow);
+  fft1d(data, data, rowsize, volsize*nvols, FORWARD);
 }
-
 
 void unwrap_ref_volume(double *uphase, fftw_complex ***vol, 
 		       int zdim, int ydim, int xdim, int xstart, int xstop)

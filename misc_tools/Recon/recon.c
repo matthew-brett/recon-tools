@@ -311,16 +311,14 @@ void ifft2d(image_struct *image, op_struct op)
   double tog = 1.0;
   fftw_complex *imspc_vec, *dp;
   fftw_plan IFT2D;
-
   printf("Calculating the FFT. \n");
-
   npe = image->n_pe;
   nfe = image->n_fe;
   dsize = npe * nfe;
   /* it's not really necessary to have buffer space */
   imspc_vec = (fftw_complex *) fftw_malloc(dsize * sizeof(fftw_complex));
-
-  IFT2D = fftw_plan_dft_2d(nfe, npe, ***(image->data), imspc_vec, +1,
+  
+  IFT2D = fftw_plan_dft_2d(npe, nfe, ***(image->data), imspc_vec, +1,
 			   FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 
   
@@ -361,7 +359,7 @@ void ifft2d(image_struct *image, op_struct op)
 void get_fieldmap(image_struct *image, op_struct op)
 {
   image_struct *asems;
-
+  double threshold;
   /* Be a little disingenuous with our operation pipelining..
      this local ref to op has the correct param_1 for read_image,
      so use it for read_image */
@@ -372,7 +370,8 @@ void get_fieldmap(image_struct *image, op_struct op)
   image->mask = d3tensor_alloc(asems->n_slice, asems->n_pe, asems->n_fe);
   asems->fmap = image->fmap;
   asems->mask = image->mask;
-  compute_field_map(asems);
+  threshold = atof(op.param_2) ? atof(op.param_2) : 0.1;
+  compute_field_map(asems, threshold);
   free(asems);
 }
 
@@ -551,7 +550,7 @@ void swap_bytes(unsigned char *x, int size)
 
 
 
-void compute_field_map(image_struct *img)
+void compute_field_map(image_struct *img, double threshold)
 {
   int sl, pe, fe, n_pe, n_fe, n_slice, offset, slice_sz;
   float delta_te;
@@ -591,7 +590,7 @@ void compute_field_map(image_struct *img)
   }
 
   // Create a 3D mask indicating where the field-map SNR is sufficient.
-  create_mask(img);
+  create_mask(img, threshold);
  
   // Unwrap the volume of phase data. 
   for(sl=0; sl<n_slice; sl++){
@@ -625,7 +624,7 @@ void compute_field_map(image_struct *img)
 
 
     
-unsigned char* create_mask(image_struct *img)
+unsigned char* create_mask(image_struct *img, double thresh_fact)
 {
   int sl, pe, fe, n_pe, n_fe, n_slice, slice_sz, dsize;
   int (*compar) ();
@@ -669,8 +668,7 @@ unsigned char* create_mask(image_struct *img)
   p02 = tmp_1d[ (int) (.02 * dsize) ]; // EXPERIMENT WITH p02
   p98 = tmp_1d[ (int) (.98 * dsize) ]; // EXPERIMENT WITH p98
   //thresh = 0.35*(p98 - p02) + p02;
-  thresh = 0.1*(p98 - p02) + p02;      // EXPERIMENT WITH 0.1
-  thresh = thresh;
+  thresh = thresh_fact*(p98 - p02) + p02;      // EXPERIMENT WITH 0.1
   printf("%2.7f, %2.7f\n", tmp_1d[0], tmp_1d[dsize-1]);
   printf("%2.7f, %2.7f, %2.7f\n", p98, p02, thresh);
 

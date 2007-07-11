@@ -47,16 +47,15 @@ void geo_undistort(image_struct *image, op_struct op)
   dist_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
   soln_chunk = (fftw_complex *) fftw_malloc(n_pe*n_vol * sizeof(fftw_complex));
   /* ^^^ FREE THESE ^^^*/
-
+  printf("getting kernel... ");
   get_kernel(kern, image->fmap, image->mask, image->Tl, n_slice, n_fe, n_pe);
-  printf("computing inverse operators...");
+  printf("done\ncomputing inverse operators... ");
   for(k=0; k<n_slice; k++) {
     for(l=0; l<n_fe; l++) {
       zregularized_inverse(*(kern[k][l]), n_pe, n_pe, lambda);
     }
   }
-  printf(" done\n");
-
+  printf("done\n");
   /* do solutions here! */
 
   /* work one plane (slice) at a time:
@@ -65,6 +64,7 @@ void geo_undistort(image_struct *image, op_struct op)
      3) (forward) xform data back to ksp
      4) 
   */
+  printf("correting data... ");
   for(l=0; l<n_slice; l++) {
     /* slice across array at slice=l and put the data in dchunk */
     for(k=0; k<n_vol; k++) {
@@ -81,26 +81,21 @@ void geo_undistort(image_struct *image, op_struct op)
       
       for(m=0; m<n_pe; m++) {
 	for(k=0; k<n_vol; k++) {
-	  /* this is equivalently soln_chunk[m][k] = dchunk[k][m][n] */
+	  /* this is equivalently dist_chunk[m][k] = dchunk[k][m][n] */
 	  memmove(dist_chunk + (m*n_vol + k),
 		  dchunk + ((k*n_pe + m)*n_fe + n),
 		  sizeof(fftw_complex));
 	}
       }
-      /* apply inv. op (NPExNPE)x(NPExNVOL) --> (M,N,K) are (NPE,NPE,NPE) */
-      if (n_vol > 1) {
-	cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
-		    n_pe, n_pe, n_pe, oneD,
-		    (void *) *(kern[l][n]), n_pe,
-		    (void *) dist_chunk, n_pe,
-		    zeroD, (void *) soln_chunk, n_pe);
-      } else {
-	cblas_zgemv(CblasRowMajor, CblasNoTrans,
-		    n_pe, n_pe, oneD,
-		    (void *) *(kern[l][n]), n_pe,
-		    (void *) dist_chunk, 1, 
-		    zeroD, (void *) soln_chunk, 1);
-      }
+      /* apply inv. op (NPExNPE)x(NPExNVOL) --> (M,N,K) are (NPE,N_VOL,NPE) */
+      /* LDA,LDB,LDC = major stride size!!!
+	 IE: LDA = NPE, LDB = NVOL, LDC = NVOL (since they are row-major)
+      */
+      cblas_zgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans,
+		  n_pe, n_vol, n_pe, oneD,
+		  (void *) *(kern[l][n]), n_pe,
+		  (void *) dist_chunk, n_vol,
+		  zeroD, (void *) soln_chunk, n_vol);
       /* put solution back into dchunk */
       for(m=0; m<n_pe; m++) {
 	for(k=0; k<n_vol; k++) {
@@ -117,7 +112,7 @@ void geo_undistort(image_struct *image, op_struct op)
 	      n_pe*n_fe*sizeof(fftw_complex));
     }
   }
-
+  printf("done. \n\n");
   fftw_free(soln_chunk);
   fftw_free(dist_chunk);
   fftw_free(dchunk);
@@ -126,91 +121,159 @@ void geo_undistort(image_struct *image, op_struct op)
   return;
 }        
 
+/* Do this faster, here's the Python model:
+
+t_n2 = (N.arange(64)-32)*Tl
+pshifts = N.exp(-1.j*2*N.pi*N.outer((N.arange(64)-32), (N.arange(64)-32))/64)
+F = bmask_xp[:,:,None,:] * N.exp(1.j*fmap_xp[:,:,None,:]*t_n2[None,None,:,None]) * pshifts
+
+F is shaped (nslice, N1, N2, M2)
+
+K = util.ifft(F)
+
+K is shaped (nslice, N1, N2, N2P)
+*/
+
 void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
 		double Tl, int ns, int nr, int nc)
 {
-  
-  int N2,N2P,M1,M2,n2,n2p,q1,q2,sl,idx;
-  double re, im, zarg, tn2;
+
+  double *t_n2;
+  fftw_complex ****F;
+  int N2, N2P, M1, M2, n2, n2p, m1, m2, sl, idx;
+  double re, im, zarg;
   double pi = acos(-1.0);
-  double *dp, cn;
-  fftw_complex *svals;
-  fftw_complex ***basis_xform;
-  //fftw_complex ***kern;
-  fftw_complex ***e2;
-  fftw_complex *sum;
 
-  sum = (fftw_complex *) malloc(sizeof(fftw_complex));
-  N2 = nr;
-  N2P = nr;
-  M1 = nc;
-  M2 = nr;
+  // this isn't strictly true.. n2/n2p and m2 can be different
+  // n2 refers to the image resolution and m2 refers to the fmap resolution
+  N2 = N2P = nr;
+  M2 = nr; // THIS SHOULD BE THE # of ROWS IN FMAP, but algorithm not ready
+  M1 = nc; // THIS SHOULD BE THE # of COLS IN FMAP (should == image->n_fe)
+  // maybe M2,m2 should stay Q2,q2 (so not to confuse with image dimension M2)
 
-  basis_xform = c3tensor_alloc(N2,N2P,M2);
-  for(n2 = 0; n2 < N2; n2++) {
-    
-    for(n2p = 0; n2p < N2P; n2p++) {
-      
-      for(q2 = 0; q2 < M2; q2++) {
-	zarg = (2.0 * pi * (n2p - n2) * (q2 - M2/2))/(double) M2;
-	basis_xform[n2][n2p][q2][0] = cos(zarg)/(double) M2;
-	basis_xform[n2][n2p][q2][1] = sin(zarg)/(double) M2;
-      }
+  t_n2 = (double *) malloc(N2 * sizeof(double));
+  F = c4tensor_alloc(ns, M1, N2, M2);
 
-    }
 
-  }
+  for(n2=0; n2<N2; n2++) t_n2[n2] = (double) (n2 - N2/2) * Tl;
 
-  for(sl=0; sl < ns; sl++) {
-    printf("starting kernel calc for sl=%d ... \n", sl);
-    e2 = c3tensor_alloc(N2,M2,M1);
-    for(n2 = 0; n2 < N2; n2++) {
-      tn2 = (n2 - N2/2) * Tl;
-      for(q2 = 0; q2 < M2; q2++) {
-      
-	for(q1 = 0; q1 < M1; q1++) {
-	  // nr rows per slice
-	  // nc pts per row
-	  if(vmask[sl][q2][q1]) {
-	    zarg = tn2 * fmap[sl][q2][q1];
-	    e2[n2][q2][q1][0] = cos(zarg);
-	    e2[n2][q2][q1][1] = sin(zarg);
-	  } else {
-	    e2[n2][q2][q1][0] = 0.0;
-	    e2[n2][q2][q1][1] = 0.0;
-	  }
+  //fmap and vmask are coming in shaped (nslice, npe, nfe).. this calculation
+  //will require indexing them as if they're transposed
+  for(sl=0; sl<ns; sl++) {
+    for(m1=0; m1<M1; m1++) {
+      for(n2=0; n2<N2; n2++) {
+	for(m2=0; m2<M2; m2++) {
+	  if(vmask[sl][m2][m1]) {
+	    // zarg is the phase(t) function minus a phase shift..
+	    // this phase shift effects a time shift after the FFT
+	    zarg = fmap[sl][m2][m1]*t_n2[n2] -				\
+	      (2.0 * pi * ((double) (n2-N2/2) * (m2-M2/2) / (double) M2));
+	    
+	    F[sl][m1][n2][m2][0] = cos(zarg);
+	    F[sl][m1][n2][m2][1] = sin(zarg);
+	  } //else {
+	    //kernel is already zero'd
 	}
       }
     }
+  }
+  /* If the fmap is of a different resolution, this will need to be a
+     M2 -> N2 transform (M2 >= N2).. so potentially, only a subset of 
+     computed frequencies will be kept. */
+  fft1d(***F, ***kernel, M2, ns*M1*N2*M2, INVERSE);
   
-    //kern = f3tensor(M1,N2,N2P);
-    // k is (M1,N2,N2P)
-    // basis_xform is (N2,N2P,M2)
-    // e2 is (N2,M2,M1)
-    for(q1 = 0; q1 < M1; q1++) {
-      for(n2 = 0; n2 < N2; n2++) {
-	for(n2p = 0; n2p < N2P; n2p++) {
-	  sum[0][0] = 0.0;
-	  sum[0][1] = 0.0;
-	  for(q2 = 0; q2 < M2; q2++) {
-	    if(vmask[sl][q2][q1]) {
-	      sum[0][0] += (basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][0])
-		          -(basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][1]);
-
-	      sum[0][1] += (basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][0])
-		          +(basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][1]);
-	    }
-	  }
-	  kernel[sl][q1][n2][n2p][0] = sum[0][0];
-	  kernel[sl][q1][n2][n2p][1] = sum[0][1];
-	}
-      }
-    }
-  }
-  free(basis_xform);
-  free(e2);
-  free(sum);
+  free(t_n2);
+  free_c4tensor(F);
 }
+	  
+
+/* void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask, */
+/* 		double Tl, int ns, int nr, int nc) */
+/* { */
+  
+/*   int N2,N2P,M1,M2,n2,n2p,q1,q2,sl,idx; */
+/*   double re, im, zarg, tn2; */
+/*   double pi = acos(-1.0); */
+/*   double *dp, cn; */
+/*   fftw_complex *svals; */
+/*   fftw_complex ***basis_xform; */
+/*   //fftw_complex ***kern; */
+/*   fftw_complex ***e2; */
+/*   fftw_complex *sum; */
+
+/*   sum = (fftw_complex *) malloc(sizeof(fftw_complex)); */
+/*   N2 = nr; */
+/*   N2P = nr; */
+/*   M1 = nc; */
+/*   M2 = nr; */
+
+/*   basis_xform = c3tensor_alloc(N2,N2P,M2); */
+/*   for(n2 = 0; n2 < N2; n2++) { */
+    
+/*     for(n2p = 0; n2p < N2P; n2p++) { */
+      
+/*       for(q2 = 0; q2 < M2; q2++) { */
+/* 	zarg = (2.0 * pi * (n2p - n2) * (q2 - M2/2))/(double) M2; */
+/* 	basis_xform[n2][n2p][q2][0] = cos(zarg)/(double) M2; */
+/* 	basis_xform[n2][n2p][q2][1] = sin(zarg)/(double) M2; */
+/*       } */
+
+/*     } */
+
+/*   } */
+
+/*   for(sl=0; sl < ns; sl++) { */
+/*     printf("starting kernel calc for sl=%d ... \n", sl); */
+/*     e2 = c3tensor_alloc(N2,M2,M1); */
+/*     for(n2 = 0; n2 < N2; n2++) { */
+/*       tn2 = (n2 - N2/2) * Tl; */
+/*       for(q2 = 0; q2 < M2; q2++) { */
+      
+/* 	for(q1 = 0; q1 < M1; q1++) { */
+/* 	  // nr rows per slice */
+/* 	  // nc pts per row */
+/* 	  if(vmask[sl][q2][q1]) { */
+/* 	    zarg = tn2 * fmap[sl][q2][q1]; */
+/* 	    e2[n2][q2][q1][0] = cos(zarg); */
+/* 	    e2[n2][q2][q1][1] = sin(zarg); */
+/* 	  } else { */
+/* 	    e2[n2][q2][q1][0] = 0.0; */
+/* 	    e2[n2][q2][q1][1] = 0.0; */
+/* 	  } */
+/* 	} */
+/*       } */
+/*     } */
+  
+/*     //kern = f3tensor(M1,N2,N2P); */
+/*     // k is (M1,N2,N2P) */
+/*     // basis_xform is (N2,N2P,M2) */
+/*     // e2 is (N2,M2,M1) */
+/*     for(q1 = 0; q1 < M1; q1++) { */
+/*       for(n2 = 0; n2 < N2; n2++) { */
+/* 	for(n2p = 0; n2p < N2P; n2p++) { */
+/* 	  sum[0][0] = 0.0; */
+/* 	  sum[0][1] = 0.0; */
+/* 	  for(q2 = 0; q2 < M2; q2++) { */
+/* 	    if(vmask[sl][q2][q1]) { */
+/* 	      sum[0][0] += (basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][0]) */
+/* 		          -(basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][1]); */
+
+/* 	      sum[0][1] += (basis_xform[n2][n2p][q2][1] * e2[n2][q2][q1][0]) */
+/* 		          +(basis_xform[n2][n2p][q2][0] * e2[n2][q2][q1][1]); */
+/* 	    } */
+/* 	  } */
+/* 	  kernel[sl][q1][n2][n2p][0] = sum[0][0]; */
+/* 	  kernel[sl][q1][n2][n2p][1] = sum[0][1]; */
+/* 	} */
+/*       } */
+/*     } */
+/*   } */
+/*   free(basis_xform); */
+/*   free(e2); */
+/*   free(sum); */
+/* } */
+
+
 
 /* zsolve_regularized takes the equation Ax = y and solves a regularized
    version (AhA + (lm^2)I)x = (Ah)y
@@ -241,19 +304,25 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
   bzero(A2, (N*N)*sizeof(fftw_complex));
   for(k=0; k<N; k++) A2[k + k*N][0] = 1.0;
   
-  /* want to get A2 <-- (A*)x(A) + (lm_sq)*I ... */
+  /* want to get A2 <-- (Ah)x(A) + (lm_sq)*I ... */
+  /* Ah is NxM.. major stride is M (??)
+     A is MxN.. major stride is N
+     A2 is NxN.. major stride is N */
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
 	      N, N, M, oneD,
 	      (void *) A, M,
-	      (void *) A, M,
+	      (void *) A, N,
 	      lm_sq, (void *) A2, N);
-  /* multiply data vector/matrix y by A*, stick it in x*/
+  /* multiply data vector/matrix y by Ah, stick it in x */
   /* DOES THIS WORK WITH NRHS = 1? */
+  /* Ah is NxM.. major stride is M (??)
+     y is MxNRHS.. major stride is NRHS
+     x is NxNRHS.. major stride is NRHS  */
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
 	      N, NRHS, M, oneD,
 	      (void *) A, M,
-	      (void *) y, M, 
-	      zeroD, (void *) x, N);
+	      (void *) y, NRHS, 
+	      zeroD, (void *) x, NRHS);
 
   /* solve the system! need to xpose ante and post to get into col-major:
      A2 is NxN, and x is NxNRHS
@@ -293,11 +362,13 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
    use CBLAS to get the of (Ah*A + lm^2*I) in A2,
    and then use LAPACK to solve for C. 
 
-   Note: in column-major, A is conj(Ah), and A2 is conj(Ah*A + lm^2*I)
+   Note: in column-major...
+   A is conj(Ah) 
+   A2 is conj(Ah*A + lm^2*I) -- since A2 is hermitian symmetric
 
    If conj(AhA + (lm^2)I)*C = conj(Ah), then conj(C) (the conjugate of
-   the LAPACK solution, which is in col-major) is the transpose of the 
-   desired solution. So the final answer is the hermitian transpose of C
+   the LAPACK solution, which is in col-major) is the desired solution. 
+   So the final answer in row-major is the hermitian transpose of C.
    
 */
 void zregularized_inverse(fftw_complex *A,
@@ -315,18 +386,13 @@ void zregularized_inverse(fftw_complex *A,
   for(k=0; k<N; k++) {
     A2[k + k*N][0] = lmsq;
   }
-  /* This gives us the lower triangular part of (Ah)A + (lm^2)*I
-     (which will be like conjugate upper triangular if it were col-major)
-  */
-/*   cblas_zherk(CblasRowMajor, CblasLower, CblasConjTrans, */
-/* 	      N, M, 1.0, */
-/* 	      (void *) A, M, */
-/* 	      1.0, (void *) A2, N); */
-
+  /* Ah is NxM... major stride is M (??)
+     A is MxN... major stride is N
+     A2 is NxN... major stride is N  */
   cblas_zgemm(CblasRowMajor, CblasConjTrans, CblasNoTrans,
 	      N, N, M, oneD,
 	      (void *) A, M,
-	      (void *) A, M,
+	      (void *) A, N,
 	      oneD, (void *) A2, N);
   //zposv_(&UPLO, &N, &M, A2, &N, A, &N, &INFO);
   zgesv_(&N, &M, A2, &N, IPIV, A, &N, &INFO);
