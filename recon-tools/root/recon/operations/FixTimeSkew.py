@@ -1,6 +1,5 @@
 import numpy as N
-from numpy.fft import fft, ifft
-
+from recon.fftmod import fft1 as fft, ifft1 as ifft
 from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.util import reverse
 
@@ -44,16 +43,13 @@ def subsampInterp(ts, c, axis=-1):
     To = ts.shape[axis]
     if axis != -1:
         ts = N.swapaxes(ts, axis, -1)
-
     ts_buf = circularize(ts)
     T = ts_buf.shape[-1]
     Fn = int(T/2.) + 1
-    phs_shift = N.empty((T,), N.complex128)
+    phs_shift = N.empty((T,), ts.dtype)
     phs_shift[:Fn] = N.exp(-2.j*N.pi*c*N.arange(Fn)/float(T))
     phs_shift[Fn:] = N.conjugate(reverse(phs_shift[1:Fn-1]))
-
-    ts[:] = ifft(fft(ts_buf)*phs_shift)[...,To-1:2*To-1].astype(ts.dtype)
-
+    ts[:] = ifft(fft(ts_buf)*phs_shift)[...,To-1:2*To-1]
     if axis != -1: ts = N.swapaxes(ts, axis, -1)
 
 class FixTimeSkew (Operation):
@@ -74,6 +70,7 @@ class FixTimeSkew (Operation):
         if image.ndim < 4:
             self.log("Cannot interpolation with only one volume")
             return
+
         nslice = image.zdim
         # slice acquisition can be in some nonlinear order
         # eg: Varian data is acquired in an order like this:
@@ -109,8 +106,7 @@ class FixTimeSkew (Operation):
                 # interpolate for each segment        
                 subsampInterp(image[:,s,sl1,:], c1, axis=0)
                 subsampInterp(image[:,s,sl2,:], c2, axis=0)
-
-                
+        
     def segn(self, image, n):
         # this is very very limited to 2-shot trajectories!
         npe = image.shape[-2]

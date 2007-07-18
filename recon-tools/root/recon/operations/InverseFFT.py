@@ -1,6 +1,5 @@
 from recon.util import ifft2d
 from recon.operations import Operation
-
 ##############################################################################
 class InverseFFT (Operation):
     """

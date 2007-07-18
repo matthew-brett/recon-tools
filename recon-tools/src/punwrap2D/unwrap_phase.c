@@ -12,9 +12,9 @@
 #include "numpy/noprefix.h"
 #include "snaphu_unwrap.h"
 
-static char doc_Unwrap[] = "Performs 2D phase unwrapping on a Numeric array via the LP-norm method";
+static char doc_Unwrap2D[] = "Performs 2D phase unwrapping on an ndarray";
 
-PyObject *punwrap_Unwrap(PyObject *self, PyObject *args) {
+PyObject *punwrap2D_Unwrap2D(PyObject *self, PyObject *args) {
   PyObject *op1;
   PyArrayObject *ap1, *ret;
   int typenum_phs, k, j;
@@ -59,13 +59,13 @@ PyObject *punwrap_Unwrap(PyObject *self, PyObject *args) {
     
 }
 
-static struct PyMethodDef punwrap_module_methods[] = {
-  {"Unwrap",	(PyCFunction)punwrap_Unwrap, 1, doc_Unwrap},
+static struct PyMethodDef punwrap2D_module_methods[] = {
+  {"Unwrap2D",	(PyCFunction)punwrap2D_Unwrap2D, 1, doc_Unwrap2D},
   {NULL, NULL, 0}
 };
 
-DL_EXPORT(void) init_punwrap(void) {
+DL_EXPORT(void) init_punwrap2D(void) {
   PyObject *m;
-  m = Py_InitModule3("_punwrap", punwrap_module_methods, "c library for phase unwrapping in python");
+  m = Py_InitModule3("_punwrap2D", punwrap2D_module_methods, "c library for phase unwrapping in python");
   import_array();
 }

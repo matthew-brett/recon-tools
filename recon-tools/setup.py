@@ -13,12 +13,20 @@ psfiles = ['tablib/'+os.path.split(file)[1] for file in psfiles]
 # with RPM builds, TODOs is already pruned from MANIFEST.in
 if 'tablib/TODOs' in psfiles:
     psfiles.remove('tablib/TODOs')
-punwrap_src = glob.glob(os.path.join("src/punwrap","*.c"))
+punwrap2_src = glob.glob(os.path.join("src/punwrap2D","*.c"))
+punwrap3_src = glob.glob(os.path.join("src/punwrap3D", "*.c"))
+fftmod_src = ['src/fftmod/cmplx_fft.c',]
 try:
     import numpy
     numpy_include = numpy.get_include()
+    from numpy.distutils.system_info import get_info
 except ImportError:
     raise ImportError("numpy module is not installed, quitting the setup")    
+
+fftw_info = get_info('fftw3')
+if not fftw_info:
+    print "you need to install FFTW3 in single and double precision mode"
+    sys.exit(1)
 
 setup(
 
@@ -48,6 +56,7 @@ setup(
     'recon.conf',
     'recon.operations',
     'recon.punwrap',
+    'recon.fftmod',
     'recon.tools',
     'recon.scanners',
     'recon.scanners.varian',],
@@ -62,9 +71,17 @@ setup(
   package_data = {'recon.conf':['*.ops'],
                   'recon.scanners.varian': psfiles},
   
-  ext_modules=[Extension('recon.punwrap._punwrap',
-                         punwrap_src,
-                         include_dirs=[numpy_include,])
+  ext_modules=[Extension('recon.punwrap._punwrap2D',
+                         punwrap2_src,
+                         include_dirs=[numpy_include,]),
+               Extension('recon.punwrap._punwrap3D',
+                         punwrap3_src,
+                         include_dirs=[numpy_include,]),
+               Extension('recon.fftmod._fftmod',
+                         fftmod_src,
+                         include_dirs=[numpy_include,]+fftw_info['include_dirs'],
+                         library_dirs=fftw_info['library_dirs'],
+                         libraries=['fftw3', 'fftw3f']),
                ],
     
 )

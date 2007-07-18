@@ -6,7 +6,7 @@ import sys
 
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
-     Quaternion, range_exceeds, volume_min, volume_max, integer_ranges
+     Quaternion, range_exceeds, integer_ranges
 from recon.imageio import ReconImage
 from recon.analyze import byteorders, _construct_dataview, canonical_orient
 
@@ -345,8 +345,6 @@ class NiftiWriter (object):
           'qoffset_x': qoffset[0],
           'qoffset_y': qoffset[1],
           'qoffset_z': qoffset[2],
-          'cal_min': float(volume_min(abs(image[:]))),
-          'cal_max': float(volume_max(abs(image[:]))),
           }
         
         if self.filetype=='single':

@@ -2,17 +2,19 @@
 
 import numpy as N
 import os
-from recon.operations import Operation, Parameter, verify_scanner_image
+from recon.operations import Operation, verify_scanner_image
 from recon.operations.ReorderSlices import ReorderSlices
 from recon.util import ifft, apply_phase_correction, linReg, checkerline, \
-     unwrap_ref_volume, reverse, polyfit, bivariate_fit
+     unwrap_ref_volume, reverse, maskbyfit, polyfit, bivariate_fit
 from recon.imageio import readImage
 
 class BalPhaseCorrection (Operation):
     """
-    Apply a phase correction with solved-for parameters based on a
-    "balanced" pair of reference scans.
+    Balanced Phase Correction attempts to reduce N/2 ghosting and other
+    systematic phase errors by fitting referrence scan data to a system
+    model. This can only be run on special balanced reference scan data.
     """
+    
 
     def run(self, image):
         
@@ -24,7 +26,6 @@ class BalPhaseCorrection (Operation):
             return -1
 
         self.volShape = image.shape[-3:]
-        
         inv_ref0 = ifft(image.ref_data[0])
         inv_ref1 = ifft(reverse(image.ref_data[1], axis=-1))
 
@@ -32,10 +33,6 @@ class BalPhaseCorrection (Operation):
         
         n_slice, n_pe, n_fe = self.refShape = inv_ref0.shape
 
-        #lin_pix = int(round(self.lin_radius/image.dFE))
-
-##         (self.lin1, self.lin2) = (lin_pix > n_fe/2) and (0,n_fe) or \
-##                                  ((n_fe/2-lin_pix), (n_fe/2+lin_pix))
         # let's hardwire this currently??
         (self.lin1,self.lin2) = (0, n_fe)
         self.lin_fe = self.lin2-self.lin1
@@ -50,15 +47,6 @@ class BalPhaseCorrection (Operation):
         #u_mask[50:] = 0
 
         import pylab as P
-        (_,_,res) = linReg(phs_vol, axis=-1)
-        res = res.sum(axis=-1)
-        #print res
-        # find 4 slices with smallest residual
-        sres = N.sort(res)
-        selected = [N.nonzero(res==c)[0] for c in sres[:4]]
-##         for c in selected:
-##             s_mask[c] = 1
-
 
         sigma = N.empty(phs_vol.shape, N.float64)
         #duplicate variance wrt to mu-ev/od over mu for convenience
@@ -72,13 +60,15 @@ class BalPhaseCorrection (Operation):
         acq_order = image.acq_order
         s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(n_slice)])
         pss = N.take(image.slice_positions, s_ind)
-        #last_good_slice = n_slice
-        last_good_slice = (pss < -25.0).nonzero()[0][0]
+        bad_slices = (pss < -25.0)
+        if bad_slices.any():
+            last_good_slice = (pss < -25.0).nonzero()[0][0]
+        else:
+            last_good_slice = n_slice
         q1_mask[last_good_slice:] = 0.0
-        for s in range(0,last_good_slice):
-            for r in range(n_pe):
-                q1_mask[s,r] = maskbyfit(phs_vol[s,r], sigma[s,r], 1.25,
-                                         1.25, q1_mask[s,r], order=1)
+        maskbyfit(phs_vol[:last_good_slice],
+                  sigma[:last_good_slice], 1.25, 1.25,
+                  q1_mask[:last_good_slice])
         
         theta = N.empty(self.refShape, N.float64)
         s_line = N.arange(n_slice)
@@ -307,16 +297,14 @@ class BalPhaseCorrection (Operation):
 ##             P.title("slice %d"%s)
 ##             P.show()
 
-
+        phase = N.exp(-1.j*theta)
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
-            image[:] = apply_phase_correction(image[:], -theta)
+            image[:] = apply_phase_correction(image[:], phase)
         else:
             for dvol in image:
-                dvol[:] = apply_phase_correction(dvol[:], -theta)
-
-
-
+                dvol[:] = apply_phase_correction(dvol[:], phase)
+        
 def solve_phase(pvol, surf_mask, r_line, s_line):
     # surface solution, pvol is (Nsl)x(Nro)
     # surf_mask is (Nsl)x(Nro)
@@ -400,94 +388,3 @@ def solve_phase3(pvol, surf_mask, r_line):
     return N.transpose(V)[0]
 
 
-def composite_mask(M):
-    mask = maskbyslope(M)
-    foo = maskbylin(M, mask=mask)
-    return foo
-
-def maskbyslope(M):
-    (_,m,res) = linReg(M)
-
-    # m is a target slope, res is a measure of what to throw out,
-    # what to keep
-
-    dM = N.diff(M)
-    mask = N.ones(M.shape[-1], N.int32)
-    mask[0] = 0
-    mask[-1] = 0
-    # if there is a diff much larger than m followed by a diff of opposite
-    # sign much larger than m, it's a notch.
-    for n in range(dM.shape[-1]-1):
-        if abs(dM[n]) > 5*m and abs(dM[n+1]) > 5*m and (dM[n]*dM[n+1] < 0):
-            mask[n+1] = 0
-    return mask
-
-## def maskbyfit(M, sigma, tol=None, tol_growth=None,
-##               mask=None, plot=False, order=1):
-##     if len(M)==0:
-##         print "all masked"
-##         return mask
-##     if mask is None:
-##         mask = N.ones(M.shape, N.int32)
-##     if tol is None:
-##         tol = 2.0
-##     if tol_growth is None:
-##         tol_growth = 1.1
-##     if order > 2 or order < 1:
-##         order = 1
-##     new_mask = N.empty(mask.shape)
-##     new_mask[:] = mask
-##     unmasked = new_mask.nonzero()[0]
-##     xax = N.arange(M.shape[-1])    
-##     if order == 1:
-##         (b,m,res) = linReg(M[unmasked], X=unmasked, sigma=sigma[unmasked])
-##         fitted = xax*m + b
-##     else:
-##         poly_c = polyfit(unmasked, M[unmasked], 2, sigma=sigma[unmasked])
-##         fitted = N.power(xax,2.0)*poly_c[0] + xax*poly_c[1] + poly_c[2]
-##         res = abs(M[unmasked]-fitted[unmasked]).sum()/unmasked.shape[-1]
-##     N.putmask(new_mask, abs(M - fitted) > tol*res, 0)
-##     unmasked = new_mask.nonzero()[0]
-##     if plot:
-##         unmasked = new_mask.nonzero()[0]
-##         (b2,m2,res2) = linReg(M[unmasked], X=xax[unmasked],
-##                                    sigma=sigma[unmasked])
-##         P.plot(xax,M)
-##         P.plot(xax[unmasked], M[unmasked], 'b.')
-##         P.plot(xax*m + b, 'g')
-##         P.plot(xax*m2 + b2, 'r')
-##         P.title("tolerance = %2.4f, avg res = %2.4f, final res = %2.4f"%(tol*res, res, res2))
-##         P.show()
-
-##     if new_mask.all():
-##         #print "limiting case"
-##         #print unmasked, new_mask
-##         return new_mask
-##     else:
-##         new_mask[unmasked] = maskbyfit(M[unmasked], sigma[unmasked],
-##                                        mask=mask[unmasked], order=order,
-##                                        plot=plot, tol=tol*tol_growth,
-##                                        tol_growth=tol_growth)
-##     return new_mask
-
-def maskbyfit(M, sigma, tol, tol_growth, mask, order=1):
-    mask_start = mask.sum(axis=-1)
-    if not mask_start:
-        print "all masked"
-        return mask
-    xax = N.arange(M.shape[-1])
-    unmasked = mask.nonzero()[0]
-    if order == 1:
-        (b,m,res) = linReg(M[unmasked], X=unmasked, sigma=sigma[unmasked])
-        fitted = xax*m + b
-    else:
-        poly_c = polyfit(unmasked, M[unmasked], 2, sigma=sigma[unmasked])
-        fitted = N.power(xax,2.0)*poly_c[0] + xax*poly_c[1] + poly_c[2]
-        res = abs(M[unmasked]-fitted[unmasked]).sum()/unmasked.shape[-1]
-    N.putmask(mask, abs(M-fitted) > tol*res, 0)
-    if(mask.sum() == mask_start):
-        return mask
-    else:
-        return maskbyfit(M, sigma, tol*tol_growth, tol_growth, mask, order=order)
-    
-    

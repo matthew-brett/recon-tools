@@ -235,7 +235,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         block = fidfile.getBlock(vol)
         bias = complex(block.lvl, block.tlt)
         volume = complex_fromstring(block.getData(), self.raw_dtype)
-        volume = (volume - bias).astype(N.complex64)
+        volume = (volume - bias)
         return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
@@ -249,7 +249,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
             block = fidfile.getBlock(self.nslice*vol + slice_num)
             bias = complex(block.lvl, block.tlt)
             slice[:] = complex_fromstring(block.getData(), self.raw_dtype)
-            slice[:] = (slice - bias).astype(N.complex64)
+            slice[:] = (slice - bias)
         return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
@@ -287,7 +287,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
                 trace = complex_fromstring(trace, self.raw_dtype)
                 if self.pulse_sequence == "gems" and self.n_transients>1:
                     volume[slice,pe] = trace
-                else: volume[slice,pe] = (trace - bias).astype(N.complex64)
+                else: volume[slice,pe] = (trace - bias)
 
         return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
@@ -305,7 +305,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
                   ((pe*self.nslice+slice)*self.nvol_true + vol))
                 bias = complex(block.lvl, block.tlt)
                 trace = complex_fromstring(block.getData(), self.raw_dtype)
-                volume[slice,pe] = (trace - bias).astype(N.complex64)
+                volume[slice,pe] = (trace - bias)
         return N.reshape(volume, (self.nslice*self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------

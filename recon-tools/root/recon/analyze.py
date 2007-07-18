@@ -4,7 +4,7 @@ import struct
 import sys
 from odict import odict
 from recon.util import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN,\
-  BIG_ENDIAN, Quaternion, volume_max, volume_min, range_exceeds, integer_ranges
+  BIG_ENDIAN, Quaternion, range_exceeds, integer_ranges
 from recon.imageio import ReconImage
 
 # datatype is a bit flag into the datatype identification byte of the Analyze
@@ -287,7 +287,12 @@ class AnalyzeWriter (object):
     def write_hdr(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
-
+        dtype = datatype2dtype[self.datatype]
+        if dtype in N.sctypes['int'] + N.sctypes['uint']:
+            glmax = 2**(datatype2bitpix[self.datatype]) - 1
+        else:
+            glmax = 1
+        
         imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
@@ -306,11 +311,12 @@ class AnalyzeWriter (object):
           'y0': (image.ydim/2),
           'z0': (image.zdim/2),
           'scale_factor': self.scaling,
-          # I suppose these should be set to pre-scaled values?
-          'glmin': int(round(volume_min(abs(image[:])))),
-          'glmax': int(round(volume_max(abs(image[:])))),
-          'cal_min': self._dataview(self.image[:]).min(),
-          'cal_max': self._dataview(self.image[:]).max(),
+          # SPM says that these are (0,2^bitpix-1) for integers,
+          # or (0,1) for floating points
+          'glmin': 0,
+          'glmax': glmax,
+          'cal_min': 0.0, # don't suggest display color mapping
+          'cal_max': 0.0,
           'orient': orientname2orientcode.get(image.orientation,255),
         }
 

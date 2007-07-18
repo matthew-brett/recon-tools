@@ -1,9 +1,12 @@
 import struct
 from numpy.fft import fft as _fft, ifft as _ifft, \
      fftn as _fftn, ifftn as _ifftn
+## from scipy.fftpack import fft as _fft, ifft as _ifft, \
+##      fftn as _fftn, ifftn as _ifftn
 import numpy as N
-
-from punwrap import unwrap2D
+import time
+from punwrap import unwrap3D, unwrap2D
+from fftmod import fft1, ifft1, fft2, ifft2
 
 # maximum numeric range for some smaller data types
 integer_ranges = {
@@ -23,8 +26,8 @@ integer_ranges = {
   # least significant value into the fixed precision fraction.
   # In notation, this is
   # (1.0 + 2**-23) * 2**-31 = '00110000000000000000000000000001'
-  N.dtype(N.int32): 2147483392.,
-  N.dtype(N.uint32): 4294966784.,
+  N.dtype(N.int32): N.float32(2147483392),
+  N.dtype(N.uint32): N.float32(4294966784),
   }
 
 # struct byte order constants
@@ -57,7 +60,7 @@ def scale_data(data, new_dtype):
     # if it has poor integral resolution, then scale up
     scl = 1.0
     if new_dtype in integer_ranges.keys():
-        maxval = volume_max(abs(data))
+        maxval = abs(data).max()
         maxrange = integer_ranges[new_dtype]
         scl = (maxval/maxrange).astype(maxval.dtype) or \
               N.array([1.], maxval.dtype)
@@ -148,30 +151,34 @@ def embedIm(subIm, Im, yOff, xOff):
 # in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
 # use checkerboard masking as more efficient route
 def fft(a):
-    chk = checkerline(a.shape[-1])
-    return chk*_fft(chk*a)
+##     chk = checkerline(a.shape[-1])
+##     return chk*_fft(chk*a)
+    return fft1(a)
 
 #-----------------------------------------------------------------------------
 # make a 2D transform analogously to the 1D transform:
 # ie, order the rows and columns so that (0,0) lies at (N/2,M/2)
 def fft2d(a):
-    chk = checkerboard(*a.shape[-2:])
-    return chk*_fftn(chk*a, axes=(-2,-1))
+##     chk = checkerboard(*a.shape[-2:])
+##     return chk*_fftn(chk*a, axes=(-2,-1))
+    return fft2(a)
 
 #-----------------------------------------------------------------------------
 # make an inverse 2D transform per method above
 def ifft2d(a):
-    chk = checkerboard(*a.shape[-2:])
-    return chk*_ifftn(chk*a, axes=(-2,-1))
-
+##     chk = checkerboard(*a.shape[-2:])
+##     return chk*_ifftn(chk*a, axes=(-2,-1))
+    return ifft2(a)
+    
 #-----------------------------------------------------------------------------
 # from k-space to image-space in FE direction (per PE line)
 # in k-space: shift from (-N/2,N/2-1) to (0,N/2) U (-(N/2-1),-w0)
 # in image-space: shift from (0,t-1) to (-t/2,t/2-1)
 # use checkerboard masking as more efficient route
 def ifft(a):
-    chk = checkerline(a.shape[-1])
-    return chk*_ifft(chk*a)
+##     chk = checkerline(a.shape[-1])
+##     return chk*_ifft(chk*a)
+    return ifft1(a)
 
 #-----------------------------------------------------------------------------
 def checkerline(cols):
@@ -196,9 +203,9 @@ def complex_checkerboard(rows, cols):
 #-----------------------------------------------------------------------------
 def apply_phase_correction(image, phase):
     "apply a phase correction to k-space"
-    corrector = N.exp(1.j*phase)
-    return fft(ifft(image)*corrector).astype(image.dtype)
-
+    corimg = ifft(image)*phase
+    return fft(corimg)
+    
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
     "@return the given angle between -pi and pi"
@@ -207,18 +214,6 @@ def normalize_angle(a):
     return normalize_angle(a + N.where(a<-N.pi, 2.*N.pi, 0) + \
                            N.where(a>N.pi, -2.*N.pi, 0))
 
-#-----------------------------------------------------------------------------
-def volume_max(a):
-    "return the global maximum of array a (oblsolete with numpy's a.max())"
-    if len(a.shape) == 1:
-        return N.maximum.reduce(a, axis=0)
-    return volume_max(N.maximum.reduce(a, axis=0))
-#-----------------------------------------------------------------------------
-def volume_min(a):
-    "return the global minimum of array a (oblsolete with numpy's a.min())"
-    if len(a.shape) == 1:
-        return N.minimum.reduce(a, axis=0)
-    return volume_max(N.minimum.reduce(a, axis=0))
 #-----------------------------------------------------------------------------
 def fermi_filter(rows, cols, cutoff, trans_width):
     """
@@ -263,9 +258,9 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, zdim, ydim, xdim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, sigma=None, axis=-1): 
+def linReg(Y, X=None, sigma=None, mask=None, axis=-1): 
     # find best linear line through data:
-    # solve for (b,m,res) = (crossing, slope, residual from fit)
+    # solve for (b,m,res) = (crossing, slope, avg residual from fit)
     # if sigma is None, let sigma = 1 for every y-point
 
     if axis != -1:
@@ -274,42 +269,54 @@ def linReg(Y, X=None, sigma=None, axis=-1):
             X = N.swapaxes(X, axis, -1)
         if sigma is not None:
             sigma = N.swapaxes(sigma, axis, -1)
+        if mask is not None:
+            mask = N.swapaxes(mask, axis, -1)
 
     Yshape = Y.shape
     nrows = N.product(Yshape[:-1])
     npts = Yshape[-1]
-    # make this 2D so it's easier to think about
-    Y = N.reshape(Y, (nrows, npts))
     if X is None:
         # if no X provided, get the right number of rows of [0,1,2,...,N]
-        X = N.outer(N.ones((nrows,)), N.arange(npts))
+        X = N.reshape(N.outer(N.ones((nrows,)), N.arange(npts)), Yshape)
     if sigma is None:
-        sigma = N.ones(Y.shape)
-    S = N.power(sigma, -1.0).sum(axis=-1)
+        sigma = N.ones(Yshape)
+    
+    # want to only count points where x/y are not zero'd out
+    if mask is not None:
+        S = (mask*N.power(sigma, -1.0)).sum(axis=-1)
+        npts = N.asarray(mask.sum(axis=-1))
+        N.putmask(npts, npts==0, 1)
+    else:
+        S = N.power(sigma, -1.0).sum(axis=-1)
+        npts = N.ones(Yshape[:-1])*Yshape[-1]
+
     Sx = (X/sigma).sum(axis=-1)
     Sy = (Y/sigma).sum(axis=-1)
     Sxx = (N.power(X,2)/sigma).sum(axis=-1)
     Sxy = (X*Y/sigma).sum(axis=-1)
     delta = S*Sxx - N.power(Sx,2)
-    b = (Sxx*Sy - Sx*Sxy)/delta
-    m = (S*Sxy - Sx*Sy)/delta
-    res = abs(Y - (m[:,N.newaxis]*X+b[:,N.newaxis])).sum(axis=-1)/float(npts)
-
-    Y = N.reshape(Y, Yshape)
+    b = N.asarray((Sxx*Sy - Sx*Sxy)/delta)
+    m = N.asarray((S*Sxy - Sx*Sy)/delta)
+    
+    if mask is not None:
+        res = abs(Y - mask*(m[...,None]*X+b[...,None])).sum(axis=-1)/npts
+    else:
+        res = abs(Y - (m[...,None]*X+b[...,None])).sum(axis=-1)/npts
     if axis != -1:
         Y = N.swapaxes(Y, axis, -1)
         # swap these back too, even if they're just local
         X = N.swapaxes(X, axis, -1)
         sigma = N.swapaxes(sigma, axis, -1)
-    return (N.reshape(b, Y.shape[:-1]),
-            N.reshape(m, Y.shape[:-1]),
-            N.reshape(res, Y.shape[:-1]))
+        if mask is not None:
+            mask = N.swapaxes(mask, axis, -1)
+    return (b, m, res)
 
 #-----------------------------------------------------------------------------
 def polyfit(x, y, deg, sigma=None, rcond=None, full=False):
     """Least squares polynomial fit.
 
-    Yoinked from numpy and modified to minimize with respect to variance.
+    Yoinked from numpy and modified to minimize with
+    variance information accounted for.
 
     sigma kwarg should be VARIANCE and NOT STDEV
 
@@ -523,6 +530,47 @@ def bivariate_fit(z, dim0, dim1, deg, sigma=None, mask=None,
 
     return A*vec_scale, c
     
+#-----------------------------------------------------------------------------
+def maskbyfit(M, sigma, tol, tol_growth, mask):
+
+    # I could cast this problem into one column of fits, with
+    # a meta-mask that hits off entries that have already reached
+    # a stable point (so they don't keep getting recomputed)
+
+    Mshape = M.shape
+    nrows, npts = N.product(Mshape[:-1]), Mshape[-1]
+    M = N.reshape(M, (nrows, npts))
+    sigma = N.reshape(sigma, (nrows, npts))
+    mask = N.reshape(mask, (nrows, npts))
+    meta_mask = N.ones(nrows)
+
+    mask_start, mask_end = N.zeros(nrows), N.ones(nrows)
+    xax = N.outer(N.ones(nrows), N.arange(npts))
+    n = 0
+    while meta_mask.any():
+        um = meta_mask.nonzero()[0]
+        M_sub = M[um]
+        xax_sub = xax[um]
+        mask_sub = mask[um]        
+        mask_start = mask.sum(axis=-1)
+        if not mask_start.any():
+            return
+        # only compute where meta-mask is unmasked
+        (b,m,res) = linReg(M_sub*mask_sub, X=xax_sub*mask_sub,
+                           sigma=sigma[um], mask=mask_sub)
+        
+        fitted = xax_sub * m[...,None] + b[...,None]
+        N.putmask(mask_sub, abs(M_sub-fitted) > tol*res[...,None], 0)
+        mask[um] = mask_sub
+        mask_end = mask.sum(axis=-1)
+        N.putmask(meta_mask, (mask_end==mask_start), 0)
+        tol = tol*tol_growth
+        n += 1
+    print "took %d iterations"%n
+    M = N.reshape(M, Mshape)
+    sigma = N.reshape(sigma, Mshape)
+    mask = N.reshape(mask, Mshape)
+    return
 
 #-----------------------------------------------------------------------------
 def unwrap_ref_volume(vol, fe1, fe2):

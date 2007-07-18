@@ -192,12 +192,18 @@ class ReconImage (object):
             raise StopIteration
     #-------------------------------------------------------------------------
     def __getitem__(self, slicer):
+        if type(slicer) is type(()) and len(slicer) > self.ndim:
+            nfakes = len(slicer)-self.ndim
+            slicer = (None,)*(nfakes) + slicer[nfakes:]
         return self.data[slicer]
     #-------------------------------------------------------------------------
     def __setitem__(self, slicer, newdata):
         ndata = N.asarray(newdata)
         if ndata.dtype.char.isupper() and self.data.dtype.char.islower():
             print "warning: losing information on complex->real cast!"
+        if type(slicer) is type(()) and len(slicer) > self.ndim:
+            nfakes = len(slicer)-self.ndim
+            slicer = (None,)*(nfakes) + slicer[nfakes:]
         self.data[slicer] = ndata.astype(self.data.dtype)
     #-------------------------------------------------------------------------
     def __mul__(self, a):
