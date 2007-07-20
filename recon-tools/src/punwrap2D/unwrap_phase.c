@@ -38,7 +38,7 @@ PyObject *punwrap2D_Unwrap2D(PyObject *self, PyObject *args) {
   }
   /*ap1 = (PyArrayObject *)PyArray_ContiguousFromObject(op1, typenum_phs, 0, 0);*/
   dtype = PyArray_DescrFromType(typenum_phs);
-  ap1 = (PyArrayObject *)PyArray_FromAny(op1, dtype, 0, 0, ALIGNED, NULL);
+  ap1 = (PyArrayObject *)PyArray_FROM_OTF(op1, typenum_phs, NPY_IN_ARRAY);
   subtype = ap1->ob_type;
   nd = ap1->nd;
   dimensions[0] = ap1->dimensions[0]; dimensions[1] = ap1->dimensions[1];

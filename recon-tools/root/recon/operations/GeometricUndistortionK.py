@@ -9,7 +9,8 @@ from recon.util import fft, ifft
 class GeometricUndistortionK (Operation):
     """
     Uses a fieldmap to calculate the geometric distortion kernel for each PE
-    line in an image, then applies the inverse operator to k-space data.
+    line in an image, then applies the inverse operator on k-space data to
+    correct for field inhomogeneity distortions.
     """
 
     params=(
@@ -34,11 +35,7 @@ class GeometricUndistortionK (Operation):
         fmap = N.swapaxes(regrid(fmapIm[0], regrid_fac, axis=-2).astype(N.float64), -1, -2)
         chi = N.swapaxes(regrid(fmapIm[1], regrid_fac, axis=-2), -1, -2)
 
-        # timer stuff:
-##         import time
-##         lag = -time.time() + time.time()
-##         total_time = time.time()
-        M2,M1 = fmap.shape[-2:]
+        M1,M2 = fmap.shape[-2:]
         N2 = N2P = npe
         # compute T_n2 vector
         Tl = image.T_pe
@@ -56,10 +53,7 @@ class GeometricUndistortionK (Operation):
         K = K * chi[:,:,None,:]
         
         K = ifft(K)
-##         total_time = time.time() - total_time
-##         print "kernel calculated in %fs"%total_time
         idnt = N.identity(N2, N.complex128)
-##         time0 = time.time()
         for s in range(nslice):
             # dchunk is shaped (nvol, npe, nfe)
             # inverse transform along nfe
@@ -72,19 +66,14 @@ class GeometricUndistortionK (Operation):
                 #
                 # There seems to be a trade-off here as nvol changes...
                 # Doing this in two steps is faster for large nvol; I think
-                # it takes advantage of the faster matrix-product in N.dot
+                # it takes advantage of the faster BLAS matrix-product in dot
                 # as opposed to LAPACK's linear solver. For smaller values
                 # of nvol, the overhead seems to outweigh the benefit.
                 #iK = solve_reg_eqs(K[s,fe], idnt, self.lmbda)
                 iK2 = regularized_inverse(K[s,fe], self.lmbda)
                 dchunk[fe] = N.dot(iK2, dchunk[fe])
-                #dchunk[fe] = solve_reg_eqs(K[s,fe], dchunk[fe], self.lmbda)
             dchunk = N.swapaxes(dchunk, 0, 2)
             image[:,s,:,:] = fft(dchunk)
-##         time1 = time.time()
-##         total_time += (time1-time0-lag)
-##         print "computed inverse operations and corrected data in %f sec"%(time1-time0)
-##         print "total time for inverse problem: ", total_time
 
 def regularized_inverse(A, lmbda):
     # I think N.linalg.solve can be sped-up for this special case

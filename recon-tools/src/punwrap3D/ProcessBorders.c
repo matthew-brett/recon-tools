@@ -7,7 +7,6 @@ void processZzero(Voxel *voxels_pointer, int x, int y)
 	int i,j,Row,Frame;
 	Frame = x*y;
 	Row = x;
-	printf("Processing the Unprocessed Surfaces.............>");
 	Voxel *temp_voxel=voxels_pointer+Row+1;
 	
 	for(j=1; j<y-1; j++)
@@ -106,5 +105,4 @@ void ProcessFinalColoums(Voxel *voxels_pointer, int x, int y, int z)
 			temp_voxel += Row;
 		}
 	}
-	printf(" Done.\n");
 }

@@ -151,23 +151,17 @@ def embedIm(subIm, Im, yOff, xOff):
 # in k-space: shift from (0,N/2) U (-(N/2-1),-w0) to (-N/2,N/2-1)
 # use checkerboard masking as more efficient route
 def fft(a):
-##     chk = checkerline(a.shape[-1])
-##     return chk*_fft(chk*a)
     return fft1(a)
 
 #-----------------------------------------------------------------------------
 # make a 2D transform analogously to the 1D transform:
 # ie, order the rows and columns so that (0,0) lies at (N/2,M/2)
 def fft2d(a):
-##     chk = checkerboard(*a.shape[-2:])
-##     return chk*_fftn(chk*a, axes=(-2,-1))
     return fft2(a)
 
 #-----------------------------------------------------------------------------
 # make an inverse 2D transform per method above
 def ifft2d(a):
-##     chk = checkerboard(*a.shape[-2:])
-##     return chk*_ifftn(chk*a, axes=(-2,-1))
     return ifft2(a)
     
 #-----------------------------------------------------------------------------
@@ -176,8 +170,6 @@ def ifft2d(a):
 # in image-space: shift from (0,t-1) to (-t/2,t/2-1)
 # use checkerboard masking as more efficient route
 def ifft(a):
-##     chk = checkerline(a.shape[-1])
-##     return chk*_ifft(chk*a)
     return ifft1(a)
 
 #-----------------------------------------------------------------------------

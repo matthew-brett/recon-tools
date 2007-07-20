@@ -27,7 +27,7 @@ def unwrap_3Dphase(vols, threshfactor):
 ##############################################################################
 class ComputeFieldMap (Operation):
     """
-    Perform phase unwrapping and calculate phase-warping field map.
+    Perform phase unwrapping and calculate B0 inhomogeneity field map.
     """
 
     params=(

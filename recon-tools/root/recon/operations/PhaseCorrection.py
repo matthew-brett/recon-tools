@@ -22,8 +22,9 @@ class PhaseCorrection (Operation):
         
         # apply correction to image data
         from recon.tools import Recon
+        phase = N.exp(-1.j*ref_phs)
         if Recon._FAST_ARRAY:
-            image[:] = apply_phase_correction(image[:], -ref_phs)
+            image[:] = apply_phase_correction(image[:], phase)
         else:
             for dvol in image:
-                dvol[:] = apply_phase_correction(dvol[:], -ref_phs)
+                dvol[:] = apply_phase_correction(dvol[:], phase)

@@ -49,7 +49,7 @@ def subsampInterp(ts, c, axis=-1):
     phs_shift = N.empty((T,), ts.dtype)
     phs_shift[:Fn] = N.exp(-2.j*N.pi*c*N.arange(Fn)/float(T))
     phs_shift[Fn:] = N.conjugate(reverse(phs_shift[1:Fn-1]))
-    ts[:] = ifft(fft(ts_buf)*phs_shift)[...,To-1:2*To-1]
+    ts[:] = ifft(fft(ts_buf,shift=False)*phs_shift,shift=False)[...,To-1:2*To-1]
     if axis != -1: ts = N.swapaxes(ts, axis, -1)
 
 class FixTimeSkew (Operation):

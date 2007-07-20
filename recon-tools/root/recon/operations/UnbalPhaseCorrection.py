@@ -74,10 +74,6 @@ class UnbalPhaseCorrection (Operation):
         # (remember not to count the lines contaminated by artifact!)
         pos_order = N.nonzero(self.alpha > 0)[0][self.xleave:]
         neg_order = N.nonzero(self.alpha < 0)[0][:-self.xleave]
-        # comes back truncated to linear region:
-        # from this point on, into the svd, work with truncated arrays
-        # (still have "true" referrences from from self.refShape and self.lin1)
-        #phs_vol = unwrap_ref_volume(inv_ref, self.lin1, self.lin2)
         phs_vol = unwrap_ref_volume(inv_ref, 0, n_fe)
 
         phs_mean, q1_mask = self.mean_and_mask(phs_vol[:,pos_order,:],
@@ -99,11 +95,8 @@ class UnbalPhaseCorrection (Operation):
         # pos_order, neg_order define which rows in a slice are grouped
         pos_order = N.nonzero(self.alpha > 0)[0]
         neg_order = N.nonzero(self.alpha < 0)[0]
-        # comes back truncated to linear region:
-        # from this point on, into the svd, work with truncated arrays
-        # (still have "true" referrences from from self.refShape, self.lin1, etc)
         phs_vol = unwrap_ref_volume(inv_ref, 0, n_fe)
-        # for upper means, use
+
         phs_mean_upper, q1_mask_upper = \
                         self.mean_and_mask(phs_vol[:,pos_order[n_pe/4+1:],:],
                                            phs_vol[:,neg_order[n_pe/4:-1],:])

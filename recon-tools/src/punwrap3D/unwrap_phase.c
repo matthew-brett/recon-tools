@@ -27,7 +27,7 @@ PyObject *punwrap3D_Unwrap3D(PyObject *self, PyObject *args) {
     return NULL;
   }
   dtype = PyArray_DescrFromType(typenum_phs);
-  ap1 = (PyArrayObject *)PyArray_FromAny(op1, dtype, 0, 0, ALIGNED, NULL);
+  ap1 = (PyArrayObject *)PyArray_FROM_OTF(op1, typenum_phs, NPY_IN_ARRAY);
   subtype = ap1->ob_type;
   if(ap1->nd < 3) {
     PyErr_SetString(PyExc_ValueError, "I can only unwrap 3D arrays");

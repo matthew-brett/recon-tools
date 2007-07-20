@@ -217,8 +217,10 @@ class ProcParImageMixin (object):
 
     def _get_is_imagevol(self):
         procpar = self._procpar
-        if hasattr(procpar, "image"):
+        if self.isepi and hasattr(procpar, "image"):
             return procpar.image
+        elif self.isravi and hasattr(procpar, "cntr"):
+            return procpar.cntr
         else:
             return [1]*self.nvol_true
 
@@ -243,9 +245,13 @@ class ProcParImageMixin (object):
     gss = CachedReadOnlyProperty(lambda self: self._procpar.gss[0], "")
 
     ### Not exactly in procpar, but useful still
+    ### 
     acq_order = CachedReadOnlyProperty(
-        lambda self: N.asarray(range(self.nslice-1,-1,-2) +
-                               range(self.nslice-2,-1,-2)), "")
+        lambda self:
+        N.asarray((self.pulse_sequence.find('mp_flash') > -1 and \
+                   range(self.nslice) or \
+                   (range(self.nslice-1,-1,-2) +
+                    range(self.nslice-2,-1,-2)))), "")
 
     def _get_slice_gap(self):
         if self.pulse_sequence == "mp_flash3d" or self.nslice < 2: return 0.
@@ -264,9 +270,9 @@ class ProcParImageMixin (object):
         10.*self._procpar.lpe2[0]/self.nslice or \
         self._procpar.thk[0], "")
 
-    # does n_pe%2 fix things?
+    # If there is an extra (odd) line per segment, then it is navigator (??)
     nav_per_seg = CachedReadOnlyProperty(
-        lambda self: self.n_pe%2, "")
+        lambda self: (self.n_pe/self.nseg)%2, "")
 
     pe_per_seg = CachedReadOnlyProperty(lambda self: self.n_pe/self.nseg, "")
 
@@ -274,11 +280,10 @@ class ProcParImageMixin (object):
         lambda self: self.nseg*self.nav_per_seg, "")
 
     def _get_nseg(self):
-        # !!!!!! HEY BEN WHAT IS THE sparse SEQUENCE !!!!
-        # Leon's "spare" sequence is really the EPI sequence with delay.
+        # this is very crude, but "nseg" in procpar doesn't reflect reality!
         if self.pulse_sequence in ('epi','tepi','sparse','spare'):
             return int(self.petable_name[-2])
-        elif self._procpar.pslabel[0] in ('epidw', 'Vsparse','testbrs2') and\
+        elif self.pulse_sequence in ('epidw', 'Vsparse','testbrs2') and\
           not self.spinecho:
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
