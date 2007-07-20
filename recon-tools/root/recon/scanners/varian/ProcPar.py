@@ -281,15 +281,14 @@ class ProcParImageMixin (object):
 
     def _get_nseg(self):
         # this is very crude, but "nseg" in procpar doesn't reflect reality!
-        if self.pulse_sequence in ('epi','tepi','sparse','spare'):
+        if self.pulse_sequence in ('epi','tepi','sparse','spare','mp_flash3d'):
             return int(self.petable_name[-2])
         elif self.pulse_sequence in ('epidw', 'Vsparse','testbrs2') and\
           not self.spinecho:
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
             return self._procpar.nseg[0]
-        elif self.pulse_sequence in ('gems','mp_flash3d','box3d_slab',
-                                     'box3d_v2','asems'):
+        elif self.pulse_sequence in ('gems','box3d_slab','box3d_v2','asems'):
             return 1
         else: raise ValueError(
               "Could not identify sequence: %s" % (self.pulse_sequence))

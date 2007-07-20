@@ -378,10 +378,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
         #time_rev = n_fe_true - 1 - N.arange(n_fe_true)
         if time_reverse: print "time reversing"
 
-        # determine if phase encodes need reordering
-        needs_pe_reordering = fidformat not in ("asems_ncsnn", "asems_nccnn") \
-                              and self.nseg > 1
-
+        # determine if phase encodes need reordering 
+        needs_pe_reordering = self.nseg > 1
+        
         # load phase encode table
         if needs_pe_reordering: self._load_petable()
 
