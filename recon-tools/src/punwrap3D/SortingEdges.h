@@ -13,4 +13,5 @@ float cmp(Edge *a, Edge *b);
 Edge * MergeSort_EdgesS2B(Edge *list, int is_circular, int is_double);
 Edge * MergeSort_EdgesB2S(Edge *list, int is_circular, int is_double);
 
+
 #endif

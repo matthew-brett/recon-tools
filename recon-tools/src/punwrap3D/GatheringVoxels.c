@@ -3,6 +3,8 @@
 
 void  Gather_Voxels(Edge *EdgesHead)
 {
+/* 	printf("Grouping the Voxels ................>"); */
+
 	Voxel *voxel1;   
 	Voxel *voxel2;
 	Voxel *h1;
@@ -98,6 +100,7 @@ void  Gather_Voxels(Edge *EdgesHead)
 
         Temp_e=Temp_e->next;
 	}
+/* 	printf(" Done.\n"); */
 }
 
 int checkincrement(float destination_value, float reference_value)

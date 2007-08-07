@@ -3,6 +3,6 @@
 
 void PseudoCorrelation(float *phase, float *result, int window_size, int x, int y,int z);
 void SquareAvgFilter(float *in, float *out, int xsize, int ysize, int zsize,
-                     int window_size,int add_code);
+				  int window_size,int add_code);
 
 #endif

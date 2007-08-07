@@ -4,22 +4,23 @@
 #include "PseudoCorrelation_QM.h"
 
 
-void PseudoCorrelation(float *phase, float *result, int window_size, int x, 
-                       int y,int z)
+void PseudoCorrelation(float *phase, float *result, int window_size, int x, int y,int z)
 {
-  int tov,i;
-  float * temp1;
-  tov = x*y*z;
-  temp1 = (float *)malloc(tov*sizeof(float));
-  for(i=0; i<tov; i++)
-    {
-    temp1[i] = cos(TWOPI*phase[i]);
-    }
+	int tov,i;
+	float * temp1;
+	tov = x*y*z;
+	temp1 = (float *)malloc(tov*sizeof(float));
+	for(i=0; i<tov; i++)
+	{
+		temp1[i] = cos(TWOPI*phase[i]);
+	}
 
+  
   SquareAvgFilter(temp1, result, x, y, z,window_size,0);
+
   
   {
-    temp1[i] = sin(TWOPI*phase[i]);
+	  temp1[i] = sin(TWOPI*phase[i]);
   }
 
   SquareAvgFilter(temp1, result, x, y, z,window_size,0);
@@ -39,8 +40,7 @@ void SquareAvgFilter(float *in, float *out, int xsize, int ysize, int zsize,
 
 	frame = ysize*xsize;
 	row = xsize;
-	hs = window_size/2;
-        //hs = int(window_size/2); DS changed to above
+	hs = (window_size/2);
 	for(k = 0; k<zsize; k++)
 	{
 		for(j=0; j<ysize; j++)

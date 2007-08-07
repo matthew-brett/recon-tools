@@ -25,16 +25,15 @@ void PhaseVariance(float *phase, float *result, int window_size, int x, int y,in
 
 
 
-void GradVariance(float *grad_array, float *dvar_output, int xsize, int ysize, 
-                  int zsize, int window_size,int add_code)
+void GradVariance(float *grad_array, float *dvar_output, int xsize, int ysize, int zsize,
+				  int window_size,int add_code)
 {
-	int i, j, k, a, b, c, aa, bb, cc, dd, index, n, hs, frame, row;
-	float avg, avgsqr, r;
+	int i,j,k,a,b,c,aa,bb,cc,dd,index, n, hs,frame,row;
+	float avg, avgsqr,r;
 
 	frame = ysize*xsize;
 	row = xsize;
-        hs = window_size/2;
-	//hs = int(window_size/2); DS changed to above line
+	hs = (window_size/2);
 	for(k = 0; k<zsize; k++)
 	{
 		for(j=0; j<ysize; j++)
