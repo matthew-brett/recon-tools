@@ -201,7 +201,7 @@ def apply_phase_correction(image, phase):
 #-----------------------------------------------------------------------------
 def normalize_angle(a):
     "@return the given angle between -pi and pi"
-    if max(abs(a)) <= N.pi:
+    if abs(a).max() <= N.pi:
         return a
     return normalize_angle(a + N.where(a<-N.pi, 2.*N.pi, 0) + \
                            N.where(a>N.pi, -2.*N.pi, 0))
@@ -558,14 +558,13 @@ def maskbyfit(M, sigma, tol, tol_growth, mask):
         N.putmask(meta_mask, (mask_end==mask_start), 0)
         tol = tol*tol_growth
         n += 1
-    print "took %d iterations"%n
     M = N.reshape(M, Mshape)
     sigma = N.reshape(sigma, Mshape)
     mask = N.reshape(mask, Mshape)
     return
 
 #-----------------------------------------------------------------------------
-def unwrap_ref_volume(vol, fe1, fe2):
+def unwrap_ref_volume(vol, fe1=None, fe2=None):
     """
     unwrap phases one "slice" at a time, where the volume
     is sliced along a single pe line (dimensions = nslice X n_fe)
@@ -574,6 +573,8 @@ def unwrap_ref_volume(vol, fe1, fe2):
     @return: uphases an unwrapped volume, shrunk to masked region
     """
     zdim,ydim,xdim = vol_shape = vol.shape
+    oslice = (fe1 and fe2) and (slice(None),slice(None),slice(fe1,fe2)) or \
+             (slice(None),)*3
     uphases = N.empty(vol_shape, N.float64)
     zeropt = vol_shape[2]/2
     # search for best sl to be s=0 by looking at all s where q2=0,q1=0
@@ -592,7 +593,7 @@ def unwrap_ref_volume(vol, fe1, fe2):
     #heights = N.zeros(ydim)
     #heights[1:] = unwrap1D(uphases[zerosl,:,zeropt], return_diffs=True)
     #uphases[:] = uphases + heights[N.newaxis,:,N.newaxis]
-    return uphases[:,:,fe1:fe2]
+    return uphases[oslice]
 
 #-----------------------------------------------------------------------------
 ### some routines from scipy ###
@@ -614,7 +615,7 @@ def unwrap1D(p,discont=N.pi,axis=-1,return_diffs=False):
     dd = N.diff(p,axis=axis)
     slice1 = [slice(None,None)]*nd     # full slices
     slice1[axis] = slice(1,None)
-    ddmod = mod(dd+N.pi,2*N.pi)-N.pi
+    ddmod = mod(dd+discont,2*N.pi)-discont
     N.putmask(ddmod,(ddmod==-N.pi) & (dd > 0),N.pi)
     ph_correct = ddmod - dd
     N.putmask(ph_correct,abs(dd)<discont,0)

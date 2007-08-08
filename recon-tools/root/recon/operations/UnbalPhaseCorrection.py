@@ -1,8 +1,8 @@
 import numpy as N
 
-from recon.operations import Operation, verify_scanner_image
+from recon.operations import Operation, verify_scanner_image, Parameter
 from recon.util import ifft, apply_phase_correction, linReg, shift, \
-     checkerline, maskbyfit, unwrap_ref_volume
+     checkerline, maskbyfit, unwrap_ref_volume, reverse, normalize_angle
 
 class UnbalPhaseCorrection (Operation):
     """
@@ -11,6 +11,16 @@ class UnbalPhaseCorrection (Operation):
     model. This can be run on Varian sequence EPI data acquired in 1 shot,
     multishot linear interleaved, or 2-shot centric sampling.
     """
+
+    params = (Parameter(name="percentile", type="float", default=75.0,
+                        description="""
+    Indicates what percentage of "good quality" points to use in the solution.
+    """),
+              Parameter(name="shear_correct", type="bool", default=True,
+                        description="""
+    Switches shear correction on and off (takes values True and False)"""),
+              )
+
 
     def run(self, image):
         # basic tasks here:
@@ -35,6 +45,7 @@ class UnbalPhaseCorrection (Operation):
             self.log("Could be performing Balanced Phase Correction!")
 
         self.volShape = image.shape[-3:]
+        self.image = image
         refVol = image.ref_data[0]        
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
         # iscentric says whether kspace is multishot centric;
@@ -66,15 +77,15 @@ class UnbalPhaseCorrection (Operation):
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
-        conj_order = N.arange(n_pe)
-        shift(conj_order, 0, -self.xleave)
+        conj_order = N.arange(-self.xleave, n_pe-self.xleave)
+        #shift(conj_order, 0, -self.xleave)
         inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
         # (remember not to count the lines contaminated by artifact!)
         pos_order = N.nonzero(self.alpha > 0)[0][self.xleave:]
         neg_order = N.nonzero(self.alpha < 0)[0][:-self.xleave]
-        phs_vol = unwrap_ref_volume(inv_ref, 0, n_fe)
+        phs_vol = unwrap_ref_volume(inv_ref)
 
         phs_mean, q1_mask = self.mean_and_mask(phs_vol[:,pos_order,:],
                                                phs_vol[:,neg_order,:])
@@ -95,7 +106,7 @@ class UnbalPhaseCorrection (Operation):
         # pos_order, neg_order define which rows in a slice are grouped
         pos_order = N.nonzero(self.alpha > 0)[0]
         neg_order = N.nonzero(self.alpha < 0)[0]
-        phs_vol = unwrap_ref_volume(inv_ref, 0, n_fe)
+        phs_vol = unwrap_ref_volume(inv_ref)
 
         phs_mean_upper, q1_mask_upper = \
                         self.mean_and_mask(phs_vol[:,pos_order[n_pe/4+1:],:],
@@ -123,14 +134,17 @@ class UnbalPhaseCorrection (Operation):
         sigma[:,0,:] = N.power(N.std(phs_evn, axis=-2), 2.0)
         sigma[:,1,:] = N.power(N.std(phs_odd, axis=-2), 2.0)
         q1_mask = N.ones((n_slice, 2, n_fe))
-        bad_slices = (self.pss < -25.0)
-        if bad_slices.any():
-            last_good_slice = bad_slices.nonzero()[0][0]
-        else: 
-            last_good_slice = n_slice           
-        q1_mask[last_good_slice:] = 0.0
-        maskbyfit(phs_mean[:last_good_slice], sigma[:last_good_slice],
-                      0.75, 2.0, q1_mask[:last_good_slice])
+##         bad_slices = (self.pss < -25.0)
+##         if bad_slices.any():
+##             last_good_slice = bad_slices.nonzero()[0][0]
+##         else: 
+##         last_good_slice = n_slice           
+##         q1_mask[last_good_slice:] = 0.0
+
+        q1_mask[:,0,:] = qual_map_mask(phs_evn, self.percentile)
+        q1_mask[:,1,:] = qual_map_mask(phs_odd, self.percentile)
+        
+
         # ditch any lines with less than 4 good pts
         for sl in q1_mask:
             npts = sl.sum(axis=-1)
@@ -177,28 +191,33 @@ class UnbalPhaseCorrection (Operation):
         A[:,A5] = (2*chk).flatten()
         A[:,A6] = -1.0
 
-        nz = ptmask.nonzero()[0]
-        A = A[nz]
-        P = P[nz]
+        nz1 = ptmask.nonzero()[0]
+        A = A[nz1]
+        P = P[nz1]
 
         [u,s,vt] = N.linalg.svd(A, full_matrices=0)
-        V = N.dot(N.transpose(vt), N.dot(N.diag(1/s), N.dot(N.transpose(u),P)))
+        #V = N.dot(N.transpose(vt), N.dot(N.diag(1/s), N.dot(N.transpose(u),P)))
+        V = N.dot(vt.transpose(), N.dot(N.diag(1/s), N.dot(u.transpose(), P)))
+        
 ##         import pylab as pl
 ##         ptmask = N.reshape(ptmask, phs.shape)
 ##         for s in s_line:
 ##             r_ind_ev = N.nonzero(ptmask[s,0])[0]
 ##             r_ind_od = N.nonzero(ptmask[s,1])[0]
 ##             if r_ind_ev.any() and r_ind_od.any():
-##                 pl.plot(r_ind_ev, N.take(phs[s,0], r_ind_ev), 'b')
-##                 pl.plot(phs[s,0], 'b--')
-##                 pl.plot(r_ind_od, N.take(phs[s,1], r_ind_od), 'r')
-##                 pl.plot(phs[s,1], 'r--')
 ##                 rowpos = 2*r_line*V[A1] - r_line*V[A2] +\
 ##                          2*s*V[A3] - s*V[A4] + 2*V[A5] - V[A6]
 ##                 rowneg = -2*r_line*V[A1] - r_line*V[A2] + \
-##                          -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]
-##                 pl.plot(r_ind_ev, rowpos[r_ind_ev], 'b.')
-##                 pl.plot(r_ind_od, rowneg[r_ind_od], 'r.')
+##                          -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]                
+
+##                 pl.plot(rowpos, 'b.')
+##                 pl.plot(rowneg, 'r.')
+##                 pl.plot(phs[s,0], 'b--')
+##                 pl.plot(r_ind_ev, phs[s,0,r_ind_ev], 'bo', alpha=0.25)
+
+##                 pl.plot(phs[s,1], 'r--')
+##                 pl.plot(r_ind_od, phs[s,1,r_ind_od], 'ro', alpha=0.25)
+                
 ##                 pl.title("slice %d"%s)
 ##                 pl.show()
 
@@ -223,6 +242,8 @@ class UnbalPhaseCorrection (Operation):
         # up correctly, theta[s] = A[s]*B ALWAYS!
         (S, M, R) = self.volShape
         (a1, a2, a3, a4, a5, a6) = self.coefs.tolist()
+        if not self.shear_correct:
+            a2 = a4 = a6 = 0.
         A = N.empty((M, len(self.coefs)), N.float64)
         B = N.empty((len(self.coefs), R), N.float64)
         theta = N.empty(self.volShape, N.float64)
@@ -258,3 +279,63 @@ class UnbalPhaseCorrection (Operation):
             theta[s] = N.dot(A,B)
             
         return theta
+
+def qual_map_mask(phs, pct):
+    s,m,n = phs.shape
+    qmask = N.zeros((s,n))    
+    qual = N.zeros(( s-2,m-2,n-2 ), phs.dtype)
+
+    hdiff = N.diff(phs[1:-1, 1:-1, :], n=2, axis=-1)
+    vdiff = N.diff(phs[1:-1, :, 1:-1], n=2, axis=-2)
+    udiff = N.diff(phs[:, 1:-1, 1:-1], n=2, axis=-3)
+    sum_sqrs = N.power(hdiff, 2) + N.power(vdiff, 2) + N.power(udiff, 2)
+    
+    qual = N.power(sum_sqrs, 0.5).mean(axis=-2)
+    qual = qual - qual.min()
+    # set a major cutoff to throw out the real bad points
+    cutoff = 0.2
+    N.putmask(qmask[1:-1,1:-1], qual <= cutoff, 1)
+    import pylab as P
+##     import matplotlib.axes3d as p3
+##     ax = P.axes()
+##     ax.hold(True)
+##     ax.imshow(qual)
+##     ax.imshow(qmask[1:-1,1:-1], alpha=.6, cmap=P.cm.copper)
+##     P.show()
+##     Rx,Sx = P.meshgrid(N.arange(n-2), N.arange(s-2))
+##     Rx2,Sx2 = P.meshgrid(N.arange(n), N.arange(s))
+##     #cutoff = N.power(N.pi/8, 2)
+##     bar = N.ones(qual.shape) * cutoff
+##     fig = P.figure()
+##     ax = p3.Axes3D(fig)
+##     ax.hold(True)
+##     ax.plot_wireframe(Rx,Sx,qual)
+##     #ax.plot_wireframe(Rx,Sx,bar, colors=[1,0,0,1])
+##     #P.show()
+##     fig = P.figure()
+##     ax = p3.Axes3D(fig)
+##     ax.plot_wireframe(Rx2,Sx2, qmask*phs.mean(axis=-2))
+##     P.show()
+    nz = qmask[1:-1,1:-1].flatten().nonzero()[0]
+##     P.hist(qual.flatten()[nz], bins=20)
+##     P.show()
+    cutoff = P.prctile(qual.flatten()[nz], pct)
+    N.putmask(qmask[1:-1,1:-1], qual > cutoff, 0)
+##     nz = qmask[1:-1,1:-1].flatten().nonzero()[0]
+##     P.hist(qual.flatten()[nz], bins=20)
+##     P.show()
+##     ax = P.axes()
+##     ax.hold(True)
+##     ax.imshow(qual)
+##     ax.imshow(qmask[1:-1,1:-1], alpha=.6, cmap=P.cm.copper)
+##     P.show()    
+    return qmask
+
+def plot_surface(surf):
+    import pylab as P
+    import matplotlib.axes3d as p3
+    Xx,Yx = P.meshgrid(N.arange(surf.shape[1]), N.arange(surf.shape[0]))
+    fig = P.figure()
+    ax = p3.Axes3D(fig)
+    ax.plot_wireframe(Xx,Yx,surf)
+    P.show()

@@ -17,7 +17,7 @@ class GeometricUndistortionK (Operation):
         Parameter(name="fmap_file", type="str", default="fieldmap-0",
             description="""
     Name of the field map file."""),
-        Parameter(name="lmbda", type="float", default=2.0,
+        Parameter(name="lmbda", type="float", default=8.0,
             description="""
     Inverse regularization factor."""),        
         )
