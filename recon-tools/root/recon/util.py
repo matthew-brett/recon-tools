@@ -465,8 +465,11 @@ def bivariate_fit(z, dim0, dim1, deg, sigma=None, mask=None,
     # So design matrix A will be structured:
     # | X0[dim00,dim10] X1[dim00,dim10] X2[dim00,dim10] ... XQR[dim00,dim10] |
     # | X0[dim00,dim11] X1[dim00,dim11] X2[dim00,dim11] ... XQR[dim00,dim11] |
-    # |  .         .         .             .         |
-    # |  .         .         .             .         |    
+    # |  .               .               .                   .               |
+    # |  .               .               .                   .               | 
+    # | X0[dim00,dim1M] X1[dim00,dim1M] X2[dim00,dim1M] ... XQR[dim00,dim1M] |
+    # |  .               .               .                   .               |
+    # |  .               .               .                   .               |
     # | X0[dim0L,dim1M] X1[dim0L,dim1M] X2[dim0L,dim1M] ... XQR[dim0L,dim1M] |
     #
 
@@ -521,7 +524,7 @@ def bivariate_fit(z, dim0, dim1, deg, sigma=None, mask=None,
     c /= vec_scale
 
     return A*vec_scale, c
-    
+
 #-----------------------------------------------------------------------------
 def maskbyfit(M, sigma, tol, tol_growth, mask):
 

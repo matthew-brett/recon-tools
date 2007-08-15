@@ -187,14 +187,27 @@ class NiftiImage (ReconImage):
         (self.xsize, self.ysize, self.zsize, self.tsize) = \
                      (hd_vals['xsize'], hd_vals['ysize'],
                       hd_vals['zsize'], hd_vals['tsize'])
-        (self.x0, self.y0, self.z0) = \
-                  (hd_vals['qoffset_x'], hd_vals['qoffset_y'],
-                   hd_vals['qoffset_z'])
         # what about orientation name?
-        qb, qc, qd, qfac = \
-            (hd_vals['quatern_b'], hd_vals['quatern_c'],
-             hd_vals['quatern_d'], hd_vals['qfac'])
-        self.orientation_xform = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
+        if hd_vals['qform_code']:
+            qb, qc, qd, qfac = \
+                (hd_vals['quatern_b'], hd_vals['quatern_c'],
+                 hd_vals['quatern_d'], hd_vals['qfac'])
+            self.orientation_xform = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
+            (self.x0, self.y0, self.z0) = \
+                      (hd_vals['qoffset_x'], hd_vals['qoffset_y'],
+                       hd_vals['qoffset_z'])
+
+        elif hd_vals['sform_code']:
+            M = N.array([[ hd_vals['srow_x0'],hd_vals['srow_x1'],hd_vals['srow_x2'] ],
+                         [ hd_vals['srow_y0'],hd_vals['srow_y1'],hd_vals['srow_y2'] ],
+                         [ hd_vals['srow_z0'],hd_vals['srow_z1'],hd_vals['srow_z2'] ]])
+            self.orientation_xform = Quaternion(M=M)
+            (self.x0, self.y0, self.z0) = \
+                      (hd_vals['srow_x3'], hd_vals['srow_y3'],
+                       hd_vals['srow_z3'])
+        else:
+            self.orientation_xform = Quaternion(M=N.identity(3))
+            self.x0, self.y0, self.z0 = (0,0,0)
         self.orientation = canonical_orient(self.orientation_xform.tomatrix())
         self.vox_offset, self.datatype, self.bitpix = \
                          (hd_vals['vox_offset'], hd_vals['datatype'],

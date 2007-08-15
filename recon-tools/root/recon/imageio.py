@@ -112,8 +112,8 @@ class ReconImage (object):
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, tsize,
-                 origin=None, orient_xform=None, orient_name=None):
+    def __init__(self, data, xsize, ysize, zsize, tsize, origin=None,
+                 scaling=None, orient_xform=None, orient_name=None):
         """
         Construct a ReconImage with at least data, xsize, ysize, zsize,
         and tsize known. Optional information are an origin 3-tuple
@@ -130,6 +130,7 @@ class ReconImage (object):
                                                self.zsize*self.zdim/2.)
         self.orientation_xform = orient_xform or Quaternion()
         self.orientation = orient_name or ""
+        self.scaling = scaling or 1.0
 
     #-------------------------------------------------------------------------
     def info(self):
@@ -216,6 +217,7 @@ class ReconImage (object):
         return ReconImage(data,
                           self.xsize, self.ysize, self.zsize, self.tsize,
                           origin=(self.x0, self.y0, self.z0),
+                          scaling=self.scaling,
                           orient_xform=self.orientation_xform,
                           orient_name=self.orientation)
 
