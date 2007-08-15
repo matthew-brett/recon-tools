@@ -19,79 +19,95 @@ from recon.imageio import readImage
 from recon import util
 from odict import odict
 from vertex_tools import get_edge_polys
+from slicerimage import SlicerImage, compose_xform
 
 ui_info = \
 '''<ui>
   <menubar name='MenuBar'>
     <menu action='FileMenu'>
+      <menuitem action='Open Image'/>
+      <separator/>
       <menuitem action='Quit'/>
     </menu>
     <menu action='ToolsMenu'>
+      <menuitem action='Load Overlay'/>
+      <menuitem action='Unload Overlay'/>
+      <menuitem action='Overlay Adjustment Toolbox'/>
+      <separator/>
       <menuitem action='VOI'/>
+      <menuitem action='Clear VOI polys'/>
     </menu>
   </menubar>
 </ui>'''
 
-AX, COR, SAG = range(3)
+cmap_lookup = odict((
+    (0, P.cm.Blues),
+    (1, P.cm.Greens),
+    (2, P.cm.Greys),
+    (3, P.cm.Oranges),
+    (4, P.cm.Purples),
+    (5, P.cm.Reds),
+    (6, P.cm.Spectral),
+    (7, P.cm.autumn),
+    (8, P.cm.bone),
+    (9, P.cm.cool),
+    (10, P.cm.copper),
+    (11, P.cm.gist_earth),
+    (12, P.cm.gist_gray),
+    (13, P.cm.gist_heat),
+    (14, P.cm.gist_rainbow),
+    (15, P.cm.gray),
+    (16, P.cm.hot),
+    (17, P.cm.hsv),
+    (18, P.cm.jet),
+    (19, P.cm.spring),
+    (20, P.cm.summer),
+    (21, P.cm.winter),
+    ))
+
 interp_types = ['nearest', 'bilinear', 'sinc']
 interp_lookup = odict([(num,name) for num,name in enumerate(interp_types)])
 
 class spmclone (gtk.Window):
     
     def __init__(self, image):
+        gtk.Window.__init__(self)
+        children = self.get_children()
+        if children:
+            self.remove(children[0])            
+            self.hide_all()
         table = gtk.Table(4, 2)
 
-        self.image = image
-        self.r0 = N.array([self.image.z0, self.image.y0, self.image.x0])
-        self.dr = N.array([self.image.zsize, self.image.ysize,
-                           self.image.xsize])
-        self.dimlengths = self.dr * N.array(image.shape)
-        # get vox origin from zyx origin (can't use transform because
-        # (these zyx are in the image's native space)
-        [z0,y0,x0] = N.round(N.array([image.z0,image.y0,image.x0])/self.dr).tolist()
-        self.vox_coords = [z0,y0,x0]        
-        # orientation xform maps vx-space:xyz-space (Right,Anterior,Superior)
-        # numpy arrays are in C-ordering, so I'm going to reverse the
-        # rows and columns of the xform
-        # Also, these xforms are right-handed, but ANALYZE parameter data
-        # are left handed, so I'm going to reverse the sign of the row
-        # mapping to x
-        # (makes as if the images are right handed??)
-        self.xform = image.orientation_xform.tomatrix()
-        self.xform = util.reverse(util.reverse(self.xform,axis=-1),axis=-2)
-        self.xform[-1] = abs(self.xform[-1])
+        self.image = len(image.shape) > 3 \
+                     and SlicerImage(image.subImage(0)) \
+                     or SlicerImage(image)
+        
+
+        self.overlay_img = None
         self.zoom = 0
-
-        # Make the ortho plots ---
-
-        # I'm transforming [AX,COR,SAG] so that this list informs each
-        # sliceplot what dimension it slices in the image array
-        # (eg for coronal data, the coronal plot slices the 0th dim)
-        [globals()['AX'],
-         globals()['COR'],
-         globals()['SAG']] = N.dot(self.xform, N.arange(3)).astype(N.int32)
-        self.setNorm()
         self.slice_patches = None
-        self.ax_plot=SlicePlot(self.data_xform(AX), 0, 0, AX,
+        self.setNorm()
+        self.dimlengths = self.image.dr * N.array(self.image.shape)
+        asdf = 0
+        zyx_lim = self.image.extents()
+        # I'm using [ax,cor,sag] such that this list informs each
+        # sliceplot what dimension it slices in the image array
+        # (eg for coronal data, the coronal plot slices the 0th dim)        
+        ax, cor, sag = self.image.slicing()
+        origin = [0,0,0]
+        # Make the ortho plots ---
+        self.ax_plot=SlicePlot(self.image.data_xform(ax, origin), 0, 0, ax,
                                norm=self.norm,
-                               extent=[-self.dimlengths[SAG]/2.,
-                                       self.dimlengths[SAG]/2.,
-                                       -self.dimlengths[COR]/2.,
-                                       self.dimlengths[COR]/2.])
+                               extent=(zyx_lim[2] + zyx_lim[1]))
         
-        self.cor_plot=SlicePlot(self.data_xform(COR), 0, 0, COR,
+        self.cor_plot=SlicePlot(self.image.data_xform(cor, origin), 0, 0, cor,
                                 norm=self.norm,
-                                extent=[-self.dimlengths[SAG]/2.,
-                                        self.dimlengths[SAG]/2.,
-                                        -self.dimlengths[AX]/2.,
-                                        self.dimlengths[AX]/2.])
+                                extent=(zyx_lim[2] + zyx_lim[0]))
         
-        self.sag_plot=SlicePlot(self.data_xform(SAG), 0, 0, SAG,
+        self.sag_plot=SlicePlot(self.image.data_xform(sag, origin), 0, 0, sag,
                                 norm=self.norm,
-                                extent=[-self.dimlengths[COR]/2.,
-                                        self.dimlengths[COR]/2.,
-                                        -self.dimlengths[AX]/2.,
-                                        self.dimlengths[AX]/2.])
+                                extent=(zyx_lim[1] + zyx_lim[0]))
+        
         # Although it doesn't matter 99% of the time, this list is
         # expected to be ordered this way
         self.sliceplots = [self.ax_plot, self.cor_plot, self.sag_plot]
@@ -101,7 +117,7 @@ class spmclone (gtk.Window):
         merge.insert_action_group(self._create_action_group(), 0)
         mergeid = merge.add_ui_from_string(ui_info)
         self.menubar = merge.get_widget("/MenuBar")
-        
+
         table.attach(self.menubar, 0, 2, 0, 1)
         self.menubar.set_size_request(600,30)
         table.attach(self.cor_plot, 0, 1, 1, 2)
@@ -118,8 +134,8 @@ class spmclone (gtk.Window):
         self.displaybox.attach_imgspace(self.rediculous_handler)
         table.attach(self.displaybox, 1, 2, 3, 4)
         self.displaybox.set_size_request(300,300)
-        self.statusbox = DisplayStatus(tuple(self.vox_coords),
-                                       tuple(self.zyx_coords()))
+        self.statusbox = DisplayStatus(tuple(self.image.vox_coords.tolist()),
+                                       tuple(self.image.zyx_coords().tolist()))
         table.attach(self.statusbox, 0, 1, 3, 4)
         self.statusbox.set_size_request(300,300)
         #table.set_row_spacing(1,25)
@@ -131,88 +147,57 @@ class spmclone (gtk.Window):
         self.connect_crosshair_id = []
         self.connectCrosshairEvents()
         
-        gtk.Window.__init__(self)
+        #gtk.Window.__init__(self)
         self.connect("destroy", lambda x: gtk.main_quit())
         self.set_data("ui-manager", merge)
         self.add_accel_group(merge.get_accel_group())
         self.set_default_size(600,730)
         self.set_border_width(3)
-        self.add(table)
-        self.show_all()
+        self.add(table)        
+        self.show_all()        
         self.setUpAxesSize()        
         P.show()
-    #-------------------------------------------------------------------------
-    def zyx_coords(self):
-        "makes the transformation from current vox to zyx coords"
-        return N.dot(self.xform, self.vox_coords*self.dr - self.r0).tolist()
-    
-    #-------------------------------------------------------------------------
-    def zyx2vox(self, zyx):
-        "makes the transformation from zyx coords to a voxel position"
-        zyx = N.asarray(zyx)
-        xform = N.linalg.inv(self.xform)
-        r_img = N.dot(xform, zyx)
-        return N.round( (r_img + self.r0)/self.dr ).tolist()
 
     #-------------------------------------------------------------------------
     def setNorm(self):
         "sets the whitepoint and blackpoint (uses raw data, not scaled)"
-        ordered_image = N.sort(self.image[:].flatten())
-        Npt = ordered_image.shape[0]
-        p01 = ordered_image[N.round(Npt*.01)]
-        p99 = ordered_image[N.round(Npt*.99)]
+        p01 = P.prctile(self.image[:], 1.0)
+        p99 = P.prctile(self.image[:], 99.)
         self.norm = P.normalize(vmin = p01, vmax = p99)
+        if hasattr(self, "overlay_img") and self.overlay_img:
+            p01 = P.prctile(self.overlay_img[:], 1.0)
+            p99 = P.prctile(self.overlay_img[:], 99.)
+            self.overlay_norm = P.normalize(vmin = p01, vmax = p99)
 
     #-------------------------------------------------------------------------
-    def data_xform(self, slice_idx):
-        """
-        Given the a sliceplots slicing index and the current vox position,
-        get a slice of data.
-        """
-        slicer = [slice(0,d) for d in self.image.shape]
-        slicer[slice_idx] = self.vox_coords[slice_idx]
-        slicer = tuple(slicer)
-        if self.is_xpose(slice_idx):
-            return N.swapaxes(self.image[slicer], 0, 1)
-        else:
-            return self.image[slicer]
-
+    def xy(self, slice_idx):
+        (ax, cor, sag) = self.image.slicing()
+        x,y = {
+            ax: (2, 1), # x,y
+            cor: (2, 0), # x,z
+            sag: (1, 0), # y,z
+        }.get(slice_idx)
+        return x,y
     #-------------------------------------------------------------------------
-    def is_xpose(self, slice_idx):
-        """
-        Based on the vox->zyx mapping, see if the data that is sliced in
-        this direction should be transposed. This can be found by examining
-        the submatrix that maps to the 2 dimensions of the slice.
-        """
-        M = self.xform.copy()
-        row_idx = range(3)
-        col_idx = range(3)
-        col = slice_idx
-        row = (abs(M[:,col]) == 1).nonzero()[0]
-        row_idx.remove(row)
-        col_idx.remove(col)
-        # do some numpy "fancy" slicing to find the sub-matrix
-        # if it's not an identity, then transpose the data slice
-        Msub = M[row_idx][:,col_idx]
-        # if this is not an identity, then the axes must be unswapped
-        return not Msub[0,0]
-
-    #-------------------------------------------------------------------------
-    def updateSlices(self, sliceplots=None):
+    def updateSlices(self, zyx, sliceplots=None, image=None, norm=None):
         if not sliceplots:
             sliceplots = self.sliceplots
+        if not image:
+            image = self.image
+        if not norm:
+            norm = self.norm
         for sliceplot in sliceplots:
             idx = sliceplot.slice_idx
-            sliceplot.setData(self.data_xform(idx), self.norm)
+            sliceplot.setData(image.data_xform(idx, zyx), norm=norm)
             if self.slice_patches is not None:
-                p_idx = int(self.vox_coords[idx])
+                p_idx = int(self.image.vox_coords[idx])
                 sliceplot.showPatches(self.slice_patches[idx][p_idx])
 
     #-------------------------------------------------------------------------
     def updateCrosshairs(self):
         for s,sliceplot in enumerate(self.sliceplots):
             idx = sliceplot.slice_idx
-            zyx = self.zyx_coords()
+            zyx = self.image.zyx_coords().tolist()
             zyx.pop(s)
             ud,lr = zyx
             sliceplot.setCrosshairs(lr,ud)
@@ -225,13 +210,14 @@ class spmclone (gtk.Window):
         # want the isotropic resolution plot to be 215x215 pixels
         xy_imgsize = 215.
         ref_size = self.dimlengths[-1]
-        slicing = [AX,COR,SAG]
+        slicing = self.image.slicing()
         for sliceplot in self.sliceplots:
-            dims_copy = N.take(self.dimlengths, slicing).tolist()
+            dims_copy = self.dimlengths.tolist()
             ax = sliceplot.getAxes()
             s_idx = sliceplot.slice_idx
             dims_copy.remove(self.dimlengths[s_idx])
-            slice_y, slice_x = dims_copy
+            slice_y, slice_x = self.image.is_xpose(s_idx) and \
+                               dims_copy[::-1] or dims_copy
             height = xy_imgsize*slice_y/ref_size
             width = xy_imgsize*slice_x/ref_size
             canvas_x, canvas_y = sliceplot.get_width_height()
@@ -288,6 +274,7 @@ class spmclone (gtk.Window):
         # The tasks here are:
         # 1 find zyx_coords of mouse click and translate to vox_coords
         # 2 update the transverse sliceplots based on vox_coords
+        # 2a update the transverse overlays if present
         # 3 update crosshairs on all sliceplots
         # 4 update voxel space and zyx space texts
         sliceplot = event.canvas
@@ -300,30 +287,47 @@ class spmclone (gtk.Window):
         self._mouse_lr, self._mouse_ud = (lr, ud)
         # trans_sliceplots are the transverse plots that get
         # updated from where the mouse clicked
+        (ax, cor, sag) = self.image.slicing()
         trans_sliceplots = {
-            self.sliceplots[AX]: (self.sliceplots[SAG], self.sliceplots[COR]),
-            self.sliceplots[COR]: (self.sliceplots[SAG], self.sliceplots[AX]),
-            self.sliceplots[SAG]: (self.sliceplots[COR], self.sliceplots[AX]),
+            self.sliceplots[ax]: (self.sliceplots[sag], self.sliceplots[cor]),
+            self.sliceplots[cor]: (self.sliceplots[sag], self.sliceplots[ax]),
+            self.sliceplots[sag]: (self.sliceplots[cor], self.sliceplots[ax]),
             }.get(sliceplot)
         trans_idx = (trans_sliceplots[0].slice_idx,
                      trans_sliceplots[1].slice_idx)
+        
         # where do left-right and up-down cut across in zyx space?
-        trans_ax = {
-            AX: (2, 1), # x,y
-            COR: (2, 0), # x,z
-            SAG: (1, 0), # y,z
-        }.get(sliceplot.slice_idx)
-        zyx_clicked = self.zyx_coords()
+        trans_ax = self.xy(sliceplot.slice_idx)
+        zyx_clicked = self.image.zyx_coords()
         zyx_clicked[trans_ax[0]] = lr
         zyx_clicked[trans_ax[1]] = ud
-        vox = self.zyx2vox(zyx_clicked)
-        self.vox_coords[trans_idx[0]] = vox[trans_idx[0]]
-        self.vox_coords[trans_idx[1]] = vox[trans_idx[1]]
-        self.updateSlices(sliceplots=trans_sliceplots)
+        vox = self.image.zyx2vox(zyx_clicked)
+
+        self.image.vox_coords[trans_idx[0]] = vox[trans_idx[0]]
+        self.image.vox_coords[trans_idx[1]] = vox[trans_idx[1]]
+        self.updateSlices(zyx_clicked, sliceplots=trans_sliceplots)
+
+        if self.overlay_img:
+            # basically do the same thing over again wrt the overlay dims
+            (ax_o, cor_o, sag_o) = self.overlay_img.slicing()
+            trans_overlays = {
+                self.sliceplots[ax]: (self.overlays[sag_o], self.overlays[cor_o]),
+                self.sliceplots[cor]: (self.overlays[sag_o], self.overlays[ax_o]),
+                self.sliceplots[sag]: (self.overlays[cor_o], self.overlays[ax_o]),
+                }.get(sliceplot)
+            trans_idx = (trans_overlays[0].slice_idx,
+                         trans_overlays[1].slice_idx)            
+            vox = self.overlay_img.zyx2vox(zyx_clicked)
+            self.overlay_img.vox_coords[trans_idx[0]] = vox[trans_idx[0]]
+            self.overlay_img.vox_coords[trans_idx[1]] = vox[trans_idx[1]]
+            self.updateSlices(zyx_clicked, sliceplots=trans_overlays,
+                              image=self.overlay_img,
+                              norm=self.overlay_norm)
+
         self.updateCrosshairs()
         # make text to update the statusbox label's
-        self.statusbox.set_vox_text(self.vox_coords)
-        self.statusbox.set_zyx_text(self.zyx_coords())
+        self.statusbox.set_vox_text(self.image.vox_coords[::-1].tolist())
+        self.statusbox.set_zyx_text(self.image.zyx_coords()[::-1].tolist())
 
     #-------------------------------------------------------------------------
     def VOI_handler(self, action):
@@ -341,16 +345,14 @@ class spmclone (gtk.Window):
         ax_plot.draw_idle()        
 
     #-------------------------------------------------------------------------
-##     def lasso_handler(self, event):
-##         if self.sliceplots[0].widgetlock.locked(): return
-##         if event.inaxes is None or \
-##            event.inaxes is not self.sliceplots[0].getAxes(): return
-##         self.lasso = MyLasso(event.inaxes, (event.xdata, event.ydata),
-##                              self.ax_mask_from_lasso)
-##         self.sliceplots[0].widgetlock(self.lasso)
+    def kill_patches(self, action):
+        for sliceplot in self.sliceplots:
+            sliceplot.getAxes().patches = []
+            sliceplot.draw_idle()
 
     #-------------------------------------------------------------------------
     def new_lasso_handler(self, event):
+        # Warning to reader: this handler gets gets reset recursively within
         plot = self.lasso_plot
         if plot.widgetlock.locked(): return
         if event.inaxes is None or \
@@ -363,57 +365,62 @@ class spmclone (gtk.Window):
         # it receives a list of vertices, from which it updates the mask,
         # and then puts the drawing into the next stage
         def mask_from_lasso(verts):
-            slicing = [AX,COR,SAG]
-            slicing.remove(plot.slice_idx)
-            shape = self.data_xform(plot.slice_idx).shape
-            sizes = N.take(self.dr, slicing)
-            offsets = N.take(self.r0, slicing)
-            rx = N.arange(shape[-1])*sizes[-1] - offsets[-1]
-            ry = N.arange(shape[-2])*sizes[-2] - offsets[-2]
-            #print rx
-            #print ry
+            (ax, cor, sag) = self.image.slicing()
+            x,y = self.xy(plot.slice_idx)
+            shape = self.image.data_xform(plot.slice_idx, (0,0,0)).shape
+            extents = self.image.extents()
+            x = extents[x]
+            y = extents[y]
+            rx = N.linspace(x[0],x[1],shape[-1],endpoint=False)
+            ry = N.linspace(y[0],y[1],shape[-2],endpoint=False)
+            print rx
+            print ry
             x,y = P.meshgrid(rx,ry)
             xys = zip(x.flatten(), y.flatten())
             inside = points_inside_poly(xys, verts)
             mask = N.reshape(inside, shape)
-            if self.is_xpose(plot.slice_idx):
-                mask = N.swapaxes(mask, 0, 1)
-            slices = [slice(0,d) for d in mask.shape]
-            slices.insert(plot.slice_idx, None)
-            #print shape, mask.shape, self.mask.shape, plot.slice_idx
-            self.mask[:] = self.mask[:] * mask[tuple(slices)]
-            #print inside.sum()
+
+            # since we're drawing on the range, need to translate the
+            # poly points back into the domain... in the end leave the
+            # 2D mask in range space because we'll need it for more polys
+            Msub = self.image.plane_xform(plot.slice_idx)
+            ixform = compose_xform(N.linalg.inv(Msub))
+            
+            slices = [slice(0,d) for d in self.mask.shape]
+            slices[plot.slice_idx] = None
+            self.mask[:] = self.mask[:] * ixform(mask)[tuple(slices)]
             poly = PolyCollection([verts,], facecolors=(0.0,0.8,0.2,0.4))
             plot.getAxes().add_patch(poly)
             plot.draw_idle()
-            #plot.mpl_disconnect(self.lasso_id)
             plot.widgetlock.release(self.lasso)
-            if plot.slice_idx is AX:
+            if plot.slice_idx is ax:
                 # draw COR and SAG rectangles, set off lasso handler on COR
                 (cor_plot, sag_plot) = self.sliceplots[1:]
                 (cor_ax, sag_ax) = (cor_plot.getAxes(), sag_plot.getAxes())
+                z = extents[0]
+                height = z[1] - z[0]
 
-                height = self.data_xform(SAG).shape[-2]*self.dr[AX]
-                y0 = -self.r0[AX]
-                proj_axes = self.is_xpose(AX) and (-1,-2) or (-2,-1)
-                lr_proj = mask.sum(axis=proj_axes[0]).nonzero()[0]
-                #print lr_proj
+                lr_proj = mask.sum(axis=-2).nonzero()[0]
                 cor_width = rx[lr_proj[-1]] - rx[lr_proj[0]]
-                cor_xy = (rx[lr_proj[0]], y0) 
+                cor_xy = (rx[lr_proj[0]], z[0]) 
 
-                ud_proj = mask.sum(axis=proj_axes[1]).nonzero()[0]
+                ud_proj = mask.sum(axis=-1).nonzero()[0]
                 sag_width = ry[ud_proj[-1]] - ry[ud_proj[0]]
-                sag_xy = (ry[ud_proj[0]], y0)
+                sag_xy = (ry[ud_proj[0]], z[0])
 
                 props = dict(alpha=0.4, facecolor=(0.0,0.8,0.2))
                 
                 cor_rect_trans = P.blend_xy_sep_transform(cor_ax.transData,
                                                          cor_ax.transAxes)
                 
+                # cor_rect goes across the LR dimension to the extent
+                # that is unmasked, and all the way across the IS dim
                 cor_rect = Rectangle(cor_xy, cor_width, height,
                                      visible=True, **props)
                 cor_ax.add_patch(cor_rect)
-                
+
+                # sag_rect goes across the PA dimension to the extent
+                # that is unmasked, and all the way across the IS dim
                 sag_rect = Rectangle(sag_xy, sag_width, height,
                                     visible=True, **props)
                 sag_ax.add_patch(sag_rect)
@@ -422,20 +429,16 @@ class spmclone (gtk.Window):
                 self.lasso_plot = cor_plot
                 self.lasso_id = cor_plot.mpl_connect("button_press_event",
                                                      self.new_lasso_handler)
-                #open("mask.dat", "wb").write(mask.tostring())
                 
-            elif plot.slice_idx is COR:
+            elif plot.slice_idx is cor:
                 # draw SAG rectangle, set off lasso handler on SAG
                 sag_plot = self.sliceplots[-1]
                 sag_ax = sag_plot.getAxes()
-                proj_ax = self.is_xpose(COR) and -2 or -1
-                ud_proj = mask.sum(axis=proj_ax).nonzero()[0]
-                #print ud_proj
-                #print "len(rx)=",len(rx),"len(ry)=",len(ry)
+
+                ud_proj = mask.sum(axis=-1).nonzero()[0]
                 ud_height = ry[ud_proj[-1]] - ry[ud_proj[0]]
 
                 old_rect = sag_ax.patches[0]
-                #old_rect.set_transform(sag_ax.get_transform())
                 old_rect.set_y(ry[ud_proj[0]])
 
                 old_rect.set_height(ud_height)
@@ -450,9 +453,7 @@ class spmclone (gtk.Window):
                 # clean up and reactivate regular callbacks
                 self.lasso_plot = None
                 self.connectCrosshairEvents()
-                #open("mask.dat", "wb").write(self.mask.tostring())
                 msk = self.image._subimage(self.mask)
-                #msk.scaling = 1.0
                 msk.writeImage("mask", format_type="analyze")
                 self.build_patches()
                 print "patches built and volume mask written as mask.(hdr,img)"
@@ -470,26 +471,30 @@ class spmclone (gtk.Window):
         self.slice_patches = [[],[],[]]
         slice_idxs = [s.slice_idx for s in self.sliceplots]
         for idx in slice_idxs:
-            slicing = [AX,COR,SAG]
-            slicing.remove(idx)
+            (ax,cor,sag)  = self.image.slicing()
+            vox_idx = range(3)
+            vox_idx.remove(idx)
+            x,y = self.xy(idx)
             slicer = [slice(0,d) for d in self.mask.shape]
+            slicer[idx] = 0
+            R = N.empty((3,) + (N.product(self.mask[tuple(slicer)].shape),))
             for d in xrange(self.mask.shape[idx]):
                 slicer[idx] = d
                 # get_edge_polys takes a mask slice and finds an ordered
                 # path around the edge of each unmasked region, returning
                 # a list of sorted vertex lists
-                if self.is_xpose(idx):
-                    polys = get_edge_polys(N.swapaxes(self.mask[tuple(slicer)],0,1))
-                else:
-                    polys = get_edge_polys(self.mask[tuple(slicer)])
+                polys = get_edge_polys(self.mask[tuple(slicer)])
                 polygons = []
                 # need to convert indices to x,y points
                 for p in range(len(polys)):
-                    xx = N.array([x for x,y in polys[p]])
-                    yy = N.array([y for x,y in polys[p]])
-                    y,x = slicing
-                    xx = xx*self.dr[x] - self.r0[x]
-                    yy = yy*self.dr[y] - self.r0[y]
+                    xx = N.array([q for q,r in polys[p]])
+                    yy = N.array([r for q,r in polys[p]])
+                    npts = xx.shape[-1]
+                    R[vox_idx[1],:npts] = xx
+                    R[vox_idx[0],:npts] = yy
+                    R[:,:npts] = self.image.zyx_coords(vox_coords=R[:,:npts])
+                    xx = R[x,:npts]
+                    yy = R[y,:npts]
                     polygons.append(Polygon(zip(xx,yy),
                                             facecolor=(0.0,0.8,0.2),
                                             alpha=0.4))
@@ -498,8 +503,10 @@ class spmclone (gtk.Window):
 
     #-------------------------------------------------------------------------
     def rediculous_handler(self, cbox):
-        mode = cbox.get_active()==0 and "enable" or "disable"
-        self.connectCrosshairEvents(mode=mode)
+        #mode = cbox.get_active()==0 and "enable" or "disable"
+        #self.connectCrosshairEvents(mode=mode)
+        print "You've hit a useless button!"
+        return
 
     #-------------------------------------------------------------------------
     def interp_handler(self, cbox):
@@ -524,43 +531,153 @@ class spmclone (gtk.Window):
             4: 20,
             5: 10,
         }.get(cbox.get_active(), 0)
-        dimlengths = self.dr * N.array(self.image.shape)
-        slicing = [AX, COR, SAG]
-        r_center = N.array(self.zyx_coords())
+        r_center = self.image.zyx_coords()
         if self.zoom:
             r_neg = r_center - N.array([self.zoom/2.]*3)
             r_pos = r_center + N.array([self.zoom/2.]*3)
+            zyx_lim = zip(r_neg, r_pos)
             self.dimlengths = N.array([self.zoom]*3)
             
         else:
-            self.dimlengths = dimlengths
-            r_neg = -N.take(dimlengths, slicing)/2.
-            r_pos = N.take(dimlengths, slicing)/2.
+            self.dimlengths = self.image.dr * N.array(self.image.shape)
+            zyx_lim = self.image.extents()
             
-        ## this could be made nicer?
-        self.sliceplots[0].setXYlim( (r_neg[2], r_pos[2]),
-                                      (r_neg[1], r_pos[1]) )
-        self.sliceplots[1].setXYlim( (r_neg[2], r_pos[2]),
-                                       (r_neg[0], r_pos[0]) )
-        self.sliceplots[2].setXYlim( (r_neg[1], r_pos[1]),
-                                       (r_neg[0], r_pos[0]) )
-        self.updateSlices()
+        for plot in self.sliceplots:
+            x,y = self.xy(plot.slice_idx)
+            plot.setXYlim(zyx_lim[x], zyx_lim[y])
+            plot.setCrosshairs(r_center[x], r_center[y])
+            
+        self.updateSlices(self.image.zyx_coords())
         self.setUpAxesSize()
-        self.sliceplots[0].setCrosshairs(r_center[2],r_center[1])
-        self.sliceplots[1].setCrosshairs(r_center[2],r_center[0])
-        self.sliceplots[2].setCrosshairs(r_center[1],r_center[0])
+
+    #-------------------------------------------------------------------------
+    def initoverlay(self, action):
+        image_filter = gtk.FileFilter()
+        image_filter.add_pattern("*.hdr")
+        image_filter.add_pattern("*.nii")
+        image_filter.set_name("Recon Images")
+        fname = self.ask_fname("Choose file to overlay...", action="open",
+                               filter=image_filter)
+        if not fname:
+            return
+        try:
+            img = readImage(fname, "nifti")
+        except:
+            img = readImage(fname, "analyze")
+        if len(img.shape) > 3:
+            self.overlay_img = SlicerImage(img.subImage(0))
+        else:
+            self.overlay_img = SlicerImage(img)
+            
+        img_dims = N.take(N.array(self.image.shape) * self.image.dr,
+                          self.image.slicing())
+        ovl_dims = N.take(N.array(self.overlay_img.shape) * self.overlay_img.dr,
+                          self.overlay_img.slicing())
+        if not (img_dims == ovl_dims).all():
+            print img_dims, ovl_dims
+            print "Overlay failed because physical dimensions do not align..."
+            print "base image dimensions (zyx): [%3.1f %3.1f %3.1f] (mm)"%tuple(img_dims)
+            print "overlay image dimenensions (zyx: [%3.1f %3.1f %3.1f] (mm)"%tuple(ovl_dims)
+            return
+        self.setNorm()
+        (ax, cor, sag) = self.overlay_img.slicing()
+        self.ax_overlay = OverLay(self.ax_plot, ax,
+                                  norm=self.overlay_norm,
+                                  interpolation=self.ax_plot.interpolation)
+        self.cor_overlay = OverLay(self.cor_plot, cor,
+                                   norm=self.overlay_norm,
+                                   interpolation=self.cor_plot.interpolation)
+        self.sag_overlay = OverLay(self.sag_plot, sag,
+                                   norm=self.overlay_norm,
+                                   interpolation=self.sag_plot.interpolation)
+        self.overlays = [self.ax_overlay, self.cor_overlay, self.sag_overlay]
+        self.updateSlices(self.image.zyx_coords(),
+                          sliceplots=self.overlays,
+                          image=self.overlay_img,
+                          norm=self.overlay_norm)
+
+    #-------------------------------------------------------------------------
+    def launch_overlay_toolbox(self, action):
+        if self.overlay_img is not None:
+            if not hasattr(self, "overlay_tools") or not self.overlay_tools:
+                self.overlay_tools = OverlayToolWin(self.overlays, self)
+            else:
+                self.overlay_tools.present()
+
+    #-------------------------------------------------------------------------
+    def killoverlay(self, action):
+        if self.overlay_img is not None:
+            for overlay in self.overlays:
+                overlay.removeSelf()
+            if hasattr(self, "overlay_tools") and self.overlay_tools:
+                self.overlay_tools.destroy()
+                del self.overlay_tools
+            self.overlay_img = None
+            self.overlay_norm = None
+
+    #-------------------------------------------------------------------------
+    def load_new_image(self, action):
+        image_filter = gtk.FileFilter()
+        image_filter.add_pattern("*.hdr")
+        image_filter.add_pattern("*.nii")
+        image_filter.set_name("Recon Images")
+        fname = self.ask_fname("Choose file to overlay...", action="open",
+                               filter=image_filter)
+        if not fname:
+            return
+        try:
+            img = readImage(fname, "nifti")
+        except:
+            img = readImage(fname, "analyze")
+        self.killoverlay(None)
+        self.__init__(img)
+
+    #-------------------------------------------------------------------------
+    def ask_fname(self, prompt, action="save", filter=None):
+        mode = {
+            "save": gtk.FILE_CHOOSER_ACTION_SAVE,
+            "open": gtk.FILE_CHOOSER_ACTION_OPEN,
+            }.get(action)
+        dialog = gtk.FileChooserDialog(
+            title=prompt,
+            action=mode,
+            parent=self,
+            buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
+                     gtk.STOCK_OK,gtk.RESPONSE_OK)
+            )
+        if filter:
+            dialog.add_filter(filter)
+        response = dialog.run()
+        if response == gtk.RESPONSE_CANCEL:
+            dialog.destroy()
+            return
+        fname = dialog.get_filename()
+        dialog.destroy()
+        return fname
 
     #-------------------------------------------------------------------------
     def _create_action_group(self):
         entries = (
             ( "FileMenu", None, "_File" ),
+            ( "Open Image", gtk.STOCK_OPEN, "_Open Image", "<control>O",
+              "Opens and plots a new image", self.load_new_image),
             ( "Quit", gtk.STOCK_QUIT,
               "_Quit", "<control>Q",
               "Quits",
               lambda action: self.destroy() ),
             ( "ToolsMenu", None, "_Tools" ),
+            ( "Load Overlay", None, "_Load Overlay", "",
+              "Load an image to overlay", self.initoverlay ),
+            ( "Unload Overlay", None, "_Unload Overlay", "",
+              "Unload the overlay", self.killoverlay ),
+            ( "Overlay Adjustment Toolbox", None,
+              "_Overlay Adjustment Toolbox", "",
+              "launch overlay toolbox", self.launch_overlay_toolbox),
             ( "VOI", None, "_VOI", "<control>V", "VOIgrab",
               self.VOI_handler ),
+            ( "Clear VOI polys", None, "_Clear VOI polys", None,
+              "clears VOI", self.kill_patches ),
+              
         )
 
         action_group = gtk.ActionGroup("WindowActions")
@@ -592,6 +709,7 @@ class SlicePlot (FigureCanvas):
         FigureCanvas.__init__(self, fig)
         self.setData(data)
         self._init_crosshairs(x, y)
+
 
     #-------------------------------------------------------------------------
     def _init_crosshairs(self, x, y):
@@ -692,6 +810,68 @@ class SlicePlot (FigureCanvas):
         self.data = data
         self.draw_idle()
 
+##############################################################################
+class OverLay (object):
+    """
+    An Overlay inherits from the SlicePlot, and shares a Figure object
+    with an existing SlicePlot.
+    """
+
+    def __init__(self, sliceplot, slice_idx, alpha=.45,
+                 cmap=P.cm.gist_heat, norm=None, interpolation="nearest"):
+
+        self.sliceplot = sliceplot
+        self.norm = norm
+        self.cmap = cmap
+        self.alpha = alpha
+        self.interpolation = interpolation
+        self.slice_idx = slice_idx
+        # set up the shared axes object for an overlay
+        ax = sliceplot.getAxes()
+        ax.hold(True)
+        ax.set_axis_bgcolor('k')
+
+    #-------------------------------------------------------------------------
+    def setData(self, data, alpha=None, cmap=None,
+                norm=None, interpolation=None):
+        self.alpha = alpha or self.alpha
+        self.cmap = cmap or self.cmap
+        self.norm = norm or self.norm
+        self.interpolation = interpolation or self.interpolation
+        ax = self.sliceplot.getAxes()
+        extent = self.sliceplot.getImage().get_extent()
+        if self.sliceplot.getImage(num=1) is None:
+            ax.imshow(data, extent=extent, origin="lower")
+        # retrieve overlay image ref
+        img = self.sliceplot.getImage(num=1)
+        img.set_data(data)
+        img.set_cmap(self.cmap)
+        img.set_alpha(self.alpha)
+        img.set_interpolation(self.interpolation)
+        img.set_norm(self.norm)
+        self.data = data
+        self.sliceplot.draw_idle()
+
+    #-------------------------------------------------------------------------
+    def setAlpha(self, alphaVal):
+        self.alpha = alphaVal
+        self.setData(self.data)
+
+    #-------------------------------------------------------------------------
+    def setCmap(self, cmapObj):
+        self.cmap = cmapObj
+        self.setData(self.data)
+    #-------------------------------------------------------------------------
+    def setInterpo(self, interpo):
+        if interpo in interp_lookup.values():
+            self.interpolation = interpo
+            self.setData(self.data)
+    #-------------------------------------------------------------------------
+    def removeSelf(self):
+        ax = self.sliceplot.getAxes()
+        if len(ax.images) > 1:
+            ax.images.pop(1)
+            self.sliceplot.draw_idle()
     
 ##############################################################################
 class DisplayInfo (gtk.Frame):
@@ -709,8 +889,9 @@ class DisplayInfo (gtk.Frame):
         voxlabel = gtk.Label("Vox size: "+self.getvox(image))
         originlabel = gtk.Label("Origin: "+self.getorigin(image))
         # make 4 lines worth of space for this label
+        xform = image.orientation_xform.tomatrix()
         xformlabel = gtk.Label("Dir Cos: \n" + \
-                               str(image.orientation_xform.tomatrix()))
+                               str(xform))
         xformlabel.set_size_request(300,80)
 
 
@@ -758,15 +939,15 @@ class DisplayInfo (gtk.Frame):
 
     #-------------------------------------------------------------------------
     def getdims(self, image):
-        return "%d x %d x %d"%image.shape
+        return "%d x %d x %d"%image.shape[::-1]
     #-------------------------------------------------------------------------
     def getvox(self, image):
-        return "%1.3f x %1.3f x %1.3f"%(image.zsize, image.ysize, image.xsize)
+        return "%1.3f x %1.3f x %1.3f"%(image.xsize, image.ysize, image.zsize)
     #-------------------------------------------------------------------------
     def getorigin(self, image):
-        return "%d x %d x %d"%(image.z0/image.zsize,
+        return "%d x %d x %d"%(image.x0/image.xsize,
                                image.y0/image.ysize,
-                               image.x0/image.xsize)
+                               image.z0/image.zsize)
     #-------------------------------------------------------------------------
     def attach_imgframe(self, func):
         self.imgframe.connect("changed", func)
@@ -819,6 +1000,80 @@ class DisplayStatus (gtk.Frame):
     def set_vox_text(self, locs):
         text = "%d %d %d"%tuple(locs)
         self.vx_loc.set_text(text)
+
+##############################################################################
+class OverlayToolWin (gtk.Window):
+    "A Window class defining a pop-up control widget for the overlay plot."
+
+    def __init__(self, overlay_list, parent):
+        self.padre = parent
+        self.overlay_ref = overlay_list
+        self.vbox = gtk.VBox(spacing=5)
+        self.vbox.set_border_width(10)        
+        alpha = self.overlay_ref[0].alpha
+        interp = self.overlay_ref[0].interpolation
+        # add alpha slider and label
+        self.alphaslider = gtk.HScale(gtk.Adjustment(alpha, 0.05, 1, .05, .05))
+        self.alphaslider.set_digits(3)
+        self.alphaslider.set_value_pos(gtk.POS_RIGHT)
+        self.alphaslider.get_adjustment().connect("value-changed",
+                                                  self.alpha_handler)
+        self.vbox.pack_start(gtk.Label("Opaqueness level"), False, False, 0)
+        self.vbox.pack_start(self.alphaslider)
+
+        self.vbox.pack_start(gtk.HSeparator(), expand=False)
+        
+        # add cmap combo box and label
+        self.cmap_list = gtk.combo_box_new_text()
+        cmaps = [cmap.name for cmap in cmap_lookup.values()]
+        for cmap in cmaps:
+            self.cmap_list.append_text(cmap)
+        self.cmap_list.set_active(cmaps.index("gist_heat"))
+        self.cmap_list.connect("changed", self.cmap_handler)
+        self.vbox.pack_start(gtk.Label("Overlay colormap"),
+                             False, False, 0)
+        self.vbox.pack_start(self.cmap_list)
+
+        # add interpolation combo box and label
+        self.interpo_list = gtk.combo_box_new_text()
+        for interpo in interp_lookup.values():
+            self.interpo_list.append_text(interpo)
+        self.interpo_list.set_active(interp_lookup.values().index(interp))
+        self.interpo_list.connect("changed", self.interpo_handler)
+        self.vbox.pack_start(gtk.Label("Overlay interpolation"),
+                             False, False, 0)
+        self.vbox.pack_start(self.interpo_list)
+        gtk.Window.__init__(self)
+        self.set_destroy_with_parent(True)
+        self.connect("destroy", self._takedown)
+        #self.set_default_size(250,150)
+        self.set_title("Overlay Plot Controls")
+        self.add(self.vbox)
+        self.show_all()
+        P.show()
+
+    #-------------------------------------------------------------------------
+    def _takedown(self, foo):
+        self.padre.overlay_tools = None
+        foo.destroy()
+
+    #-------------------------------------------------------------------------
+    def alpha_handler(self, adj):
+        for overlay in self.overlay_ref:
+            overlay.setAlpha(self.alphaslider.get_value())
+
+    #-------------------------------------------------------------------------
+    def cmap_handler(self, cbox):
+        cmap = cmap_lookup[cbox.get_active()]
+        for overlay in self.overlay_ref:
+            overlay.setCmap(cmap)
+
+    #-------------------------------------------------------------------------
+    def interpo_handler(self, cbox):
+        interpo = interp_lookup[cbox.get_active()]
+        for overlay in self.overlay_ref:
+            overlay.setInterpo(interpo)
+
 
 ###############################################################################
 ################## MATPLOTLIB HACKS! ##########################################

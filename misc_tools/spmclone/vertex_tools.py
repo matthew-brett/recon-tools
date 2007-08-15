@@ -101,13 +101,13 @@ def get_edge_polys(mask):
     edgeslr = N.zeros(mask.shape, N.int32)
     #edgeslr[:,1:] = N.diff(mask, axis=-1) & N.diff(cmpmask, axis=-1)
     edgeslr[:,1:] = mask[:,1:]*N.diff(mask, axis=-1)
-    edgeslr[:,:-1] += mask[:,:-1]*N.diff(cmpmask, axis=-1)
+    edgeslr[:,:-1] |= mask[:,:-1]*N.diff(cmpmask, axis=-1)
     edgesud = N.zeros(mask.shape, N.int32)
     edgesud[1:,:] = mask[1:,:]*N.diff(mask, axis=-2)
-    edgesud[:-1,:] += mask[:-1,:]*N.diff(cmpmask, axis=-2)
+    edgesud[:-1,:] |= mask[:-1,:]*N.diff(cmpmask, axis=-2)
     #edgesud[1:,:] |= N.diff(cmpmask, axis=-2)
     edges = edgesud | edgeslr
-    return edges
+    #return edges
     #nz = N.transpose(edges).nonzero()
     nz = edges.nonzero()
     # pts[0] will have the y value of the lowest row in the object,
@@ -117,7 +117,7 @@ def get_edge_polys(mask):
     pgroups = segment_polys(pts)
     edgepolys = []
     for group in pgroups:
-        edgepolys.append(edge_walk2(group))
+        edgepolys.append(edge_walk3(group))
     return edgepolys
             
 
@@ -226,6 +226,18 @@ def edge_walk2(pts):
         print "untouched points:",unsorted_hash.keys()            
     return [(r.real, r.imag) for r in sorted_pts]
         
+def edge_walk3(pts):
+    unsorted_pts = [complex(r,i) for r,i in pts[1:]]
+    sorted_pts = [pts[0]]
+    while unsorted_pts:
+        z = abs(N.asarray(unsorted_pts) - complex(*sorted_pts[-1]))
+        if (z > 2**0.5).all():
+            break
+        k = (z==z.min()).nonzero()[0][0]
+        tpl = (unsorted_pts[k].real, unsorted_pts[k].imag)
+        sorted_pts.append(tpl)
+        unsorted_pts.pop(k)
+    return sorted_pts
 
 def test_polys(mask, axis=0):
     from matplotlib.patches import Polygon
