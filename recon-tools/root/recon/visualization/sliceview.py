@@ -11,20 +11,10 @@ from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
 import matplotlib
 
-from recon.imageio import readImage
+from recon.imageio import readImage, ReconImage
+from recon.slicerimage import SlicerImage, compose_xform
+from recon.visualization import *
 from odict import odict
-
-def iscomplex(a): return a.imag.any()
-def ifdefset(a, b):
-    if b is not None:
-        a = b
-
-# Transforms for viewing different aspects of complex data
-def ident_xform(data): return data
-def abs_xform(data): return abs(data)
-def phs_xform(data): return P.angle(data)
-def real_xform(data): return data.real
-def imag_xform(data): return data.imag
 
 ui_info = \
 '''<ui>
@@ -87,12 +77,20 @@ ui_info = \
         <menuitem action='blackman'/>
       </menu>
       <menuitem action='Contour Plot'/>
+      <separator/>
+      <menuitem action='View Ortho Plots'/>
     </menu>
     <menu action='OverlayMenu'>
       <menuitem action='Load Overlay'/>
       <menuitem action='Unload Overlay'/>
       <menuitem action='Overlay Adjustment Toolbox'/>
-    </menu>    
+    </menu>
+    <menu action='Orientation'>
+      <menuitem action='Native'/>
+      <menuitem action='Axial'/>
+      <menuitem action='Coronal'/>
+      <menuitem action='Saggital'/>
+    </menu>
   </menubar>
 </ui>'''
 
@@ -138,19 +136,23 @@ class sliceview (gtk.Window):
     _dragging = False
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, dim_names=[], title="sliceview", cmap=P.cm.bone):
-        self.data = P.asarray(data)
+    def __init__(self, data, dim_names=[], title="sliceview",
+                 cmap=P.cm.bone, parent=None):
+        if isinstance(data, ReconImage):
+            self.data = SlicerImage(data)
+        else:
+            self.data = SlicerImage(N.asarray(data), 1, 1, 1, 1)
         self.overlay_data = None
+        self.orient_mode = -1
         # if data is complex, show the magnitude by default
-        self.transform = iscomplex(data) and abs_xform or ident_xform
+        self.transform = iscomplex(self.data[:]) and abs_xform or ident_xform
         # widget layout table
         table = gtk.Table(4, 2)        
 
         # control panel
         self.control_panel = \
-          ControlPanel(data.shape, dim_names, iscomplex(data))
+          ControlPanel(self.data.shape, dim_names, iscomplex(self.data[:]))
         self.control_panel.connect(
-            self.spinnerHandler,
             self.radioHandler,
             self.sliderHandler,
             self.contrastHandler)
@@ -210,7 +212,6 @@ class sliceview (gtk.Window):
         except gobject.GError, msg:
             print "building menus failed: %s" % msg
         self.menubar = merge.get_widget("/MenuBar")
-
         table.attach(self.menubar, 0, 2, 0, 1, yoptions=0)
 
         # initialize contour tools
@@ -218,7 +219,10 @@ class sliceview (gtk.Window):
         
         # main window
         gtk.Window.__init__(self)
-        self.connect("destroy", lambda x: gtk.main_quit())
+        try:
+            self.set_screen(parent.get_screen())
+        except AttributeError:
+            self.connect("destroy", lambda x: gtk.main_quit())
         self.set_data("ui-manager", merge)
         self.add_accel_group(merge.get_accel_group())        
         # sum of widget height:
@@ -249,9 +253,8 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def getOverlaySlice(self):
         if self.overlay_data is not None:
-            slices = self.control_panel.getIndexSlices()
-            slices = (slices[-3],) + tuple([slice(0,d)
-                                            for d in self.overlay_data.shape[-2:]])
+            slices = self.control_panel.getIndexSlices()[-3:]
+            print slices
             return self.transform(self.overlay_data[slices])
         
     #-------------------------------------------------------------------------
@@ -283,21 +286,19 @@ class sliceview (gtk.Window):
 
     #------------------------------------------------------------------------- 
     def updateDataRange(self):
-        data_min = self.transform(self.data).min()
-        data_max = self.transform(self.data).max()
+        data_min = self.transform(self.data[:]).min()
+        data_max = self.transform(self.data[:]).max()
         self.rowplot.setDataRange(data_min, data_max)
         self.colplot.setDataRange(data_max, data_min)
 
     #-------------------------------------------------------------------------
-    ###### Event handlers for control panel object
-    def spinnerHandler(self, adj):
-        print "sliceview::spinnerHandler slice_dims", \
-               self.control_panel.slice_dims
-
-    #-------------------------------------------------------------------------
     def radioHandler(self, button, transform):
         if not button.get_active(): return
-        self.transform = transform
+        if self.orient_mode >= 0:
+            mat = self.data.plane_xform(self.orient_mode)
+            self.transform = compose_xform(mat, prefilter=transform)
+        else:
+            self.transform = transform
         self.updateDataRange()
         self.norm = None
         self.setNorm(contrast=self.contrast)
@@ -305,7 +306,7 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def sliderHandler(self, adj):
-        row_dim, col_dim= self.control_panel.slice_dims
+        row_dim, col_dim = self.control_panel.slice_dims
         if adj.dim.index == row_dim: self.updateRow()
         elif adj.dim.index == col_dim: self.updateCol()
         else: self.updateSlice()
@@ -443,14 +444,14 @@ class sliceview (gtk.Window):
         if self.norm is None:
             # set the black point to 1st percentile value
             # set the white point to 99th percentile value
-            sorted = P.sort(self.transform(self.data.flatten()))
+            sorted = P.sort(self.transform(self.data[:]).flatten())
             npts = sorted.shape[0]
             self.blkpt, self.whtpt = sorted[int(.01*npts+0.5)], \
                                      sorted[int(.99*npts+0.5)]
 
         if self.overlay_data is not None:
             if self.overlay_norm is None:
-                sorted = P.sort(self.transform(self.overlay_data.flatten()))
+                sorted = P.sort(self.transform(self.overlay_data[:]).flatten())
                 npts = sorted.shape[0]
                 self.blkpt_o, self.whtpt_o = sorted[int(.1*npts+0.5)], \
                                              sorted[int(.99*npts+0.5)]
@@ -568,13 +569,10 @@ class sliceview (gtk.Window):
         if not fname:
             return
         try:
-            img = readImage(fname, "nifti")
+            img = readImage(fname, "nifti", vrange=(0,0))
         except:
-            img = readImage(fname, "analyze")
-        if len(img.shape) > 3:
-            self.overlay_data = img[0]
-        else:
-            self.overlay_data = img[:]
+            img = readImage(fname, "analyze", vrange=(0,0))
+        self.overlay_data = img
         if self.data.shape[-3] != img.shape[-3]:
             print "slices don't match"
             return
@@ -607,6 +605,31 @@ class sliceview (gtk.Window):
         self.sliceplot.setInterpo(interp_method)
 
     #-------------------------------------------------------------------------
+    def orient_handler(self, action, current):
+        self.orient_mode = current.get_current_value()
+        for button in self.control_panel.radios:
+            if button.get_active():
+                prefilter = button.transform
+        if self.orient_mode >= 0:
+            ax, cor, sag = self.data.slicing()
+            trans_dims = {
+                ax: [cor, sag],
+                cor: [ax, sag],
+                sag: [ax, cor],
+            }.get(self.orient_mode)
+            #offset = len(self.data.shape)            
+            new_zyx = map(lambda x: x-3, [self.orient_mode] + trans_dims)
+            T = self.data.plane_xform(self.orient_mode)
+            self.transform = compose_xform(T, prefilter=prefilter)
+        else:
+            new_zyx = [-3, -2, -1]
+            self.transform = prefilter
+        self.control_panel.ResetDims(new_zyx)
+        self.updateSlice()
+        self.updateRow()
+        self.updateCol()
+        
+    #-------------------------------------------------------------------------
     def scale_handler(self, action, current):
         self.image_scale = current.get_current_value()
         self.scale_image()
@@ -618,7 +641,7 @@ class sliceview (gtk.Window):
                             self.control_panel.getColDim().size)
         canvas_size_x, canvas_size_y = self.sliceplot.get_size_request()
         canvas_size_real_x,canvas_size_real_y=self.sliceplot.get_width_height()
-        new_img_size = base_img_size*scale
+        new_img_size = int(base_img_size*scale)
         # If the new image requires a larger canvas, resize it.
         # Otherwise, make sure the canvas is at the default size
         if canvas_size_x < new_img_size+50:
@@ -635,6 +658,11 @@ class sliceview (gtk.Window):
         ax.set_position([l,b,w,h])
         self.sliceplot.set_size_request(canvas_size_x,canvas_size_y)
         self.sliceplot.draw()
+
+    #-------------------------------------------------------------------------
+    def launch_ortho_plots(self, action):
+        from recon.visualization.spmclone import spmclone
+        spmclone(self.data, parent=self)
 
     #-------------------------------------------------------------------------
     def auto_scale_image(self):
@@ -661,6 +689,7 @@ class sliceview (gtk.Window):
             ( "SizeMenu", None, "_Image Size" ),
             ( "ColorMapping", None, "_Color Mapping"),
             ( "Interpolation", None, "_Interpolation"),
+            ( "Orientation", None, "_Orientation" ),
             ( "Save Image", gtk.STOCK_SAVE,
               "_Save Image", "<control>S",
               "Saves current slice as PNG",
@@ -677,6 +706,10 @@ class sliceview (gtk.Window):
               "_Contour Plot", None,
               "Opens contour plot controls",
               self.launch_contour_tool ),
+            ( "View Ortho Plots", None,
+              "_View Ortho Plots", None,
+              "Opens orthogonal plot viewer",
+              self.launch_ortho_plots ),
             ( "OverlayMenu", None, "_Overlay" ),
             ( "Load Overlay", None,
               "_Load Overlay", "",
@@ -701,6 +734,13 @@ class sliceview (gtk.Window):
             ( "8x", None, "_8x", None, "", 8 )
         )
 
+        orient_toggles = (
+            ( "Native", None, "_Navive", None, "", -1 ),
+            ( "Axial", None, "_Axial", None, "", self.data.ax ),
+            ( "Coronal", None, "_Coronal", None, "", self.data.cor ),
+            ( "Saggital", None, "_Saggital", None, "", self.data.sag )
+        )
+
         cmap_toggles = tuple([(cmap.name.strip(), None,
                                "_"+cmap.name.strip(), None, "", num)
                               for num, cmap in cmap_lookup.items()])
@@ -716,6 +756,7 @@ class sliceview (gtk.Window):
                                        self.cmap_handler)
         action_group.add_radio_actions(interpo_toggles, 0,
                                        self.interpo_handler)
+        action_group.add_radio_actions(orient_toggles, -1, self.orient_handler)
         return action_group
 
 ##############################################################################
@@ -844,19 +885,11 @@ class OverlayToolWin (gtk.Window):
 
 ##############################################################################
 class Dimension (object):
+    "a Dimension has an index in the dim ordering, a total size, and a name"
     def __init__(self, index, size, name):
         self.index = index
         self.size = size
         self.name = name
-
-
-##############################################################################
-class DimSpinner (gtk.SpinButton):
-    def __init__(self, name, value, start, end, handler):
-        adj = gtk.Adjustment(0, start, end, 1, 1)
-        adj.name = name
-        gtk.SpinButton.__init__(self, adj, 0, 0)
-        adj.connect("value-changed", handler)
 
 
 ##############################################################################
@@ -867,7 +900,20 @@ class DimSlider (gtk.HScale):
         gtk.HScale.__init__(self, adj)
         self.set_digits(0)
         self.set_value_pos(gtk.POS_RIGHT)
+        self.handler = None
 
+    def changeDim(self, dim, pt):
+        adj = self.get_adjustment()
+        if self.handler:
+            adj.handler_block(self.handler)
+        self.set_range(0, dim.size-1)
+        adj.upper = dim.size-1
+        adj.set_value(pt)
+        adj.dim = dim
+        if self.handler:
+            adj.handler_unblock(self.handler)
+        
+    
 
 ##############################################################################
 class ContrastSlider (gtk.HScale):
@@ -886,20 +932,6 @@ class ControlPanel (gtk.Frame):
         gtk.Frame.__init__(self)
         main_vbox = gtk.VBox()
         main_vbox.set_border_width(2)
-
-        # spinner for row dimension
-        #spinner_box = gtk.HBox()
-        self.row_spinner = \
-          DimSpinner("row", len(shape)-2, 0, len(shape)-2, self.spinnerHandler)
-        #spinner_box.add(gtk.Label("Row:"))
-        #spinner_box.add(self.row_spinner)
-
-        # spinner for column dimension
-        self.col_spinner = \
-          DimSpinner("col", len(shape)-1, 1, len(shape)-1, self.spinnerHandler)
-        #spinner_box.add(gtk.Label("Col:"))
-        #spinner_box.add(self.col_spinner)
-        #main_vbox.add(spinner_box)
 
         # radio buttons for different aspects of complex data
         xform_map = {
@@ -956,25 +988,21 @@ class ControlPanel (gtk.Frame):
         for dim_num, (dim_size, dim_name) in\
           enumerate(zip(dim_sizes, dim_names)):
             self.dimensions.append( Dimension(dim_num, dim_size, dim_name) )
+        # initialize everything with native slicing, this may change later
         self.slice_dims = (self.dimensions[-2].index, self.dimensions[-1].index)
+        self.slicing = range(len(self.dimensions))
 
     #-------------------------------------------------------------------------
-    def connect(self,
-        spinner_handler, radio_handler, slider_handler, contrast_handler):
+    def connect(self, radio_handler, slider_handler, contrast_handler):
         "Connect control elements to the given handler functions."
-
-        # connect slice orientation spinners
-        self.row_spinner.get_adjustment().connect(
-          "value-changed", spinner_handler)
-        self.col_spinner.get_adjustment().connect(
-          "value-changed", spinner_handler)
 
         # connect radio buttons
         for r in self.radios: r.connect("toggled", radio_handler, r.transform)
 
         # connect slice position sliders
         for s in self.sliders:
-            s.get_adjustment().connect("value_changed", slider_handler)
+            id = s.get_adjustment().connect("value_changed", slider_handler)
+            s.handler = id
 
         # connect contrast slider
         self.contrast_slider.get_adjustment().connect(
@@ -986,50 +1014,62 @@ class ControlPanel (gtk.Frame):
 
     #-------------------------------------------------------------------------
     def getDimPosition(self, dnum):
-        return int(self.sliders[dnum].get_adjustment().value)
+        dim_slider = self.slicing[dnum]
+        return int(self.sliders[dim_slider].get_adjustment().value)
 
     #-------------------------------------------------------------------------
     def setDimPosition(self, dnum, index):
-        return self.sliders[dnum].get_adjustment().set_value(int(index))
+        dim_slider = self.slicing[dnum]
+        return self.sliders[dim_slider].get_adjustment().set_value(int(index))
 
     #-------------------------------------------------------------------------
-    def getRowIndex(self): return self.getDimPosition(self.slice_dims[0])
+    def getRowIndex(self): return self.getDimPosition(self.slice_dims[-2])
 
     #-------------------------------------------------------------------------
-    def getColIndex(self): return self.getDimPosition(self.slice_dims[1])
+    def getColIndex(self): return self.getDimPosition(self.slice_dims[-1])
 
     #------------------------------------------------------------------------- 
-    def setRowIndex(self, index): self.setDimPosition(self.slice_dims[0],index)
+    def setRowIndex(self, index): self.setDimPosition(self.slice_dims[-2],index)
 
     #------------------------------------------------------------------------- 
-    def setColIndex(self, index): self.setDimPosition(self.slice_dims[1],index)
+    def setColIndex(self, index): self.setDimPosition(self.slice_dims[-1],index)
 
     #------------------------------------------------------------------------- 
-    def getRowDim(self): return self.dimensions[self.slice_dims[0]]
+    def getRowDim(self): return self.dimensions[self.slice_dims[-2]]
 
     #------------------------------------------------------------------------- 
-    def getColDim(self): return self.dimensions[self.slice_dims[1]]
+    def getColDim(self): return self.dimensions[self.slice_dims[-1]]
 
+    #-------------------------------------------------------------------------
+    def ResetDims(self, dim_order):
+        # tasks:
+        # assign new dim references to each slider (except 0th if tdim)
+        # identify new transverse slicing directions (rowdim, coldim)
+        #
+        # define new slice_dims according to new slice plane
+        # reset ranges set_range(min, max) for the reordered sliders
+        # set current values set_value(p) of reordered sliders
+        for n, slider in enumerate(self.sliders[-3:]):
+            new_dim = self.dimensions[dim_order[n]]
+            if n:
+                initial_value = new_dim.size/2
+            else:
+                initial_value = 0
+            slider.changeDim(new_dim, initial_value)
+
+        self.slice_dims = (self.dimensions[dim_order[-2]].index,
+                           self.dimensions[dim_order[-1]].index)
+        if len(self.dimensions) > 3:
+            offset = 1
+        else:
+            offset = 0
+        self.slicing = [dim_order.index(n)+offset for n in range(-3,0,1)]
+        if offset: self.slicing = [0] + self.slicing
     #-------------------------------------------------------------------------
     def getIndexSlices(self):
         return tuple([
-          dim.index in self.slice_dims and\
-            slice(0, dim.size) or\
-            self.getDimPosition(dim.index)
-          for dim in self.dimensions])
-
-    #-------------------------------------------------------------------------
-    def spinnerHandler(self, adj):
-        newval = int(adj.value)
-        row_adj = self.row_spinner.get_adjustment()
-        col_adj = self.col_spinner.get_adjustment()
-
-        if adj.name == "row" and newval >= int(col_adj.value):
-            col_adj.set_value(newval+1)
-        if adj.name == "col" and newval <= int(row_adj.value):
-            row_adj.set_value(newval-1)
-
-        self.slice_dims = (int(row_adj.value), int(col_adj.value))
+            dim.index in self.slice_dims and slice(None) or \
+            self.getDimPosition(dim.index) for dim in self.dimensions])
 
 
 ##############################################################################
@@ -1140,8 +1180,8 @@ class SlicePlot (FigureCanvas):
         else: x = None
         if event.ydata is not None:y = int(event.ydata)
         else: y = None
-        if x < 0 or x >= self.data.shape[0]: x = None
-        if y < 0 or y >= self.data.shape[1]: y = None
+        if x < 0 or x >= self.data.shape[1]: x = None
+        if y < 0 or y >= self.data.shape[0]: y = None
         return (y,x)
 
     #-------------------------------------------------------------------------
@@ -1246,8 +1286,10 @@ class OverLay (object):
         self.interpolation = interpolation or self.interpolation
         ax = self.sliceplot.getAxes()
         extent = self.sliceplot.getImage().get_extent()
+        print extent
         if self.sliceplot.getImage(num=1) is None:
             ax.imshow(data, extent=extent, origin="lower")
+
 ##         elif norm != self.norm:
 ##             self.sliceplot.setImage(AxesImage(ax, interpolation=interpolation,
 ##                                               cmap=cmap,alpha=alpha,norm=norm,

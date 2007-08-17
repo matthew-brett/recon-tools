@@ -4,6 +4,7 @@ from optparse import OptionParser, Option
 from recon.tools import ConsoleTool
 from recon.imageio import readImage
 from recon.operations.ViewImage import ViewImage
+from recon.operations.ViewOrtho import ViewOrtho
 
 ##############################################################################
 class ViewImageTool (ConsoleTool):
@@ -24,11 +25,14 @@ class ViewImageTool (ConsoleTool):
         OptionParser.__init__(self, *args, **kwargs)
         self.add_options(self.options)
     
-    def run(self):
+    def run(self, plotter="slice"):
         opts, args = self.parse_args()
         if not args:
             self.print_help()
             sys.exit(0)
         filetype = opts.file_format
         image = readImage(args[0], filetype)
-        ViewImage(title=args[0]).run(image)
+        if plotter is "slice":
+            ViewImage(title=args[0]).run(image)
+        else:
+            ViewOrtho(title=args[0]).run(image)

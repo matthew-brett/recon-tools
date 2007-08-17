@@ -1,4 +1,4 @@
-from sliceview import sliceview
+from recon.visualization.sliceview import sliceview
 from recon.operations import Operation, Parameter
 
 ##############################################################################
@@ -14,4 +14,4 @@ class ViewImage (Operation):
     def run(self, image):
         dimnames = (image.tdim and ("Time Point",) or ()) + \
                    ("Slice", "Row", "Column",)
-        sliceview(image[:], dimnames, title=self.title)
+        sliceview(image, dimnames, title=self.title)

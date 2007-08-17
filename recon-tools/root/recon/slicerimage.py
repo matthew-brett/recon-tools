@@ -4,6 +4,7 @@ from recon.analyze import AnalyzeImage
 from recon.util import reverse
 import numpy as N
 
+##############################################################################
 class SlicerImage (ReconImage):
     """
     A wrapper of any ReconImage that provides slicing access and vox<->zyx
@@ -12,9 +13,9 @@ class SlicerImage (ReconImage):
 
     def __init__(self, image=None):
         if not image:
-            image = ReconImage(N.ones((4,4,4)), 1, 1, 1, 0)
+            image = ReconImage(N.ones((4,4,4)), 1, 1, 1, 1)
         if not isinstance(image, ReconImage):
-            raise ValueError("image must be a type of ReconImage")
+            image = ReconImage(N.asarray(image), 1, 1, 1, 1)
         for item in image.__dict__.items():
             self.__dict__[item[0]] = item[1]
 
@@ -45,9 +46,10 @@ class SlicerImage (ReconImage):
             # xyz = N.dot(xform, dr*r - r0_a)
             # .... Then r0_n = -N.dot(xform, r0_a)
             self.r0 = -N.dot(self.xform, self.r0)
-        self.is_cplx = self.data.dtype.kind is 'c'
+        self.prefilter = None
         self.vox_coords = self.zyx2vox([0,0,0])
 
+    #-------------------------------------------------------------------------
     def zyx_coords(self, vox_coords=None):
         if vox_coords is not None:
             vox_coords = N.asarray(vox_coords)
@@ -59,21 +61,30 @@ class SlicerImage (ReconImage):
         dr = self.dr[slices]
         r0 = self.r0[slices]
         return N.dot(self.xform, vox_coords*dr) + r0
-
+    #-------------------------------------------------------------------------
     def zyx2vox(self, zyx):
         zyx = N.asarray(zyx)
         ixform = N.linalg.inv(self.xform)
         r_img = N.dot(ixform, zyx - self.r0)
         return N.round(r_img/self.dr)
-        
+    #-------------------------------------------------------------------------
     def slicing(self):
         return [self.ax, self.cor, self.sag]
-
+    #-------------------------------------------------------------------------
+    def transverse_slicing(self, slice_idx):
+        (ax, cor, sag) = self.slicing()
+        x,y = {
+            ax: (-1, -2), # x, y
+            cor: (-1, -3), # x, z
+            sag: (-2, -3), # y, z
+        }.get(slice_idx)
+        return x,y
+    #-------------------------------------------------------------------------
     def extents(self):
         return map(lambda x: [min(*x),max(*x)],
                    zip(self.zyx_coords(vox_coords=(0,0,0)),
                        self.zyx_coords(vox_coords=self.shape)))
-
+    #-------------------------------------------------------------------------
     def plane_xform(self, slice_idx):
         """
         Retrieve the submatrix that maps the plane selected by slice_idx
@@ -89,7 +100,7 @@ class SlicerImage (ReconImage):
         # do some numpy "fancy" slicing to find the sub-matrix
         Msub = M[row_idx][:,col_idx]
         return Msub
-        
+    #-------------------------------------------------------------------------
     def is_xpose(self, slice_idx):
         """
         Based on the plane transform, see if the data that is sliced in
@@ -99,13 +110,7 @@ class SlicerImage (ReconImage):
         Msub = self.plane_xform(slice_idx)
         # if abs(Msub) is not an identity xform, then slice needs xpose
         return not Msub[0,0]
-
-    def __getitem__(self, slicer):
-        if self.is_cplx:
-            return abs(super(SlicerImage, self).__getitem__(slicer))
-        else:
-            return super(SlicerImage, self).__getitem__(slicer)
-
+    #-------------------------------------------------------------------------
     def data_xform(self, slice_idx, zyx_coords):
         """
         Given the a sliceplots slicing index and the current vox position,
@@ -116,13 +121,16 @@ class SlicerImage (ReconImage):
         slicer = tuple(slicer)
         Msub = self.plane_xform(slice_idx)
         xform = compose_xform(Msub)
-        if self.is_cplx:
-            return xform(abs(self[slicer]))
+        return xform(self[slicer])
+    #-------------------------------------------------------------------------
+    def __getitem__(self, slicer):
+        if self.prefilter:
+            return self.prefilter(super(SlicerImage, self).__getitem__(slicer))
         else:
-            return xform(self[slicer])
-
-def compose_xform(M):
-    xform = lambda x: x
+            return super(SlicerImage, self).__getitem__(slicer)
+    
+def compose_xform(M, prefilter=None):
+    xform = prefilter or (lambda x: x)
     if not M[0,0]:
         xform = lambda x, g=xform: N.swapaxes(g(x), 0, 1)
     if M[0,0] < 0 or M[0,1] < 0:

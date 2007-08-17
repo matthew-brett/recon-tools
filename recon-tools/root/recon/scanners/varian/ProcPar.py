@@ -139,7 +139,8 @@ class ProcParImageMixin (object):
     n_fe_true = CachedReadOnlyProperty(lambda self: self.n_fe/2, "")
 
     isepi = CachedReadOnlyProperty(
-        lambda self: self.pulse_sequence.find("epidw") != -1, "")
+        lambda self: self.pulse_sequence.find("epidw") != -1 or \
+                     self.pulse_sequence.find("testbrs") != -1, "")
 
     isravi = CachedReadOnlyProperty(
         lambda self: not self.isepi and \

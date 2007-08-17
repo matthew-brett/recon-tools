@@ -12,9 +12,10 @@ from matplotlib.backends.backend_gtkagg import \
 import matplotlib
 
 from recon.imageio import readImage
+from recon.slicerimage import SlicerImage, compose_xform
+from recon.visualization import *
 from recon import util
 from odict import odict
-from recon.slicerimage import SlicerImage, compose_xform
 
 ui_info = \
 '''<ui>
@@ -28,6 +29,8 @@ ui_info = \
       <menuitem action='Load Overlay'/>
       <menuitem action='Unload Overlay'/>
       <menuitem action='Overlay Adjustment Toolbox'/>
+      <separator/>
+      <menuitem action='Plot In Sliceview'/>
     </menu>
   </menubar>
 </ui>'''
@@ -60,9 +63,10 @@ cmap_lookup = odict((
 interp_types = ['nearest', 'bilinear', 'sinc']
 interp_lookup = odict([(num,name) for num,name in enumerate(interp_types)])
 
+##############################################################################
 class spmclone (gtk.Window):
     
-    def __init__(self, image):
+    def __init__(self, image, title="spmclone", parent=None):
         gtk.Window.__init__(self)
         children = self.get_children()
         if children:
@@ -73,7 +77,8 @@ class spmclone (gtk.Window):
         self.image = len(image.shape) > 3 \
                      and SlicerImage(image.subImage(0)) \
                      or SlicerImage(image)
-        
+        if iscomplex(self.image[:]):
+            self.image.prefilter = abs_xform
 
         self.overlay_img = None
         self.zoom = 0
@@ -127,9 +132,11 @@ class spmclone (gtk.Window):
         table.attach(self.displaybox, 1, 2, 3, 4)
         self.displaybox.set_size_request(300,300)
         self.statusbox = DisplayStatus(tuple(self.image.vox_coords.tolist()),
-                                       tuple(self.image.zyx_coords().tolist()))
+                                       tuple(self.image.zyx_coords().tolist()),
+                                       self.image[tuple(self.image.vox_coords)])
         table.attach(self.statusbox, 0, 1, 3, 4)
         self.statusbox.set_size_request(300,300)
+        self.connect("configure_event", self.resize_handler)
         #table.set_row_spacing(1,25)
         # heights = 800
         # 250 plot 1
@@ -139,15 +146,18 @@ class spmclone (gtk.Window):
         self.connect_crosshair_id = []
         self.connectCrosshairEvents()
         
-        #gtk.Window.__init__(self)
-        self.connect("destroy", lambda x: gtk.main_quit())
+        try:
+            self.set_screen(parent.get_screen())
+        except AttributeError:
+            self.connect("destroy", lambda x: gtk.main_quit())
         self.set_data("ui-manager", merge)
         self.add_accel_group(merge.get_accel_group())
         self.set_default_size(600,730)
         self.set_border_width(3)
+        self.set_title(title)
         self.add(table)        
         self.show_all()        
-        self.setUpAxesSize()        
+        #self.setUpAxesSize()        
         P.show()
 
     #-------------------------------------------------------------------------
@@ -200,9 +210,11 @@ class spmclone (gtk.Window):
         # assume that image resolution is isotropic in dim2 and dim1
         # (not necessarily in dim0)
         # want the isotropic resolution plot to be 215x215 pixels
-        xy_imgsize = 215.
+        #xy_imgsize = 215. # this should be more like 85% of the dim0 sliceplot
         ref_size = self.dimlengths[-1]
         slicing = self.image.slicing()
+        idx = slicing.index(0)
+        xy_imgsize = .85 * min(*self.sliceplots[idx].get_width_height())
         for sliceplot in self.sliceplots:
             dims_copy = self.dimlengths.tolist()
             ax = sliceplot.getAxes()
@@ -289,7 +301,7 @@ class spmclone (gtk.Window):
                      trans_sliceplots[1].slice_idx)
         
         # where do left-right and up-down cut across in zyx space?
-        trans_ax = self.xy(sliceplot.slice_idx)
+        trans_ax = self.image.transverse_slicing(sliceplot.slice_idx)
         zyx_clicked = self.image.zyx_coords()
         zyx_clicked[trans_ax[0]] = lr
         zyx_clicked[trans_ax[1]] = ud
@@ -320,6 +332,8 @@ class spmclone (gtk.Window):
         # make text to update the statusbox label's
         self.statusbox.set_vox_text(self.image.vox_coords[::-1].tolist())
         self.statusbox.set_zyx_text(self.image.zyx_coords()[::-1].tolist())
+        point = tuple(self.image.vox_coords)
+        self.statusbox.set_intensity_text(self.image[point])
 
     #-------------------------------------------------------------------------
     def rediculous_handler(self, cbox):
@@ -363,13 +377,16 @@ class spmclone (gtk.Window):
             zyx_lim = self.image.extents()
             
         for plot in self.sliceplots:
-            x,y = self.xy(plot.slice_idx)
+            x,y = self.image.transverse_slicing(plot.slice_idx)
             plot.setXYlim(zyx_lim[x], zyx_lim[y])
             plot.setCrosshairs(r_center[x], r_center[y])
             
         self.updateSlices(self.image.zyx_coords())
         self.setUpAxesSize()
-
+    #-------------------------------------------------------------------------
+    def resize_handler(self, window, event):
+        #print "got resize signal"
+        self.setUpAxesSize()
     #-------------------------------------------------------------------------
     def initoverlay(self, action):
         image_filter = gtk.FileFilter()
@@ -474,7 +491,10 @@ class spmclone (gtk.Window):
         fname = dialog.get_filename()
         dialog.destroy()
         return fname
-
+    #-------------------------------------------------------------------------
+    def launch_sliceview(self, action):
+        from recon.visualization.sliceview import sliceview
+        sliceview(self.image, parent=self)
     #-------------------------------------------------------------------------
     def _create_action_group(self):
         entries = (
@@ -493,6 +513,9 @@ class spmclone (gtk.Window):
             ( "Overlay Adjustment Toolbox", None,
               "_Overlay Adjustment Toolbox", "",
               "launch overlay toolbox", self.launch_overlay_toolbox),
+            ( "Plot In Sliceview", None,
+              "_Plot In Sliceview", "", "opens image in sliceview",
+              self.launch_sliceview ),
         )
 
         action_group = gtk.ActionGroup("WindowActions")
@@ -780,7 +803,7 @@ class DisplayInfo (gtk.Frame):
 ##############################################################################
 class DisplayStatus (gtk.Frame):
 
-    def __init__(self, vox_coords, zyx_coords):
+    def __init__(self, vox_coords, zyx_coords, intensity):
         main_table = gtk.Table(1,2)
         main_table.attach(gtk.Label(""), 0, 1, 1, 2)
 
@@ -789,17 +812,17 @@ class DisplayStatus (gtk.Frame):
         subframe.set_size_request(300,170)
 
         sub_table = gtk.Table(4,2)
-        sub_table.attach(gtk.Label("MEG:"), 0, 1, 0, 1)
-        sub_table.attach(gtk.Label("mm:"), 0, 1, 1, 2)
-        sub_table.attach(gtk.Label("vx:"), 0, 1, 2, 3)
+        sub_table.attach(gtk.Label("mm:"), 0, 1, 0, 1)
+        sub_table.attach(gtk.Label("vx:"), 0, 1, 1, 2)
+        sub_table.attach(gtk.Label("intensity:"), 0, 1, 2, 3)
         sub_table.attach(gtk.Label("MNI:"), 0, 1, 3, 4)
-        self.meg_loc = gtk.Label("??  ?? ??")
         self.zyx_loc = gtk.Label("%2.1f %2.1f %2.1f"%zyx_coords)
         self.vx_loc = gtk.Label("%d %d %d"%vox_coords)
+        self.intensity = gtk.Label("%3.4f"%intensity)
         self.mni_loc = gtk.Label("?? ?? ??")
-        sub_table.attach(self.meg_loc, 1, 2, 0, 1)
-        sub_table.attach(self.zyx_loc, 1, 2, 1, 2)
-        sub_table.attach(self.vx_loc, 1, 2, 2, 3)
+        sub_table.attach(self.zyx_loc, 1, 2, 0, 1)
+        sub_table.attach(self.vx_loc, 1, 2, 1, 2)
+        sub_table.attach(self.intensity, 1, 2, 2, 3)
         sub_table.attach(self.mni_loc, 1, 2, 3, 4)
         subframe.add(sub_table)
 
@@ -815,6 +838,10 @@ class DisplayStatus (gtk.Frame):
     def set_vox_text(self, locs):
         text = "%d %d %d"%tuple(locs)
         self.vx_loc.set_text(text)
+    #-------------------------------------------------------------------------
+    def set_intensity_text(self, val):
+        text = "%3.4f"%val
+        self.intensity.set_text(text)
 
 ##############################################################################
 class OverlayToolWin (gtk.Window):
