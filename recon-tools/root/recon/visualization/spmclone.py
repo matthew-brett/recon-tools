@@ -393,8 +393,8 @@ class spmclone (gtk.Window):
         image_filter.add_pattern("*.hdr")
         image_filter.add_pattern("*.nii")
         image_filter.set_name("Recon Images")
-        fname = self.ask_fname("Choose file to overlay...", action="open",
-                               filter=image_filter)
+        fname = ask_fname("Choose file to overlay...", action="open",
+                          filter=image_filter)
         if not fname:
             return
         try:
@@ -458,8 +458,8 @@ class spmclone (gtk.Window):
         image_filter.add_pattern("*.hdr")
         image_filter.add_pattern("*.nii")
         image_filter.set_name("Recon Images")
-        fname = self.ask_fname("Choose file to overlay...", action="open",
-                               filter=image_filter)
+        fname = ask_fname("Choose file to open...", action="open",
+                          filter=image_filter)
         if not fname:
             return
         try:
@@ -470,28 +470,6 @@ class spmclone (gtk.Window):
         self.__init__(img)
 
     #-------------------------------------------------------------------------
-    def ask_fname(self, prompt, action="save", filter=None):
-        mode = {
-            "save": gtk.FILE_CHOOSER_ACTION_SAVE,
-            "open": gtk.FILE_CHOOSER_ACTION_OPEN,
-            }.get(action)
-        dialog = gtk.FileChooserDialog(
-            title=prompt,
-            action=mode,
-            parent=self,
-            buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
-                     gtk.STOCK_OK,gtk.RESPONSE_OK)
-            )
-        if filter:
-            dialog.add_filter(filter)
-        response = dialog.run()
-        if response == gtk.RESPONSE_CANCEL:
-            dialog.destroy()
-            return
-        fname = dialog.get_filename()
-        dialog.destroy()
-        return fname
-    #-------------------------------------------------------------------------
     def launch_sliceview(self, action):
         from recon.visualization.sliceview import sliceview
         sliceview(self.image, parent=self)
@@ -500,7 +478,7 @@ class spmclone (gtk.Window):
         entries = (
             ( "FileMenu", None, "_File" ),
             ( "Open Image", gtk.STOCK_OPEN, "_Open Image", "<control>O",
-              "Opens and plots a new image", self.load_new_image),
+              "Opens and plots a new image", self.load_new_image ),
             ( "Quit", gtk.STOCK_QUIT,
               "_Quit", "<control>Q",
               "Quits",
@@ -512,7 +490,7 @@ class spmclone (gtk.Window):
               "Unload the overlay", self.killoverlay ),
             ( "Overlay Adjustment Toolbox", None,
               "_Overlay Adjustment Toolbox", "",
-              "launch overlay toolbox", self.launch_overlay_toolbox),
+              "launch overlay toolbox", self.launch_overlay_toolbox ),
             ( "Plot In Sliceview", None,
               "_Plot In Sliceview", "", "opens image in sliceview",
               self.launch_sliceview ),

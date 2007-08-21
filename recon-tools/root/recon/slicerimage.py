@@ -81,9 +81,13 @@ class SlicerImage (ReconImage):
         return x,y
     #-------------------------------------------------------------------------
     def extents(self):
-        return map(lambda x: [min(*x),max(*x)],
-                   zip(self.zyx_coords(vox_coords=(0,0,0)),
-                       self.zyx_coords(vox_coords=self.shape)))
+        return [[min(*x),max(*x)]
+                for x in zip(self.zyx_coords(vox_coords=(0,0,0)),
+                             self.zyx_coords(vox_coords=self.shape))]
+##         return map(lambda x: [min(*x),max(*x)],
+##                    zip(self.zyx_coords(vox_coords=(0,0,0)),
+##                        self.zyx_coords(vox_coords=self.shape)))
+    
     #-------------------------------------------------------------------------
     def plane_xform(self, slice_idx):
         """

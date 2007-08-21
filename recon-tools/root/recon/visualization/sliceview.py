@@ -290,6 +290,14 @@ class sliceview (gtk.Window):
         data_max = self.transform(self.data[:]).max()
         self.rowplot.setDataRange(data_min, data_max)
         self.colplot.setDataRange(data_max, data_min)
+        
+    #-------------------------------------------------------------------------
+    def externalUpdate(self, new_img):
+        print "got external update cue"
+        self.data = SlicerImage(new_img)
+        self.norm = None
+        self.setNorm(contrast=self.contrast)
+        self.updateSlice()
 
     #-------------------------------------------------------------------------
     def radioHandler(self, button, transform):
@@ -370,8 +378,6 @@ class sliceview (gtk.Window):
         #self.ROI = None
         avg = self.getSlice()[y1:y2,x1:x2].mean()
         text = "average in [%d,%d] to [%d,%d]: %2.4f"%(x1,y1,x2-1,y2-1,avg)
-        #ratio = self.getSlice()[y1:y2,x1:x2].mean()/self.getSlice()[y1-32:y2-32,x1:x2].mean()
-        #text = "sig-to-ghost ratio: %2.4f"%ratio
         self.status.setROILabel(text)
 
     #-------------------------------------------------------------------------
@@ -475,34 +481,11 @@ class sliceview (gtk.Window):
                 self.overlay_tools = OverlayToolWin(self.overlay, self)
             else:
                 self.overlay_tools.present()
-            
-    #-------------------------------------------------------------------------
-    def ask_fname(self, prompt, action="save", filter=None):
-        mode = {
-            "save": gtk.FILE_CHOOSER_ACTION_SAVE,
-            "open": gtk.FILE_CHOOSER_ACTION_OPEN,
-            }.get(action)
-        dialog = gtk.FileChooserDialog(
-            title=prompt,
-            action=mode,
-            parent=self,
-            buttons=(gtk.STOCK_CANCEL,gtk.RESPONSE_CANCEL,
-                     gtk.STOCK_OK,gtk.RESPONSE_OK)
-            )
-        if filter:
-            dialog.add_filter(filter)
-        response = dialog.run()
-        if response == gtk.RESPONSE_CANCEL:
-            dialog.destroy()
-            return
-        fname = dialog.get_filename()
-        dialog.destroy()
-        return fname
 
     #-------------------------------------------------------------------------
     def save_png(self, action):
         # save a PNG of the current image and the current scaling
-        fname = self.ask_fname("Save image as...")
+        fname = ask_fname(self, "Save image as...")
         if fname is None:
             return
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
@@ -513,7 +496,7 @@ class sliceview (gtk.Window):
     def save_png_montage(self, action):
         # make a montage PNG, for now make 5 slices to a row
         # make images 128x128 pix
-        fname = self.ask_fname("Save montage as...")
+        fname = ask_fname(self, "Save montage as...")
         if fname is None:
             return
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
@@ -564,8 +547,8 @@ class sliceview (gtk.Window):
         image_filter.add_pattern("*.hdr")
         image_filter.add_pattern("*.nii")
         image_filter.set_name("Recon Images")
-        fname = self.ask_fname("Choose file to overlay...", action="open",
-                               filter=image_filter)
+        fname = ask_fname(self, "Choose file to overlay...", action="open",
+                          filter=image_filter)
         if not fname:
             return
         try:
@@ -618,7 +601,8 @@ class sliceview (gtk.Window):
                 sag: [ax, cor],
             }.get(self.orient_mode)
             #offset = len(self.data.shape)            
-            new_zyx = map(lambda x: x-3, [self.orient_mode] + trans_dims)
+            #new_zyx = map(lambda x: x-3, [self.orient_mode] + trans_dims)
+            new_zyx = [x-3 for x in ([self.orient_mode] + trans_dims)]
             T = self.data.plane_xform(self.orient_mode)
             self.transform = compose_xform(T, prefilter=prefilter)
         else:
@@ -626,6 +610,7 @@ class sliceview (gtk.Window):
             self.transform = prefilter
         self.control_panel.ResetDims(new_zyx)
         self.updateSlice()
+        self.scale_image()
         self.updateRow()
         self.updateCol()
         
@@ -636,23 +621,31 @@ class sliceview (gtk.Window):
 
     #-------------------------------------------------------------------------
     def scale_image(self):
+        im = self.data
         scale = self.image_scale
-        base_img_size = min(self.control_panel.getRowDim().size,
-                            self.control_panel.getColDim().size)
+        dimsizes = N.array([im.zsize, im.ysize, im.xsize]) * \
+                   N.array(im.shape[-3:])
+        r_idx, c_idx = [x-im.ndim
+                        for x in (self.control_panel.getRowDim().index,
+                                  self.control_panel.getColDim().index)]
+        r = dimsizes[r_idx] / dimsizes[c_idx]
+        px, py = r > 1 and (1/r, 1.0) or (1.0, r)
+
+        base_img_size = (im.shape[r_idx], im.shape[c_idx])
         canvas_size_x, canvas_size_y = self.sliceplot.get_size_request()
         canvas_size_real_x,canvas_size_real_y=self.sliceplot.get_width_height()
-        new_img_size = int(base_img_size*scale)
+        new_img_size = max([int(scale*x) for x in base_img_size])
         # If the new image requires a larger canvas, resize it.
         # Otherwise, make sure the canvas is at the default size
-        if canvas_size_x < new_img_size+50:
-            canvas_size_real_x = canvas_size_real_y = \
-                        canvas_size_x = canvas_size_y = int(new_img_size + 50)
+        if max(canvas_size_x,canvas_size_y) < new_img_size + 50:
+            canvas_size_real_y = canvas_size_real_x = \
+                    canvas_size_y = canvas_size_x = new_img_size + 50
         elif max(canvas_size_x,canvas_size_y) > 400 and new_img_size < 350:
             canvas_size_x = canvas_size_y = 350
             canvas_size_real_x = canvas_size_real_y = 396
         ax = self.sliceplot.getAxes()
-        w = new_img_size/float(canvas_size_real_x)
-        h = new_img_size/float(canvas_size_real_y)
+        w = px*new_img_size/canvas_size_real_x
+        h = py*new_img_size/canvas_size_real_y
         l = 15./canvas_size_real_x
         b = 1.0 - (new_img_size + 25.)/canvas_size_real_y
         ax.set_position([l,b,w,h])
@@ -667,19 +660,28 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def auto_scale_image(self):
         # try to find some scale that gets ~ 256x256 pixels
-        base_img_size = min(self.control_panel.getRowDim().size,
-                            self.control_panel.getColDim().size)
-        p = round(256./base_img_size)
-        new_img_size =  p*base_img_size
-        canvas_size = 350
-        canvas_size_real = 396
-        ax = self.sliceplot.getAxes()
-        w = h = new_img_size/float(canvas_size_real)
-        l = 15./canvas_size
-        b = 1.0 - (new_img_size + 25.)/canvas_size_real
-        ax.set_position([l,b,w,h])
-        self.sliceplot.set_size_request(canvas_size,canvas_size)
+        im = self.data
+        r_idx, c_idx = (self.control_panel.getRowDim().index,
+                        self.control_panel.getColDim().index)
+        base_img_size = (im.shape[r_idx], im.shape[c_idx])
+
+        p = round(256./max(*base_img_size))
         self.image_scale = p
+        self.scale_image()
+        
+##         r = dimsizes[r_idx] / dimsizes[c_idx]
+##         px, py = r > 1 and (1/r, 1.0) or (1.0, r)
+##         new_img_size =  max([int(p*x) for x in base_img_size])
+##         canvas_size = 350
+##         canvas_size_real = 396
+##         ax = self.sliceplot.getAxes()
+##         w = px*new_img_size/canvas_size_real
+##         h = py*new_img_size/canvas_size_real
+##         l = 15./canvas_size
+##         b = 1.0 - (new_img_size + 25.)/canvas_size_real
+##         ax.set_position([l,b,w,h])
+##         self.sliceplot.set_size_request(canvas_size,canvas_size)
+##         self.image_scale = p
 
     #-------------------------------------------------------------------------
     def _create_action_group(self, default_scale):
