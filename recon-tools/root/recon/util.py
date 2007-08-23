@@ -810,8 +810,10 @@ class Quaternion:
         R = N.empty((3,3), N.float64)
         b,c,d = tuple(self.Q)
         a = 1.0 - (b*b + c*c + d*d)
-        if (a < 1.e-7):
+        if (a < 1.e-5):
             a = 1.0 / N.power(b*b+c*c+d*d, 0.5)
+            if (a - N.floor(a)) < 1.e-5:
+                a = N.floor(a)
             b *= a
             c *= a
             d *= a
@@ -827,7 +829,7 @@ class Quaternion:
         R[2,0] = 2.*(b*d - a*c)
         R[2,1] = 2.*(c*d + a*b)
         R[2,2] = (a*a + d*d - c*c - b*b)*self.qfac
-        N.putmask(R, abs(R) < 1e-5, 0)
+        R = N.where(R - N.round(R) < 1e-5, N.round(R), R)
         return R
     
     def mult(self, quat):

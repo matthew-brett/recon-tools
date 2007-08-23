@@ -79,6 +79,8 @@ ui_info = \
       <menuitem action='Contour Plot'/>
       <separator/>
       <menuitem action='View Ortho Plots'/>
+      <separator/>
+      <menuitem action='Run Recon GUI'/>
     </menu>
     <menu action='OverlayMenu'>
       <menuitem action='Load Overlay'/>
@@ -140,8 +142,12 @@ class sliceview (gtk.Window):
                  cmap=P.cm.bone, parent=None):
         if isinstance(data, ReconImage):
             self.data = SlicerImage(data)
+            # super dumb way of storing the image object with its original
+            # class identification
+            self.img_obj = data
         else:
             self.data = SlicerImage(N.asarray(data), 1, 1, 1, 1)
+            self.img_obj = None
         self.overlay_data = None
         self.orient_mode = -1
         # if data is complex, show the magnitude by default
@@ -292,11 +298,13 @@ class sliceview (gtk.Window):
         self.colplot.setDataRange(data_max, data_min)
         
     #-------------------------------------------------------------------------
+    ### THIS IS HACKY!!
     def externalUpdate(self, new_img):
-        print "got external update cue"
+        self.img_obj = new_img
         self.data = SlicerImage(new_img)
         self.norm = None
         self.setNorm(contrast=self.contrast)
+        self.updateDataRange()
         self.updateSlice()
 
     #-------------------------------------------------------------------------
@@ -500,7 +508,15 @@ class sliceview (gtk.Window):
         if fname is None:
             return
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
-        nslice = self.data.shape[-3]
+        dimsizes = N.array([self.data.zsize, self.data.ysize, self.data.xsize]) * \
+                   N.array(im.shape[-3:])
+        ridx,cidx = (self.control_panel.getRowDim().index,
+                     self.control_panel.getColDim().index)
+        shape = list(self.data.shape)
+        rdim,cdim = shape[ridx],shape[cidx]
+        shape.remove(rdim)
+        shape.remove(cdim)
+        nslice = shape[-1]
         cmap = self.sliceplot.getImage().cmap
         sdim = 128
         col_buf = 20
@@ -518,7 +534,7 @@ class sliceview (gtk.Window):
         figsize = (_wd/figdpi, _ht/figdpi)
         fig = P.Figure(figsize=figsize, dpi=figdpi)
         fig.set_canvas(FigureCanvas(fig))
-        plane_slice = list(self.control_panel.getIndexSlices())
+        plane_slice = self.control_panel.getIndexSlices()
         for row in range(nrow):
             for col in range(ncol):
                 s = col + row*ncol
@@ -529,7 +545,7 @@ class sliceview (gtk.Window):
                 Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
                 Xpct, Ypct = (sdim/_wd, sdim/_ht)
                 ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
-                ax.imshow(P.squeeze(self.transform(self.data[plane_slice])),
+                ax.imshow(self.transform(self.data[plane_slice]),
                           cmap=cmap,
                           origin='lower',
                           interpolation='nearest')
@@ -609,8 +625,9 @@ class sliceview (gtk.Window):
             new_zyx = [-3, -2, -1]
             self.transform = prefilter
         self.control_panel.ResetDims(new_zyx)
-        self.updateSlice()
         self.scale_image()
+        # might have to update the sliceplot figure's figsize
+        self.updateSlice()
         self.updateRow()
         self.updateCol()
         
@@ -620,34 +637,38 @@ class sliceview (gtk.Window):
         self.scale_image()
 
     #-------------------------------------------------------------------------
-    def scale_image(self):
+    def slice_proportions(self):
         im = self.data
-        scale = self.image_scale
         dimsizes = N.array([im.zsize, im.ysize, im.xsize]) * \
                    N.array(im.shape[-3:])
         r_idx, c_idx = [x-im.ndim
                         for x in (self.control_panel.getRowDim().index,
                                   self.control_panel.getColDim().index)]
         r = dimsizes[r_idx] / dimsizes[c_idx]
-        px, py = r > 1 and (1/r, 1.0) or (1.0, r)
+        base_size = float(max(im.shape[r_idx], im.shape[c_idx]))
+        px, py = r > 1 and (base_size/r, base_size) or (base_size, r*base_size)
+        return (px, py)
 
-        base_img_size = (im.shape[r_idx], im.shape[c_idx])
+    #-------------------------------------------------------------------------
+    def scale_image(self):
+        px, py = self.slice_proportions()
+        scale = self.image_scale
         canvas_size_x, canvas_size_y = self.sliceplot.get_size_request()
         canvas_size_real_x,canvas_size_real_y=self.sliceplot.get_width_height()
-        new_img_size = max([int(scale*x) for x in base_img_size])
+        new_img_size = (scale*px, scale*py)
         # If the new image requires a larger canvas, resize it.
         # Otherwise, make sure the canvas is at the default size
-        if max(canvas_size_x,canvas_size_y) < new_img_size + 50:
+        if max(canvas_size_x,canvas_size_y) < max(*new_img_size) + 50:
             canvas_size_real_y = canvas_size_real_x = \
-                    canvas_size_y = canvas_size_x = new_img_size + 50
-        elif max(canvas_size_x,canvas_size_y) > 400 and new_img_size < 350:
+                    canvas_size_y = canvas_size_x = max(*new_img_size) + 50
+        elif max(canvas_size_x,canvas_size_y) > 400 and max(*new_img_size)<350:
             canvas_size_x = canvas_size_y = 350
             canvas_size_real_x = canvas_size_real_y = 396
         ax = self.sliceplot.getAxes()
-        w = px*new_img_size/canvas_size_real_x
-        h = py*new_img_size/canvas_size_real_y
+        w = new_img_size[0]/canvas_size_real_x
+        h = new_img_size[1]/canvas_size_real_y
         l = 15./canvas_size_real_x
-        b = 1.0 - (new_img_size + 25.)/canvas_size_real_y
+        b = 1.0 - (new_img_size[1] + 25.)/canvas_size_real_y
         ax.set_position([l,b,w,h])
         self.sliceplot.set_size_request(canvas_size_x,canvas_size_y)
         self.sliceplot.draw()
@@ -656,14 +677,15 @@ class sliceview (gtk.Window):
     def launch_ortho_plots(self, action):
         from recon.visualization.spmclone import spmclone
         spmclone(self.data, parent=self)
+    #-------------------------------------------------------------------------
+    def launch_recon_gui(self, action):
+        from recon.visualization.recon_gui import recon_gui
+        recon_gui(image=self.img_obj, parent=self)
 
     #-------------------------------------------------------------------------
     def auto_scale_image(self):
         # try to find some scale that gets ~ 256x256 pixels
-        im = self.data
-        r_idx, c_idx = (self.control_panel.getRowDim().index,
-                        self.control_panel.getColDim().index)
-        base_img_size = (im.shape[r_idx], im.shape[c_idx])
+        base_img_size = self.slice_proportions()
 
         p = round(256./max(*base_img_size))
         self.image_scale = p
@@ -712,6 +734,9 @@ class sliceview (gtk.Window):
               "_View Ortho Plots", None,
               "Opens orthogonal plot viewer",
               self.launch_ortho_plots ),
+            ( "Run Recon GUI", None,
+              "_Run Recon GUI", None,
+              "", self.launch_recon_gui ),
             ( "OverlayMenu", None, "_Overlay" ),
             ( "Load Overlay", None,
               "_Load Overlay", "",
@@ -759,6 +784,8 @@ class sliceview (gtk.Window):
         action_group.add_radio_actions(interpo_toggles, 0,
                                        self.interpo_handler)
         action_group.add_radio_actions(orient_toggles, -1, self.orient_handler)
+        if not self.img_obj:
+            action_group.get_action("Run Recon GUI").set_sensitive(False)
         return action_group
 
 ##############################################################################

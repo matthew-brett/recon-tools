@@ -31,6 +31,8 @@ ui_info = \
       <menuitem action='Overlay Adjustment Toolbox'/>
       <separator/>
       <menuitem action='Plot In Sliceview'/>
+      <separator/>
+      <menuitem action='Run Recon GUI'/>
     </menu>
   </menubar>
 </ui>'''
@@ -74,6 +76,9 @@ class spmclone (gtk.Window):
             self.hide_all()
         table = gtk.Table(4, 2)
 
+        # super dumb way of storing the image object with its original
+        # class identification
+        self.img_obj = image
         self.image = len(image.shape) > 3 \
                      and SlicerImage(image.subImage(0)) \
                      or SlicerImage(image)
@@ -85,7 +90,6 @@ class spmclone (gtk.Window):
         self.slice_patches = None
         self.setNorm()
         self.dimlengths = self.image.dr * N.array(self.image.shape)
-        asdf = 0
         zyx_lim = self.image.extents()
         # I'm using [ax,cor,sag] such that this list informs each
         # sliceplot what dimension it slices in the image array
@@ -204,6 +208,20 @@ class spmclone (gtk.Window):
             ud,lr = zyx
             sliceplot.setCrosshairs(lr,ud)
 
+    #-------------------------------------------------------------------------
+    def externalUpdate(self, new_img):
+        old_vox = self.image.vox_coords
+        if len(new_img.shape) > 3:
+            self.image = SlicerImage(new_img.subImage(0))
+        else:
+            self.image = SlicerImage(new_img)
+        self.image.vox_coords = old_vox
+        if iscomplex(self.image[:]):
+            self.image.prefilter = abs_xform
+        self.setNorm()
+        self.setUpAxesSize()
+        self.updateSlices(self.image.zyx_coords())
+        
     #-------------------------------------------------------------------------
     def setUpAxesSize(self):
         "Scale the axes appropriately for the image dimensions"
@@ -393,7 +411,7 @@ class spmclone (gtk.Window):
         image_filter.add_pattern("*.hdr")
         image_filter.add_pattern("*.nii")
         image_filter.set_name("Recon Images")
-        fname = ask_fname("Choose file to overlay...", action="open",
+        fname = ask_fname(self, "Choose file to overlay...", action="open",
                           filter=image_filter)
         if not fname:
             return
@@ -458,7 +476,7 @@ class spmclone (gtk.Window):
         image_filter.add_pattern("*.hdr")
         image_filter.add_pattern("*.nii")
         image_filter.set_name("Recon Images")
-        fname = ask_fname("Choose file to open...", action="open",
+        fname = ask_fname(self, "Choose file to open...", action="open",
                           filter=image_filter)
         if not fname:
             return
@@ -473,6 +491,11 @@ class spmclone (gtk.Window):
     def launch_sliceview(self, action):
         from recon.visualization.sliceview import sliceview
         sliceview(self.image, parent=self)
+    #-------------------------------------------------------------------------
+    def launch_recon_gui(self, action):
+        from recon.visualization.recon_gui import recon_gui
+        recon_gui(image=self.img_obj, parent=self)
+
     #-------------------------------------------------------------------------
     def _create_action_group(self):
         entries = (
@@ -494,6 +517,8 @@ class spmclone (gtk.Window):
             ( "Plot In Sliceview", None,
               "_Plot In Sliceview", "", "opens image in sliceview",
               self.launch_sliceview ),
+            ( "Run Recon GUI", None, "_Run Recon GUI", "", "opens gui",
+              self.launch_recon_gui ),
         )
 
         action_group = gtk.ActionGroup("WindowActions")

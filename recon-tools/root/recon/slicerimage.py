@@ -45,7 +45,9 @@ class SlicerImage (ReconImage):
             # the Analyze transform is:
             # xyz = N.dot(xform, dr*r - r0_a)
             # .... Then r0_n = -N.dot(xform, r0_a)
+            # (this should work for FidImages also)
             self.r0 = -N.dot(self.xform, self.r0)
+            
         self.prefilter = None
         self.vox_coords = self.zyx2vox([0,0,0])
 
@@ -84,9 +86,6 @@ class SlicerImage (ReconImage):
         return [[min(*x),max(*x)]
                 for x in zip(self.zyx_coords(vox_coords=(0,0,0)),
                              self.zyx_coords(vox_coords=self.shape))]
-##         return map(lambda x: [min(*x),max(*x)],
-##                    zip(self.zyx_coords(vox_coords=(0,0,0)),
-##                        self.zyx_coords(vox_coords=self.shape)))
     
     #-------------------------------------------------------------------------
     def plane_xform(self, slice_idx):
@@ -132,7 +131,8 @@ class SlicerImage (ReconImage):
             return self.prefilter(super(SlicerImage, self).__getitem__(slicer))
         else:
             return super(SlicerImage, self).__getitem__(slicer)
-    
+
+
 def compose_xform(M, prefilter=None):
     xform = prefilter or (lambda x: x)
     if not M[0,0]:

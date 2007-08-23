@@ -1,6 +1,6 @@
 import gtk
 import gobject
-import pylab as P
+#import pylab as P
 
 from recon.operations import OperationManager, Parameter, Operation
 from recon import imageio
@@ -44,7 +44,7 @@ class recon_gui (gtk.Window):
         self.pvals_vbox = gtk.VBox()
         self.op_man = OperationManager()
         self.op_names = self.op_man.getOperationNames()
-        self.op_names.remove("ReadImage")
+        self.cookOps()
         self.image = image
         # need to copy the image somehow?
         self.first_image = cheap_copy(self.image)
@@ -57,11 +57,13 @@ class recon_gui (gtk.Window):
         self.op_select.connect("changed", self.op_changed)
 
         self.run_op = gtk.Button(label="Run")
+        #self.run_op.connect("clicked", self.hide_buttons)
         self.run_op.connect("clicked", self.op_runner)
         self.revert_op = gtk.Button(label="Revert Op")
         self.revert_op.connect("clicked", self.revert_image)
         self.original_img = gtk.Button(label="Revert All")
         self.original_img.connect("clicked", self.restore_original)
+        self.buttons = [self.run_op, self.revert_op, self.original_img]
 
         vbox.pack_start(self.op_select)
         vbox.pack_start(self.run_op)
@@ -86,9 +88,23 @@ class recon_gui (gtk.Window):
         self.set_default_size(400,180)
         self.set_border_width(3)
         self.add(table)
+        self.set_title("Graphical Recon Tools")
         self.show_all()
-        P.show()
-        #gtk.main()
+        if not parent:
+            gtk.main()
+
+    def cookOps(self):
+        ### remove some troublesome Ops ####
+        self.op_names.remove("ReadImage")
+        self.op_names.remove("RotPlane")
+        self.op_names.remove("FlipSlices")
+        ### insert some convenience Ops ####
+        ksp_ops = ["GeometricUndistortionK", "BalPhaseCorrection",
+                   "UnbalPhaseCorrection", "FillHalfSpace"]
+        for op in ksp_ops:
+            idx = self.op_names.index(op)
+            self.op_names.insert(idx, op+"**")
+        
 
     def update_params(self, op_name):
         op = self.op_man.getOperation(op_name)
@@ -112,20 +128,37 @@ class recon_gui (gtk.Window):
         return params
         
     def op_changed(self, cbox):
-        self.update_params(self.op_names[cbox.get_active()])
+        self.update_params(self.op_names[cbox.get_active()].strip("**"))
         self.show_all()
-        print self.get_params()
 
     def op_runner(self, button):
         self.last_image = cheap_copy(self.image)
-        op_name = self.op_names[self.op_select.get_active()]
-        op = self.op_man.getOperation(op_name)(**self.get_params())
-        op.log("running")
-        op.run(self.image)
-        self.update_plotter()
+        putative_ops = self.op_names[self.op_select.get_active()].split("**")
+        op_name = putative_ops.pop(0)
+        ops = [self.op_man.getOperation(op_name)(**self.get_params())]
+        if putative_ops:
+            # there are no params for the FTs
+            ft = self.op_man.getOperation("ForwardFFT")()
+            ift = self.op_man.getOperation("InverseFFT")()
+            ops = [ft] + ops + [ift]
+        for op in ops:
+            op.log("running")
+            success = op.run(self.image)
+        if success is not -1:
+            self.update_plotter()
+        else:
+            print "Warning: Operation failed"
+##         for button in self.buttons:
+##             button.set_sensitive(True)
+
+    def hide_buttons(self, button):
+        for b in self.buttons: b.set_sensitive(False)
+        print "buttons hidden"
+        self.queue_draw()
 
     def revert_image(self, button):
         if self.last_image:
+            print "reverting"            
             self.image = cheap_copy(self.last_image)
             self.last_image = None
             self.update_plotter()
@@ -146,7 +179,7 @@ class recon_gui (gtk.Window):
                           filter=image_filter)
         if not fname:
             return
-        self.image = imageio.readImage(fname, "fid", vrange=(0,0))
+        self.image = imageio.readImage(fname, "fid", vrange=(0,1))
         self.first_image = cheap_copy(self.image)
         self.last_image = None
 
@@ -156,7 +189,8 @@ class recon_gui (gtk.Window):
                        2: spmclone}.get(current.get_current_value())
         if self.plotter:
             self.plotter.destroy()
-        self.plotter = new_plotter(self.image, parent=self)
+        if new_plotter:
+            self.plotter = new_plotter(self.image, parent=self)
 
     def _create_action_group(self):
         entries = (
@@ -170,11 +204,11 @@ class recon_gui (gtk.Window):
         )
 
         if not self.plotter:
-            active = 0
+            active_plot = 0
         elif isinstance(self.plotter, sliceview):
-            active = 1
+            active_plot = 1
         elif isinstance(self.plotter, spmclone):
-            active = 2
+            active_plot = 2
         
         plotting_toggles = (
             ( "sliceview", None, "_sliceview", None, "", 1),
@@ -184,8 +218,17 @@ class recon_gui (gtk.Window):
             
         action_group = gtk.ActionGroup("WindowActions")
         action_group.add_actions(entries)
-        action_group.add_radio_actions(plotting_toggles, active,
+        action_group.add_radio_actions(plotting_toggles, active_plot,
                                        self.plot_handler)
+
+        # if launched from a plotter, don't give the user the chance
+        # to destroy that plotter from here; so disable these toggles
+        if active_plot:
+            action_group.get_action("Load Image").set_sensitive(False)
+            for plot_entry in plotting_toggles:
+                action_group.get_action(plot_entry[0]).set_sensitive(False)
+            
+        
         return action_group
         
 
