@@ -260,7 +260,6 @@ class sliceview (gtk.Window):
     def getOverlaySlice(self):
         if self.overlay_data is not None:
             slices = self.control_panel.getIndexSlices()[-3:]
-            print slices
             return self.transform(self.overlay_data[slices])
         
     #-------------------------------------------------------------------------
@@ -503,58 +502,65 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def save_png_montage(self, action):
         # make a montage PNG, for now make 5 slices to a row
-        # make images 128x128 pix
+        # make image with longest side 128 pix
         fname = ask_fname(self, "Save montage as...")
         if fname is None:
             return
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
-        dimsizes = N.array([self.data.zsize, self.data.ysize, self.data.xsize]) * \
-                   N.array(im.shape[-3:])
+        px, py = self.slice_proportions()
+        scale = 128./max(px, py)
+        wpix, hpix = [round(x) for x in [scale*px, scale*py]]
+        indices = range(self.data.ndim)
         ridx,cidx = (self.control_panel.getRowDim().index,
                      self.control_panel.getColDim().index)
-        shape = list(self.data.shape)
-        rdim,cdim = shape[ridx],shape[cidx]
-        shape.remove(rdim)
-        shape.remove(cdim)
-        nslice = shape[-1]
+        
+        indices.remove(ridx)
+        indices.remove(cidx)
+        sidx = indices[-1]
+        nslice = self.data.shape[sidx]
+
         cmap = self.sliceplot.getImage().cmap
-        sdim = 128
-        col_buf = 20
-        row_buf = 50
-        lr_buf = 20
-        b_buf = 20
+
+        #col_buf = 20
+        #row_buf = 50 - 30
+        col_buf = 0
+        row_buf = 0
+        lr_buf = 0 #20
+        b_buf = 0 #20
         #title_buf = 50
-        ncol = 5 # hardwired for now
+        ncol = 6 # hardwired for now
         nrow = int(nslice/ncol) + (nslice % ncol and 1 or 0)
         # get required height and width in pixels
-        _ht = float(10 + nrow*(sdim + row_buf) + b_buf)
-        _wd = float(2*lr_buf + ncol*sdim + (ncol-1)*col_buf)
+        _ht = float(10 + nrow*(hpix + row_buf) + b_buf)
+        _wd = float(2*lr_buf + ncol*wpix + (ncol-1)*col_buf)
         figdpi = 100
         # inches = _ht/dpi, _wd/dpi
         figsize = (_wd/figdpi, _ht/figdpi)
         fig = P.Figure(figsize=figsize, dpi=figdpi)
         fig.set_canvas(FigureCanvas(fig))
-        plane_slice = self.control_panel.getIndexSlices()
+        plane_slice = list(self.control_panel.getIndexSlices())
         for row in range(nrow):
             for col in range(ncol):
                 s = col + row*ncol
                 if s >= nslice:
                     continue
-                plane_slice[-3] = s
-                Loff = (lr_buf + (col)*(sdim + col_buf))/_wd
-                Boff = (b_buf + (nrow-row-1)*(sdim + row_buf))/_ht
-                Xpct, Ypct = (sdim/_wd, sdim/_ht)
+                plane_slice[sidx] = s
+                Loff = (lr_buf + (col)*(wpix + col_buf))/_wd
+                Boff = (b_buf + (nrow-row-1)*(hpix + row_buf))/_ht
+                Xpct, Ypct = (wpix/_wd, hpix/_ht)
                 ax = fig.add_axes([Loff, Boff, Xpct, Ypct])
-                ax.imshow(self.transform(self.data[plane_slice]),
+                ax.imshow(self.transform(self.data[tuple(plane_slice)]),
                           cmap=cmap,
                           origin='lower',
-                          interpolation='nearest')
+                          interpolation='nearest',
+                          aspect='auto',
+                          norm=self.norm)
                 
                 ax.yaxis.set_visible(False)
                 ax.xaxis.set_visible(False)
                 ax.set_frame_on(False)
-                t = ax.set_title('Slice %d'%s)
-                t.set_size(12)
+                #t = ax.set_title('Slice %d'%s)
+                #t.set_size(12)
         fig.savefig(fname, dpi=figdpi)
 
     #-------------------------------------------------------------------------
@@ -670,7 +676,7 @@ class sliceview (gtk.Window):
         l = 15./canvas_size_real_x
         b = 1.0 - (new_img_size[1] + 25.)/canvas_size_real_y
         ax.set_position([l,b,w,h])
-        self.sliceplot.set_size_request(canvas_size_x,canvas_size_y)
+        self.sliceplot.set_size_request(int(canvas_size_x),int(canvas_size_y))
         self.sliceplot.draw()
 
     #-------------------------------------------------------------------------
@@ -1240,11 +1246,13 @@ class SlicePlot (FigureCanvas):
         if interpolation: self.interpolation = interpolation
         if cmap: self.cmap = cmap
         if norm: self.norm = norm
-        if self.getImage() is None:
-            ax.imshow(data, origin="lower")
+        try:
+            img = self.getImage()
+            img.set_data(data)
+        except:
+            ax.imshow(data, origin="lower", aspect="auto")
+            img = self.getImage()
         
-        img = self.getImage()        
-        img.set_data(data)
         img.set_cmap(self.cmap)
         img.set_interpolation(self.interpolation)
         img.set_norm(self.norm)
@@ -1315,7 +1323,6 @@ class OverLay (object):
         self.interpolation = interpolation or self.interpolation
         ax = self.sliceplot.getAxes()
         extent = self.sliceplot.getImage().get_extent()
-        print extent
         if self.sliceplot.getImage(num=1) is None:
             ax.imshow(data, extent=extent, origin="lower")
 

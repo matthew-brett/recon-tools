@@ -1,5 +1,6 @@
 import gtk
 import gobject
+import os
 #import pylab as P
 
 from recon.operations import OperationManager, Parameter, Operation
@@ -182,6 +183,9 @@ class recon_gui (gtk.Window):
         self.image = imageio.readImage(fname, "fid", vrange=(0,1))
         self.first_image = cheap_copy(self.image)
         self.last_image = None
+        basedir = fname.strip(fname.split('/')[-1])
+        os.chdir(basedir)
+        self.update_plotter()
 
     def plot_handler(self, action, current):
         print "foo"
