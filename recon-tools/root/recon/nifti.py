@@ -75,9 +75,9 @@ struct_fields = odict((
     ('dim_info','B'),
     # these are short dim[8]
     ('ndim','h'),
-    ('xdim','h'),
-    ('ydim','h'),
-    ('zdim','h'),
+    ('idim','h'),
+    ('jdim','h'),
+    ('kdim','h'),
     ('tdim','h'),
     ('dim5','h'),
     ('dim6','h'),
@@ -91,9 +91,9 @@ struct_fields = odict((
     ('slice_start', 'h'),
     # these 8 float are float pixdim[8] (pixdim[0] encodes qfac)
     ('qfac','f'),
-    ('xsize','f'),
-    ('ysize','f'),
-    ('zsize','f'),
+    ('isize','f'),
+    ('jsize','f'),
+    ('ksize','f'),
     ('tsize','f'),
     ('pixdim5','f'),
     ('pixdim6','f'),
@@ -181,12 +181,12 @@ class NiftiImage (ReconImage):
                   (filestem, hd_vals['magic']))
 
         # These values are required to be a ReconImage
-        (self.xdim, self.ydim, self.zdim, self.tdim) = \
-                    (hd_vals['xdim'], hd_vals['ydim'],
-                     hd_vals['zdim'], hd_vals['tdim'])
-        (self.xsize, self.ysize, self.zsize, self.tsize) = \
-                     (hd_vals['xsize'], hd_vals['ysize'],
-                      hd_vals['zsize'], hd_vals['tsize'])
+        (self.idim, self.jdim, self.kdim, self.tdim) = \
+                    (hd_vals['idim'], hd_vals['jdim'],
+                     hd_vals['kdim'], hd_vals['tdim'])
+        (self.isize, self.jsize, self.ksize, self.tsize) = \
+                     (hd_vals['isize'], hd_vals['jsize'],
+                      hd_vals['ksize'], hd_vals['tsize'])
         # what about orientation name?
         if hd_vals['qform_code']:
             qb, qc, qd, qfac = \
@@ -236,12 +236,12 @@ class NiftiImage (ReconImage):
                    and self.tdim-1 or vrange[1]
             vstart = (vrange[0] > vend) and vend or vrange[0]
             self.tdim = vend-vstart+1
-            byteoffset = vstart*bytepix*N.product((self.zdim,
-                                                   self.ydim,self.xdim))
+            byteoffset = vstart*bytepix*N.product((self.kdim,
+                                                   self.jdim,self.idim))
 
-        dims = self.tdim > 1 and (self.tdim, self.zdim, self.ydim, self.xdim) \
-               or self.zdim > 1 and (self.zdim, self.ydim, self.xdim) \
-               or (self.ydim, self.xdim)
+        dims = self.tdim > 1 and (self.tdim, self.kdim, self.jdim, self.idim) \
+               or self.kdim > 1 and (self.kdim, self.jdim, self.idim) \
+               or (self.jdim, self.idim)
         datasize = bytepix * N.product(dims)
         fp.seek(byteoffset, 1)
         image = N.fromstring(fp.read(datasize), numtype)
@@ -329,7 +329,6 @@ class NiftiWriter (object):
         image = self.image
         Qform = image.orientation_xform.Q
         Qform_mat = image.orientation_xform.tomatrix()
-        qoffset = -N.dot(Qform_mat, N.asarray([image.x0, image.y0, image.z0]))
         # hack alert!
         (pe_dim, fe_dim) = Qform_mat[0,0] == 0. and (2, 1) or (1, 2)
 
@@ -339,14 +338,14 @@ class NiftiWriter (object):
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],
           'ndim': image.ndim,
-          'xdim': image.xdim,
-          'ydim': image.ydim,
+          'idim': image.idim,
+          'jdim': image.jdim,
           # including t,z info should probably depend on targetdims
-          'zdim': image.zdim,
+          'kdim': image.kdim,
           'tdim': image.tdim,
-          'xsize': image.xsize,
-          'ysize': image.ysize,
-          'zsize': image.zsize,
+          'isize': image.isize,
+          'jsize': image.jsize,
+          'ksize': image.ksize,
           'tsize': image.tsize,
           'scl_slope': self.scaling,
           'xyzt_units': (NIFTI_UNITS_MM | NIFTI_UNITS_SEC),
@@ -355,9 +354,9 @@ class NiftiWriter (object):
           'quatern_b': Qform[0],
           'quatern_c': Qform[1],
           'quatern_d': Qform[2],
-          'qoffset_x': qoffset[0],
-          'qoffset_y': qoffset[1],
-          'qoffset_z': qoffset[2],
+          'qoffset_x': image.x0,
+          'qoffset_y': image.y0,
+          'qoffset_z': image.z0,
           }
         
         if self.filetype=='single':

@@ -71,7 +71,7 @@ class FixTimeSkew (Operation):
             self.log("Cannot interpolation with only one volume")
             return
 
-        nslice = image.zdim
+        nslice = image.kdim
         # slice acquisition can be in some nonlinear order
         # eg: Varian data is acquired in an order like this:
         # [19,17,15,13,11, 9, 7, 5, 3, 1,18,16,14,12,10, 8, 6, 4, 2, 0,]

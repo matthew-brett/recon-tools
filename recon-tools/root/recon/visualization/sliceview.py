@@ -146,7 +146,7 @@ class sliceview (gtk.Window):
             # class identification
             self.img_obj = data
         else:
-            self.data = SlicerImage(N.asarray(data), 1, 1, 1, 1)
+            self.data = SlicerImage(N.asarray(data))
             self.img_obj = None
         self.overlay_data = None
         self.orient_mode = -1
@@ -645,8 +645,7 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def slice_proportions(self):
         im = self.data
-        dimsizes = N.array([im.zsize, im.ysize, im.xsize]) * \
-                   N.array(im.shape[-3:])
+        dimsizes = im.dr * N.array(im.shape[-3:])
         r_idx, c_idx = [x-im.ndim
                         for x in (self.control_panel.getRowDim().index,
                                   self.control_panel.getColDim().index)]

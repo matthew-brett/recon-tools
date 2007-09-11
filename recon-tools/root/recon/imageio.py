@@ -38,8 +38,8 @@ output_datatypes = recon_output2dtype.keys()
 #-----------------------------------------------------------------------------
 def get_dims(data):
     """
-    Extract ndim, tdim, zdim, ydim, and xdim from data shape.
-    @return: (ndim, tdim, zdim, ydim, xdim)
+    Extract ndim, tdim, kdim, jdim, and idim from data shape.
+    @return: (ndim, tdim, kdim, jdim, idim)
     """
     # In case the data dimension size for t or z are 1,
     # let's not reflect this in the image properties. 
@@ -91,16 +91,16 @@ class ReconImage (object):
              volume, or a timecourse of volumes.
       ndim:  number of dimensions
       tdim:  number of volumes in a timecourse
-      zdim:  number of slices per volume
-      ydim:  number of rows per slice
-      xdim:  number of columns per row
-      xsize: spacial width of column
-      ysize: spacial height of a row
-      zsize: spacial slice thickness
-      tsize: duration of each time-series volume
-      x0: x coordinate of voxel-origin ??
-      y0: y coordinate of voxel-origin ?? 
-      z0: z coordinate of voxle-origin ??
+      kdim:  number of slices per volume
+      jdim:  number of rows per slice
+      idim:  number of columns per row
+      isize: spacial width of array columns
+      jsize: spacial height of array rows
+      ksize: spacial slice thickness (3rd dim of array)
+      tsize: duration of each time-series volume (4th dim of array)
+      x0: x coordinate of xyz offset
+      y0: y coordinate of xyz offset
+      z0: z coordinate of xyz offset
       orientation: name of the orientaion (coronal, axial, etc)
       orientation_xform: quaternion describing the orientation
 
@@ -112,36 +112,44 @@ class ReconImage (object):
     """
 
     #-------------------------------------------------------------------------
-    def __init__(self, data, xsize, ysize, zsize, tsize, origin=None,
+    def __init__(self, data, isize, jsize, ksize, tsize, offset=None,
                  scaling=None, orient_xform=None, orient_name=None):
         """
-        Construct a ReconImage with at least data, xsize, ysize, zsize,
-        and tsize known. Optional information are an origin 3-tuple
+        Construct a ReconImage with at least data, isize, jsize, ksize,
+        and tsize known. Optional information are an offset 3-tuple
         specifying (x0,y0,z0), a Quaternion object representing the
         transformation of this data to neurological orientation
         (+X,+Y,+Z) = (Right,Anterior,Superior), and a name for the data's
         orientation (used for ANALYZE format output).
         """
         self.setData(data)
-        self.xsize, self.ysize, self.zsize, self.tsize = \
-          (xsize, ysize, zsize, tsize)
-        self.x0, self.y0, self.z0 = origin or (self.xsize*self.xdim/2.,
-                                               self.ysize*self.ydim/2.,
-                                               self.zsize*self.zdim/2.)
+        self.isize, self.jsize, self.ksize, self.tsize = \
+          (isize, jsize, ksize, tsize)
+
         self.orientation_xform = orient_xform or Quaternion()
         self.orientation = orient_name or ""
+
+        # offset should be the (x,y,z) offset in xyz-space
+        xform = self.orientation_xform.tomatrix()
+        (self.x0, self.y0, self.z0) = \
+                  offset or \
+                  -N.dot(xform, N.array([self.isize*self.idim/2.,
+                                         self.jsize*self.jdim/2.,
+                                         self.ksize*self.kdim/2.]))
+        
+
         self.scaling = scaling or 1.0
 
     #-------------------------------------------------------------------------
     def info(self):
         print "ndim =",self.ndim
-        print "xdim =",self.xdim
-        print "ydim =",self.ydim
-        print "zdim =",self.zdim
+        print "idim =",self.idim
+        print "jdim =",self.jdim
+        print "kdim =",self.kdim
         print "tdim =",self.tdim
-        print "xsize =",self.xsize
-        print "ysize =",self.ysize
-        print "zsize =",self.zsize
+        print "isize =",self.isize
+        print "jsize =",self.jsize
+        print "ksize =",self.ksize
         print "x0 =",self.x0
         print "y0 =",self.y0
         print "z0 =",self.z0
@@ -152,8 +160,8 @@ class ReconImage (object):
     def setData(self, data):
         "Inform self about dimension info from the data array"
         self.data = data
-        self.ndim, self.tdim, self.zdim, self.ydim, self.xdim = get_dims(data)
-        self.shape = (self.tdim, self.zdim, self.ydim, self.xdim)
+        self.ndim, self.tdim, self.kdim, self.jdim, self.idim = get_dims(data)
+        self.shape = (self.tdim, self.kdim, self.jdim, self.idim)
         while self.shape[0] < 2:
             self.shape = self.shape[1:]
 
@@ -162,8 +170,8 @@ class ReconImage (object):
         """Stitch together two images along a given axis, possibly
         creating a new dimension
         """
-        self_sizes = (self.xsize, self.ysize, self.zsize)
-        image_sizes = (image.xsize, image.ysize, image.zsize)
+        self_sizes = (self.isize, self.jsize, self.ksize)
+        image_sizes = (image.isize, image.jsize, image.ksize)
 
         # pixel sizes must match
         if self_sizes != image_sizes:
@@ -213,10 +221,10 @@ class ReconImage (object):
     def __div__(self, a):
         self[:] = self[:]/a
     #-------------------------------------------------------------------------
-    def _subimage(self, data):
+    def _subimage(self, data):        
         return ReconImage(data,
-                          self.xsize, self.ysize, self.zsize, self.tsize,
-                          origin=(self.x0, self.y0, self.z0),
+                          self.isize, self.jsize, self.ksize, self.tsize,
+                          offset=(self.x0, self.y0, self.z0),
                           scaling=self.scaling,
                           orient_xform=self.orientation_xform,
                           orient_name=self.orientation)
@@ -224,7 +232,6 @@ class ReconImage (object):
     #-------------------------------------------------------------------------
     def subImage(self, subnum):
         "returns subnum-th sub-image with dimension ndim-1"
-        ##!! Need to fix locations here !!##
         return self._subimage(self.data[subnum])
 
     #-------------------------------------------------------------------------

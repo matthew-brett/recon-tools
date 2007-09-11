@@ -34,11 +34,11 @@ class GeometricUndistortion (Operation):
                      " the image shape, quitting")
 	    return
 	
-	shift = (image.xdim * image.T_pe/2/N.pi)
+	shift = (image.idim * image.T_pe/2/N.pi)
         
         #watch the sign
-        pixel_pos = -shift*fMap[:] + N.outer(N.arange(fMap.ydim),
-                                             N.ones(fMap.ydim))
+        pixel_pos = -shift*fMap[:] + N.outer(N.arange(fMap.jdim),
+                                             N.ones(fMap.jdim))
         
         image[:].real = resample_phase_axis(abs(image[:]), pixel_pos)
         image[:].imag = 0.

@@ -77,8 +77,7 @@ class UnbalPhaseCorrection (Operation):
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
-        conj_order = N.arange(-self.xleave, n_pe-self.xleave)
-        #shift(conj_order, 0, -self.xleave)
+        conj_order = N.array(range(self.xleave, n_pe) + range(self.xleave))
         inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped
@@ -205,11 +204,14 @@ class UnbalPhaseCorrection (Operation):
 ##             r_ind_ev = N.nonzero(ptmask[s,0])[0]
 ##             r_ind_od = N.nonzero(ptmask[s,1])[0]
 ##             if r_ind_ev.any() and r_ind_od.any():
-##                 rowpos = 2*r_line*V[A1] - r_line*V[A2] +\
-##                          2*s*V[A3] - s*V[A4] + 2*V[A5] - V[A6]
-##                 rowneg = -2*r_line*V[A1] - r_line*V[A2] + \
-##                          -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]                
-
+##                 if self.shear_correct:
+##                     rowpos = 2*r_line*V[A1] - r_line*V[A2] +\
+##                              2*s*V[A3] - s*V[A4] + 2*V[A5] - V[A6]
+##                     rowneg = -2*r_line*V[A1] - r_line*V[A2] + \
+##                              -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]
+##                 else:
+##                     rowpos = 2*r_line*V[A1] + 2*s*V[A3] + 2*V[A5]
+##                     rowneg = -(2*r_line*V[A1] + 2*s*V[A3] + 2*V[A5])
 ##                 pl.plot(rowpos, 'b.')
 ##                 pl.plot(rowneg, 'r.')
 ##                 pl.plot(phs[s,0], 'b--')

@@ -109,7 +109,7 @@ class FillHalfSpace (Operation):
         return cooked3D.astype(volData.dtype)
     
     def run(self, image):
-        ny = image.ydim
+        ny = image.jdim
         self.over_fill = ny - self.fill_size/2
         self.fill_rows = self.fill_size - ny
         
@@ -140,9 +140,9 @@ class FillHalfSpace (Operation):
         new_shape = list(image.shape)
         new_shape[-2] = self.fill_size
         image.resize(new_shape)
-        # often the ysize is set wrong--as if the partial Y-dim spans the FOV
-        if image.ysize > image.xsize:
-            image.ysize = image.xsize
+        # often the jsize is set wrong--as if the partial j-dim spans the FOV
+        if image.jsize > image.isize:
+            image.jsize = image.isize
 
         for new_vol, old_vol in zip(image, old_image):
             if self.method == "iterative":

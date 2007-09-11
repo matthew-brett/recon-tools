@@ -12,7 +12,7 @@ class SlicerImage (ReconImage):
     """
 
     def __init__(self, image=None):
-        if not image:
+        if image is None:
             image = ReconImage(N.ones((4,4,4)), 1, 1, 1, 1)
         if not isinstance(image, ReconImage):
             image = ReconImage(N.asarray(image), 1, 1, 1, 1)
@@ -22,7 +22,7 @@ class SlicerImage (ReconImage):
         # get vox origin from zyx origin (can't use transform because
         # (these zyx are in the image's native space)
         self.r0 = N.array([self.z0, self.y0, self.x0])
-        self.dr = N.array([self.zsize, self.ysize, self.xsize])
+        self.dr = N.array([self.ksize, self.jsize, self.isize])
         # orientation xform maps vx-space:xyz-space (Right,Anterior,Superior)
         # numpy arrays are in C-ordering, so I'm going to reverse the
         # rows and columns of the xform
@@ -39,14 +39,15 @@ class SlicerImage (ReconImage):
         # IF the data is Analyze style, make a conversion of the r0 offset
         # to allow for a universal transformation formula.
         # keep this internal until later.. this is the r0 in zyx space
-        if not isinstance(image, NiftiImage):
-            # the NIFTI (r1,r2,r3) -> (x,y,z) transform is:
-            # xyz = N.dot(xform, dr*r) + r0_n
-            # the Analyze transform is:
-            # xyz = N.dot(xform, dr*r - r0_a)
-            # .... Then r0_n = -N.dot(xform, r0_a)
-            # (this should work for FidImages also)
-            self.r0 = -N.dot(self.xform, self.r0)
+
+##         if not isinstance(image, NiftiImage):
+##             # the NIFTI (r1,r2,r3) -> (x,y,z) transform is:
+##             # xyz = N.dot(xform, dr*r) + r0_n
+##             # the Analyze transform is:
+##             # xyz = N.dot(xform, dr*r - r0_a)
+##             # .... Then r0_n = -N.dot(xform, r0_a)
+##             # (this should work for FidImages also)
+##             self.r0 = -N.dot(self.xform, self.r0)
             
         self.prefilter = None
         self.vox_coords = self.zyx2vox([0,0,0])

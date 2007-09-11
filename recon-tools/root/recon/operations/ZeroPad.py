@@ -31,6 +31,7 @@ class ZeroPad (Operation):
         final_slicer = image.tdim and (0,0) or (0,)
         embedIm(b, image[final_slicer], ny/2, nx/2)
         image.setData(image[:])
-        # should set xsize,ysize = xsize/2,ysize/2
+        # pixel size has just gone down
+        image.jsize, image.isize = (image.jsize/2., image.isize/2.)
     
     #done

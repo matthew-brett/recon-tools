@@ -230,24 +230,24 @@ def median_filter(image, N):
     ndim = len(image.shape)
     if ndim < 2:
         raise ValueError("Image dimension must be at least 2 for median_filter")
-    tdim, zdim, ydim, xdim = (1,)*(4-ndim) + image.shape[-4:]
+    tdim, kdim, jdim, idim = (1,)*(4-ndim) + image.shape[-4:]
 
     median_pt = int((N*N)/2)
     center = int(N/2)
-    image = N.reshape(image,(tdim*zdim, ydim, xdim))
+    image = N.reshape(image,(tdim*kdim, jdim, idim))
     img = N.empty(image.shape, image.dtype)
     subm = N.empty((N, N), image.dtype)
-    for tz in range(tdim*zdim):
+    for tz in range(tdim*kdim):
         img[tz, 0, :] = 0.
         img[tz, -1:, :] = 0.
-        for y in range(ydim-N):
-            img[tz, y, 0] = 0.
-            img[tz, y, xdim-1] = 0.
-            for x in range(xdim-N):
-                subm[:,:] = image[tz, y+1:y+N+1, x+1:x+N+1]
+        for j in range(jdim-N):
+            img[tz, j, 0] = 0.
+            img[tz, j, idim-1] = 0.
+            for i in range(idim-N):
+                subm[:,:] = image[tz, j+1:j+N+1, i+1:i+N+1]
                 s = N.sort(subm.flatten())
-                img[tz, y+center+1, x+center+1] = s[median_pt]
-    return N.reshape(img, (tdim, zdim, ydim, xdim))
+                img[tz, j+center+1, i+center+1] = s[median_pt]
+    return N.reshape(img, (tdim, kdim, jdim, idim))
 
 #-----------------------------------------------------------------------------
 def linReg(Y, X=None, sigma=None, mask=None, axis=-1): 
@@ -575,27 +575,23 @@ def unwrap_ref_volume(vol, fe1=None, fe2=None):
     @param phases is a volume of wrapped phases
     @return: uphases an unwrapped volume, shrunk to masked region
     """
-    zdim,ydim,xdim = vol_shape = vol.shape
     oslice = (fe1 and fe2) and (slice(None),slice(None),slice(fe1,fe2)) or \
              (slice(None),)*3
-    uphases = N.empty(vol_shape, N.float64)
-    zeropt = vol_shape[2]/2
+    uphases = N.empty(vol.shape, N.float64)
+    zeropt = vol.shape[2]/2
     # search for best sl to be s=0 by looking at all s where q2=0,q1=0
-    scut = abs(vol[:,vol_shape[1]/2,zeropt])
+    scut = abs(vol[:,vol.shape[1]/2,zeropt])
     zerosl = N.nonzero(scut == scut.max())[0][0]
     phases = N.angle(vol)
     # unwrap the volume sliced along each PE line
     # the middle of each surface should be between -pi and pi,
     # if not, put it there!
-    for u in range(0,vol_shape[1],1):
+    for u in range(0,vol.shape[1],1):
         uphases[:,u,:] = unwrap2D(phases[:,u,:])
         height = uphases[zerosl,u,zeropt]
         height = int((height+N.sign(height)*N.pi)/2/N.pi)
         uphases[:,u,:] = uphases[:,u,:] - 2*N.pi*height
 
-    #heights = N.zeros(ydim)
-    #heights[1:] = unwrap1D(uphases[zerosl,:,zeropt], return_diffs=True)
-    #uphases[:] = uphases + heights[N.newaxis,:,N.newaxis]
     return uphases[oslice]
 
 #-----------------------------------------------------------------------------

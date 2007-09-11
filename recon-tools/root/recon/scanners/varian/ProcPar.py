@@ -139,13 +139,20 @@ class ProcParImageMixin (object):
     n_fe_true = CachedReadOnlyProperty(lambda self: self.n_fe/2, "")
 
     isepi = CachedReadOnlyProperty(
-        lambda self: self.pulse_sequence.find("epidw") != -1 or \
-                     self.pulse_sequence.find("testbrs") != -1, "")
+        lambda self: self.pulse_sequence.find('epidw') != -1 or \
+                     self.pulse_sequence.find('testbrs') != -1, "")
 
     isravi = CachedReadOnlyProperty(
         lambda self: not self.isepi and \
-        self.pulse_sequence.find("epi") != -1, "")
+        self.pulse_sequence.find('epi') != -1, "")
 
+    ismultislice = CachedReadOnlyProperty(
+        lambda self: self.pulse_sequence in ('gems', 'asems', 'asems_mod'), "")
+
+    ismpflash_like = CachedReadOnlyProperty(
+        lambda self: self.pulse_sequence in ('box3d_slab', 'box3d_v2',
+                                             'mp_flash3d'), "")
+    
     # oops, nv is screwed up for half-space data! try nv/2 + over-scan
     n_pe = CachedReadOnlyProperty(lambda self: self.isepi and \
                         self._procpar.fract_ky[0]+self._procpar.nv[0]/2 or \
@@ -197,24 +204,15 @@ class ProcParImageMixin (object):
         lambda self: (self.acq_cycles != self.nslice and self.acq_cycles \
                       or 1), "")
 
-##     nvol_true = CachedReadOnlyProperty(
-##         lambda self: self.asym_times and len(self.asym_times) or \
-##                      not self.isepi and self.mpflash_vols or \
-##                      self._procpar.images[0], "")
-
-##     def _get_is_imagevol(self):
-##         # try using procpar.cntr or procpar.image to know which volumes are
-##         # reference
-##         procpar = self._procpar
-##         if hasattr(procpar, "cntr") and len(procpar.cntr)==self.nvol_true:
-##             return procpar.cntr
-##         elif hasattr(procpar, "image") and len(procpar.image)==self.nvol_true:
-##             return procpar.image
-##         else: return [1]*self.nvol_true
-    nvol_true = CachedReadOnlyProperty(
-        lambda self: self.asym_times and len(self.asym_times) or \
-                     not self.isepi and self.mpflash_vols or \
-                     len(self.is_imagevol), "")
+    def _get_nvol_true(self):
+        if self.isepi or self.isravi:
+            return len(self.is_imagevol)
+        if self.ismpflash_like:
+            return self.mpflash_vols
+        else:
+            return self.acq_cycles
+    
+    nvol_true = CachedReadOnlyProperty(_get_nvol_true, "")
 
     def _get_is_imagevol(self):
         procpar = self._procpar
@@ -249,8 +247,7 @@ class ProcParImageMixin (object):
     ### 
     acq_order = CachedReadOnlyProperty(
         lambda self:
-        N.asarray((self.pulse_sequence.find('mp_flash') > -1 and \
-                   range(self.nslice) or \
+        N.asarray((self.ismpflash_like and range(self.nslice) or \
                    (range(self.nslice-1,-1,-2) +
                     range(self.nslice-2,-1,-2)))), "")
 
@@ -262,9 +259,9 @@ class ProcParImageMixin (object):
     slice_gap = CachedReadOnlyProperty(_get_slice_gap, "")
 
     nslice = CachedReadOnlyProperty(
-        lambda self: self.pulse_sequence in ("mp_flash3d", "box3d_v2",
-                                             "box3d_slab") and \
-                     self._procpar.nv2[0] or len(self.slice_positions), "")
+        lambda self: self.ismpflash_like and \
+        self._procpar.nv2[0] or \
+        len(self.slice_positions), "")
 
     thk = CachedReadOnlyProperty(
         lambda self: self.pulse_sequence == "mp_flash3d" and \
@@ -289,7 +286,7 @@ class ProcParImageMixin (object):
             return int(self.petable_name[-1])
         elif self.pulse_sequence in ('epi','epidw') and self.spinecho:
             return self._procpar.nseg[0]
-        elif self.pulse_sequence in ('gems','box3d_slab','box3d_v2','asems'):
+        elif self.ismultislice or self.ismpflash_like:
             return 1
         else: raise ValueError(
               "Could not identify sequence: %s" % (self.pulse_sequence))

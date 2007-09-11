@@ -8,7 +8,7 @@ import numpy as N
 
 def unwrap2D(matrix, mask=None):
     """The method for this module unwraps a 2D grid of wrapped phases
-    using the lp-norm method.
+    using the quality-map unwrapper.
     @param matrix, if ndim > 2, explode; if ndim < 2, a 1xN matrix
     is used. Numerical range should be [-pi,pi]
     @return: the unwrapped phases
@@ -18,19 +18,18 @@ def unwrap2D(matrix, mask=None):
     dims = matrix.shape
 
     if len(dims)>2: raise ValueError("matrix has too many dimensions to unwrap")
-    if mask is None: mask = N.ones(dims)
-    else:
-        if dims != mask.shape:
-            raise ValueError("mask dimensions do not match matrix dimensions!")
-
-    # mark this for in_phase = this if True else that (for Python 2.5)
     if len(dims) < 2:
-        in_phase = N.reshape(matrix, (1,dims[0]))
+        matrix.shape = (1,dims[0])
+
+    if mask is None:
+        mask = 255*(N.ones(matrix.shape, N.uint8))
     else:
-        in_phase = matrix.copy()
-    # actually this seems better pre-masked (confirm??)
-    in_phase = (mask*in_phase).astype(N.float32)
-    ret = Unwrap2D(in_phase).astype(dtype)
+        mask = N.where(mask, 255, 0).astype(N.uint8)
+    if dims != mask.shape:
+        raise ValueError("mask dimensions do not match matrix dimensions!")
+
+    ret = Unwrap2D(matrix.astype(N.float32), mask).astype(dtype)
+    ret.shape = dims
     return ret
 
 def unwrap3D(matrix):

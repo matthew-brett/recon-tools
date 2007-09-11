@@ -94,9 +94,9 @@ struct_fields = odict((
     ('regular','c'),
     ('hkey_un0','c'),
     ('ndim','h'),
-    ('xdim','h'),
-    ('ydim','h'),
-    ('zdim','h'),
+    ('idim','h'),
+    ('jdim','h'),
+    ('kdim','h'),
     ('tdim','h'),
     ('dim5','h'),
     ('dim6','h'),
@@ -108,9 +108,9 @@ struct_fields = odict((
     ('bitpix','h'),
     ('dim_un0','h'),
     ('pixdim0','f'),
-    ('xsize','f'),
-    ('ysize','f'),
-    ('zsize','f'),
+    ('isize','f'),
+    ('jsize','f'),
+    ('ksize','f'),
     ('tsize','f'),
     ('pixdim5','f'),
     ('pixdim6','f'),
@@ -187,20 +187,22 @@ class AnalyzeImage (ReconImage):
         # now load values into self
         hd_vals = dict()
         map(hd_vals.__setitem__, struct_fields.keys(), values)
-        (self.xdim, self.ydim, self.zdim, self.tdim) = \
-                    (hd_vals['xdim'], hd_vals['ydim'],
-                     hd_vals['zdim'], hd_vals['tdim'])
-        (self.xsize, self.ysize, self.zsize, self.tsize) = \
-                     (hd_vals['xsize'], hd_vals['ysize'],
-                      hd_vals['zsize'], hd_vals['tsize'])
-        (self.x0, self.y0, self.z0) = \
-                  (hd_vals['x0']*self.xsize,
-                   hd_vals['y0']*self.ysize,
-                   hd_vals['z0']*self.zsize)
+        (self.idim, self.jdim, self.kdim, self.tdim) = \
+                    (hd_vals['idim'], hd_vals['jdim'],
+                     hd_vals['kdim'], hd_vals['tdim'])
+        (self.isize, self.jsize, self.ksize, self.tsize) = \
+                     (hd_vals['isize'], hd_vals['jsize'],
+                      hd_vals['ksize'], hd_vals['tsize'])
         self.orientation = orientcode2orientname.get(hd_vals['orient'], "")
         
         xform_mat = xforms.get(self.orientation, N.identity(3))
         self.orientation_xform = Quaternion(M=xform_mat)
+
+        (self.x0, self.y0, self.z0) = \
+                  -N.dot(xform_mat,N.array((hd_vals['x0']*self.isize,
+                                            hd_vals['y0']*self.jsize,
+                                            hd_vals['z0']*self.ksize)))
+
         # various items:
         self.datatype, self.bitpix, self.scaling = (hd_vals['datatype'],
                                                     hd_vals['bitpix'],
@@ -224,11 +226,11 @@ class AnalyzeImage (ReconImage):
                    and self.tdim-1 or vrange[1]
             vstart = (vrange[0] > vend) and vend or vrange[0]
             self.tdim = vend-vstart+1
-            byteoffset = vstart*bytepix*N.product((self.zdim,
-                                                   self.ydim,self.xdim))
+            byteoffset = vstart*bytepix*N.product((self.kdim,
+                                                   self.jdim,self.idim))
 
-        dims = self.tdim > 1 and (self.tdim, self.zdim, self.ydim, self.xdim) \
-               or (self.zdim, self.ydim, self.xdim)
+        dims = self.tdim > 1 and (self.tdim, self.kdim, self.jdim, self.idim) \
+               or (self.kdim, self.jdim, self.idim)
         datasize = bytepix * N.product(dims)
         fp = file(filename)
         fp.seek(byteoffset, 1)
@@ -287,6 +289,15 @@ class AnalyzeWriter (object):
     def write_hdr(self, filename):
         "Write ANALYZE format header (.hdr) file."
         image = self.image
+
+        # NOT IMPLEMENTING YET
+        # ReconImage r0 is the offset in xyz-space, but ANALYZE
+        # calls for an offset in vox-space
+        inv_xform = N.linalg.inv(image.orientation_xform.tomatrix())
+        r0 = N.array([image.x0, image.y0, image.z0])
+        dimscl = N.array([image.isize, image.jsize, image.ksize])
+        r0_ana = (-N.dot(inv_xform, r0)/dimscl).astype(N.int16)
+
         dtype = datatype2dtype[self.datatype]
         if dtype in N.sctypes['int'] + N.sctypes['uint']:
             glmax = 2**(datatype2bitpix[self.datatype]) - 1
@@ -299,17 +310,17 @@ class AnalyzeWriter (object):
           # should be 4 for (z,y,x) and (t,z,y,x) ...
           # should be 3 for (y,x) ??
           'ndim': (image.ndim >= 3 and 4 or image.ndim),
-          'xdim': image.xdim,
-          'ydim': image.ydim,
-          'zdim': image.zdim,
+          'idim': image.idim,
+          'jdim': image.jdim,
+          'kdim': image.kdim,
           'tdim': (image.tdim or 1),
-          'xsize': image.xsize,
-          'ysize': image.ysize,
-          'zsize': image.zsize,
+          'isize': image.isize,
+          'jsize': image.jsize,
+          'ksize': image.ksize,
           'tsize': image.tsize,
-          'x0': (image.xdim/2),
-          'y0': (image.ydim/2),
-          'z0': (image.zdim/2),
+          'x0': r0_ana[0],
+          'y0': r0_ana[1],
+          'z0': r0_ana[2],
           'scale_factor': self.scaling,
           # SPM says that these are (0,2^bitpix-1) for integers,
           # or (0,1) for floating points

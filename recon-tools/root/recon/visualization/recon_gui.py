@@ -144,7 +144,7 @@ class recon_gui (gtk.Window):
             ops = [ft] + ops + [ift]
         for op in ops:
             op.log("running")
-            success = op.run(self.image)
+            success = op.run(self.image) or 1
         if success is not -1:
             self.update_plotter()
         else:
@@ -188,7 +188,6 @@ class recon_gui (gtk.Window):
         self.update_plotter()
 
     def plot_handler(self, action, current):
-        print "foo"
         new_plotter = {1: sliceview,
                        2: spmclone}.get(current.get_current_value())
         if self.plotter:
@@ -240,8 +239,8 @@ class recon_gui (gtk.Window):
 def cheap_copy(src, copy_array=True):
     if not src:
         return None
-    dest = imageio.ReconImage(src[:], src.xsize, src.ysize,
-                              src.zsize, src.tsize)
+    dest = imageio.ReconImage(src[:], src.isize, src.jsize,
+                              src.ksize, src.tsize)
     for item in src.__dict__.items():
         dest.__dict__[item[0]] = item[1]
     dest.__class__ = src.__class__

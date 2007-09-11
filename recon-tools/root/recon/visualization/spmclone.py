@@ -783,12 +783,10 @@ class DisplayInfo (gtk.Frame):
         return "%d x %d x %d"%image.shape[::-1]
     #-------------------------------------------------------------------------
     def getvox(self, image):
-        return "%1.3f x %1.3f x %1.3f"%(image.xsize, image.ysize, image.zsize)
+        return "%1.3f x %1.3f x %1.3f"%(image.isize, image.jsize, image.ksize)
     #-------------------------------------------------------------------------
     def getorigin(self, image):
-        return "%d x %d x %d"%(image.x0/image.xsize,
-                               image.y0/image.ysize,
-                               image.z0/image.zsize)
+        return "%d x %d x %d"%(image.x0, image.y0, image.z0)
     #-------------------------------------------------------------------------
     def attach_imgframe(self, func):
         self.imgframe.connect("changed", func)

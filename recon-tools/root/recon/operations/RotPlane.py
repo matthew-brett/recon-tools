@@ -61,11 +61,11 @@ class RotPlane (Operation):
         temp = rot(image[:])
         # now want to reorder array elements, not change sign:
         Ts = abs(Ts.astype(N.int32))
-        shape = N.array([image.xdim, image.ydim, image.zdim])
-        delta = N.array([image.xsize, image.ysize, image.zsize])
+        shape = N.array([image.idim, image.jdim, image.kdim])
+        delta = N.array([image.isize, image.jsize, image.ksize])
         origin = N.array([image.x0, image.y0, image.z0])
         (image.x0, image.y0, image.z0) = tuple(N.dot(Ts, origin))
-        (image.xsize, image.ysize, image.zsize) = tuple(N.dot(Ts, delta))
+        (image.isize, image.jsize, image.ksize) = tuple(N.dot(Ts, delta))
         new_cshape = (image.tdim and (image.tdim,) or ()) + \
                      tuple(util.reverse(N.dot(Ts,shape)))
         image.resize(new_cshape)

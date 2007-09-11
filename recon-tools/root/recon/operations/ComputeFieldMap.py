@@ -57,7 +57,7 @@ class ComputeFieldMap (Operation):
             return
 
         # Unwrap phases.
-        diffshape = (image.tdim-1, image.zdim, image.ydim, image.xdim)
+        diffshape = (image.tdim-1, image.kdim, image.jdim, image.idim)
         diff_vols = N.zeros(diffshape, N.complex64)
         for vol in range(image.tdim-1):
             diff_vols[vol] = N.conjugate(image[vol])*image[vol+1]

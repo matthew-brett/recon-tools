@@ -21,8 +21,8 @@ class FDFImage (ReconImage, ProcParImageMixin):
  
     #-------------------------------------------------------------------------
     def loadDimSizes(self):
-        "@return (xsize, ysize, zsize)"
-        if not (self.image_vols or self.zdim): return (0.,0.,0.)
+        "@return (isize, jsize, ksize)"
+        if not (self.image_vols or self.kdim): return (0.,0.,0.)
         header = FDFHeader(file(pjoin(self.datadir, slicefilename(1))))
         x, y, z = header.roi
         xpix, ypix = header.matrix
@@ -31,11 +31,11 @@ class FDFImage (ReconImage, ProcParImageMixin):
     #-------------------------------------------------------------------------
     def loadData(self):
         volumes = []
-        self.zdim = len(self._procpar.pss)
+        self.kdim = len(self._procpar.pss)
         for volnum in self.image_vols:
             slices = []
-            for slicenum in range(self.zdim):
-                filename = slicefilename(volnum*self.zdim + slicenum + 1)
+            for slicenum in range(self.kdim):
+                filename = slicefilename(volnum*self.kdim + slicenum + 1)
                 slices.append(FDFFile(pjoin(self.datadir, filename)).data)
             volumes.append(N.asarray(slices))
         self.setData(N.asarray(volumes))

@@ -33,4 +33,4 @@ class Window (Operation):
 
     def run(self, image):
         # multiply the window by each slice of the image
-        image *= getWindow(self.win_name, image.xdim, image.ydim)
+        image *= getWindow(self.win_name, image.idim, image.jdim)
