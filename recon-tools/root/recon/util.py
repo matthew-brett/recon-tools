@@ -126,9 +126,10 @@ def half_shift(matrix, dim=0):
     return tmp
 
 #-----------------------------------------------------------------------------
-def reverse(seq, axis=-1): return N.take(seq, -1-N.arange(seq.shape[axis]),
-                                         axis)
-
+def reverse(seq, axis=-1):
+    slices = [slice(0,d) for d in seq.shape]
+    slices[axis] = slice(-1, -seq.shape[axis]-1, -1)
+    return seq[tuple(slices)]
 #-----------------------------------------------------------------------------
 def embedIm(subIm, Im, yOff, xOff):
     """

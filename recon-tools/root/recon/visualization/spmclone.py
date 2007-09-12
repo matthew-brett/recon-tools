@@ -167,8 +167,10 @@ class spmclone (gtk.Window):
     #-------------------------------------------------------------------------
     def setNorm(self):
         "sets the whitepoint and blackpoint (uses raw data, not scaled)"
-        p01 = P.prctile(self.image[:], 1.0)
-        p99 = P.prctile(self.image[:], 99.)
+        x = N.sort(self.image[:].flatten())
+        npts = x.shape[0]
+        p01 = x[int(round(.01*npts))]
+        p99 = x[int(round(.99*npts))]
         self.norm = P.normalize(vmin = p01, vmax = p99)
         if hasattr(self, "overlay_img") and self.overlay_img:
             p01 = P.prctile(self.overlay_img[:], 1.0)

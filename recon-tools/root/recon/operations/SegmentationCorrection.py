@@ -31,10 +31,9 @@ class SegmentationCorrection (Operation):
 
         # weight phase difference by the phase encode timing during each segment
         pe_times = (image.pe_times[image.nav_per_seg:]/image.echo_time)[:,N.newaxis]
-        theta = N.empty(image.data.shape, N.float64)
+        theta = N.empty(image.shape, N.float64)
         theta[:,:,:pe_per_seg] = phsdiff[:,:,N.newaxis,0]*pe_times
         theta[:,:,pe_per_seg:] = phsdiff[:,:,N.newaxis,1]*pe_times
 
         # Apply the phase correction.
-        #image.data = apply_phase_correction(image.data, theta, shift=True)
-        image.data = apply_phase_correction(image.data, theta)
+        image[:] = apply_phase_correction(image[:], N.exp(-1.j*theta))
