@@ -82,14 +82,11 @@ class UnbalPhaseCorrection (Operation):
         pos_order = N.nonzero(self.alpha > 0)[0][self.xleave:]
         neg_order = N.nonzero(self.alpha < 0)[0][:-self.xleave]
 
-        print "unwrapping"
         phs_vol = unwrap_ref_volume(inv_ref)
-        print "finding avgs"
         phs_mean, q1_mask = self.mean_and_mask(phs_vol[:,pos_order,:],
                                                phs_vol[:,neg_order,:])
             
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
-        print "solving"
         self.coefs = self.solve_phase(phs_mean, q1_mask)
         print self.coefs
         return self.correction_volume()
