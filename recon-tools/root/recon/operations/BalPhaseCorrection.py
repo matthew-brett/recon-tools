@@ -3,6 +3,7 @@
 import numpy as N
 import os
 from recon.operations import Operation, verify_scanner_image, Parameter
+from recon.operations.UnbalPhaseCorrection import tag_backplane_slices
 from recon.util import ifft, apply_phase_correction, unwrap_ref_volume, reverse
 
 class BalPhaseCorrection (Operation):
@@ -14,6 +15,14 @@ class BalPhaseCorrection (Operation):
     params = (Parameter(name="percentile", type="float", default=90.0,
                         description="""
     Indicates what percentage of "good quality" points to use in the solution.
+    """),
+              Parameter(name="backplane_adj", type="bool", default=False,
+                        description="""
+    Try to keep data contaminated by backplane eddy currents out of solution.
+    """),
+              Parameter(name="fitmeans", type="bool", default=False,
+                        description="""
+    Fit evn/odd means rather than individual planes.
     """),
               )
     
@@ -43,8 +52,10 @@ class BalPhaseCorrection (Operation):
 
         # get slice positions (in order) so we can throw out the ones
         # too close to the backplane of the headcoil (or not ???)
-        #s_idx = tag_backplane_slices(image)
-        s_idx = range(n_slice)
+        if self.backplane_adj:
+            s_idx = tag_backplane_slices(image)
+        else:
+            s_idx = range(n_slice)
         q1_mask[s_idx] = 1.0
         q1_mask[s_idx,0::2,:] =  qual_map_mask(phs_vol[s_idx,0::2,:],
                                               self.percentile)
@@ -68,21 +79,41 @@ class BalPhaseCorrection (Operation):
         A[:,0] = 1.
         A[:,1] = s_line
         A[:,2] = 1.
-        for m in range(n_pe):
-            P = N.reshape(0.5*phs_vol[:,m,:], (nrows,))
-            pt_mask = N.reshape(q1_mask[:,m,:], (nrows,))
-            nz = pt_mask.nonzero()[0]
-            Msub = M[nz]
-            P = P[nz]
-            [u,sv,vt] = N.linalg.svd(Msub, full_matrices=0)
-            coefs = N.dot(vt.transpose(),
-                          N.dot(N.diag(1/sv), N.dot(u.transpose(), P)))
+        if not self.fitmeans:
+            for m in range(n_pe):
+                P = N.reshape(0.5*phs_vol[:,m,:], (nrows,))
+                pt_mask = N.reshape(q1_mask[:,m,:], (nrows,))
+                nz = pt_mask.nonzero()[0]
+                Msub = M[nz]
+                P = P[nz]
+                [u,sv,vt] = N.linalg.svd(Msub, full_matrices=0)
+                coefs = N.dot(vt.transpose(),
+                              N.dot(N.diag(1/sv), N.dot(u.transpose(), P)))
+                
+                B[0,:] = coefs[B1]*r_line
+                B[1,:] = coefs[B2]
+                B[2,:] = coefs[B3]
+                theta[:,m,:] = N.dot(A,B)
+        else:
+            for rows in ( 'evn', 'odd' ):
+                if rows is 'evn':
+                    slicing = ( slice(None), slice(0, n_pe, 2), slice(None) )
+                else:
+                    slicing = ( slice(None), slice(1, n_pe, 2), slice(None) )
+                P = N.reshape(0.5*phs_vol[slicing].mean(axis=-2), (nrows,))
+                pt_mask = q1_mask[slicing].prod(axis=-2)
+                pt_mask.shape = (nrows,)
+                nz = pt_mask.nonzero()[0]
+                Msub = M[nz]
+                P = P[nz]
+                [u,sv,vt] = N.linalg.svd(Msub, full_matrices=0)
+                coefs = N.dot(vt.transpose(),
+                              N.dot(N.diag(1/sv), N.dot(u.transpose(), P)))
+                B[0,:] = coefs[B1]*r_line
+                B[1,:] = coefs[B2]
+                B[2,:] = coefs[B3]
+                theta[slicing] = N.dot(A,B)[:,None,:]
             
-            B[0,:] = coefs[B1]*r_line
-            B[1,:] = coefs[B2]
-            B[2,:] = coefs[B3]
-            theta[:,m,:] = N.dot(A,B)
-
         phase = N.exp(-1.j*theta)
         from recon.tools import Recon
         if Recon._FAST_ARRAY:
