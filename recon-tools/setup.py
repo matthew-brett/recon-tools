@@ -76,13 +76,15 @@ setup(
     'recon.fftmod',
     'recon.tools',
     'recon.scanners',
-    'recon.scanners.varian',],
+    'recon.scanners.varian',
+    'recon.visualization',],
 
   scripts=[
     'scripts/dumpheader',
     'scripts/getparam',
     'scripts/fdf2img',
     'scripts/viewimage',
+    'scripts/viewortho',
     'scripts/recon'],
 
   package_data = {'recon.conf':['*.ops'],
