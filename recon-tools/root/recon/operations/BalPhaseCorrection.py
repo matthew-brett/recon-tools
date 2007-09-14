@@ -2,11 +2,8 @@
 
 import numpy as N
 import os
-from recon.operations import Operation, verify_scanner_image
-from recon.operations.ReorderSlices import ReorderSlices
-from recon.util import ifft, apply_phase_correction, unwrap_ref_volume, \
-     reverse, maskbyfit
-from recon.imageio import readImage
+from recon.operations import Operation, verify_scanner_image, Parameter
+from recon.util import ifft, apply_phase_correction, unwrap_ref_volume, reverse
 
 class BalPhaseCorrection (Operation):
     """
@@ -14,8 +11,12 @@ class BalPhaseCorrection (Operation):
     systematic phase errors by fitting referrence scan data to a system
     model. This can only be run on special balanced reference scan data.
     """
+    params = (Parameter(name="percentile", type="float", default=90.0,
+                        description="""
+    Indicates what percentage of "good quality" points to use in the solution.
+    """),
+              )
     
-
     def run(self, image):
         
         if not verify_scanner_image(self, image):
@@ -33,56 +34,54 @@ class BalPhaseCorrection (Operation):
         
         n_slice, n_pe, n_fe = self.refShape = inv_ref0.shape
 
-        # let's hardwire this currently??
-        (self.lin1,self.lin2) = (0, n_fe)
-        self.lin_fe = self.lin2-self.lin1
         self.alpha, self.beta = image.epi_trajectory()
 
         #phs_vol comes back shaped (n_slice, n_pe, lin2-lin1)
-        phs_vol = unwrap_ref_volume(inv_ref, self.lin1, self.lin2)
+        phs_vol = unwrap_ref_volume(inv_ref)
         
-        sigma = N.empty(phs_vol.shape, N.float64)
-        #duplicate variance wrt to mu-ev/od over mu for convenience
-        sigma[:,0::2,:] = N.power(N.std(phs_vol[:,0::2,:], axis=-2), 2.0)[:,None,:]
-        sigma[:,1::2,:] = N.power(N.std(phs_vol[:,1::2,:], axis=-2), 2.0)[:,None,:]
-
-        q1_mask = N.ones((n_slice, n_pe, self.lin_fe))
+        q1_mask = N.zeros((n_slice, n_pe, n_fe))
 
         # get slice positions (in order) so we can throw out the ones
-        # too close to the backplane of the headcoil
-        acq_order = image.acq_order
-        s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(n_slice)])
-        pss = N.take(image.slice_positions, s_ind)
-        bad_slices = (pss < -25.0)
-        if bad_slices.any():
-            last_good_slice = (pss < -25.0).nonzero()[0][0]
-        else:
-            last_good_slice = n_slice
-        q1_mask[last_good_slice:] = 0.0
-        maskbyfit(phs_vol[:last_good_slice],
-                  sigma[:last_good_slice], 1.25, 1.25,
-                  q1_mask[:last_good_slice])
-        
+        # too close to the backplane of the headcoil (or not ???)
+        #s_idx = tag_backplane_slices(image)
+        s_idx = range(n_slice)
+        q1_mask[s_idx] = 1.0
+        q1_mask[s_idx,0::2,:] =  qual_map_mask(phs_vol[s_idx,0::2,:],
+                                              self.percentile)
+        q1_mask[s_idx,1::2,:] = qual_map_mask(phs_vol[s_idx,1::2,:],
+                                              self.percentile)
         theta = N.empty(self.refShape, N.float64)
         s_line = N.arange(n_slice)
         r_line = N.arange(n_fe) - n_fe/2
-        r_line_chop = N.arange(self.lin_fe) + self.lin1 - n_fe/2.
 
         B1, B2, B3 = range(3)
 
         # planar solution
+        nrows = n_slice * n_fe
+        M = N.zeros((nrows, 3), N.float64)
+        M[:,B1] = N.outer(N.ones(n_slice), r_line).flatten()
+        M[:,B2] = N.repeat(s_line, n_fe)
+        M[:,B3] = 1.
+        
         A = N.empty((n_slice, 3), N.float64)
         B = N.empty((3, n_fe), N.float64)
         A[:,0] = 1.
         A[:,1] = s_line
         A[:,2] = 1.
-        for u in range(n_pe):
-            coefs = solve_phase(0.5*phs_vol[:-1,u,:], q1_mask[:-1,u,:],
-                                r_line_chop, s_line[:-1])
+        for m in range(n_pe):
+            P = N.reshape(0.5*phs_vol[:,m,:], (nrows,))
+            pt_mask = N.reshape(q1_mask[:,m,:], (nrows,))
+            nz = pt_mask.nonzero()[0]
+            Msub = M[nz]
+            P = P[nz]
+            [u,sv,vt] = N.linalg.svd(Msub, full_matrices=0)
+            coefs = N.dot(vt.transpose(),
+                          N.dot(N.diag(1/sv), N.dot(u.transpose(), P)))
+            
             B[0,:] = coefs[B1]*r_line
             B[1,:] = coefs[B2]
             B[2,:] = coefs[B3]
-            theta[:,u,:] = N.dot(A,B)
+            theta[:,m,:] = N.dot(A,B)
 
         phase = N.exp(-1.j*theta)
         from recon.tools import Recon
@@ -92,30 +91,22 @@ class BalPhaseCorrection (Operation):
             for dvol in image:
                 dvol[:] = apply_phase_correction(dvol[:], phase)
         
-def solve_phase(pvol, surf_mask, r_line, s_line):
-    # surface solution, pvol is (Nsl)x(Nro)
-    # surf_mask is (Nsl)x(Nro)
-    # r_line is 1xNro
-    # s_line is 1xNsl
-    # there is one row for each unmasked point in surf_mask
-    (B1,B2,B3) = range(3)
-    nrows = surf_mask.sum()
-    A = N.empty((nrows, 3), N.float64)
-    P = N.empty((nrows, 1), N.float64)
-    row_start, row_end = 0, 0
-    for s in range(surf_mask.shape[0]):
-        
-        unmasked = surf_mask[s].nonzero()[0]
-        row_start = row_end
-        row_end = unmasked.shape[0] + row_start
-        P[row_start:row_end,0] = pvol[s,unmasked]
-        A[row_start:row_end,B1] = r_line[unmasked]
-        A[row_start:row_end,B2] = s_line[s]
-        A[row_start:row_end,B3] = 1.
-    
-    [u,s,vt] = N.linalg.svd(A, full_matrices=0)
-    V = N.dot(N.transpose(vt), N.dot(N.diag(1/s), N.dot(N.transpose(u),P)))
+def qual_map_mask(phs, pct):
+    s,m,n = phs.shape
+    qmask = N.ones((s,m,n))
+    qmask[1:-1,1:-1,1:-1] = 0
 
-        
-    return N.transpose(V)[0] 
-
+    hdiff = N.diff(phs[1:-1, 1:-1, :], n=2, axis=-1)
+    vdiff = N.diff(phs[1:-1, :, 1:-1], n=2, axis=-2)
+    udiff = N.diff(phs[:, 1:-1, 1:-1], n=2, axis=-3)
+    qual = N.power(hdiff, 2) + N.power(vdiff, 2) + N.power(udiff, 2)
+    qual = N.power(qual, 0.5)
+    qual = qual - qual.min()
+    cutoff = 2.0
+    N.putmask(qmask[1:-1,1:-1,1:-1], qual <= cutoff, 1)
+    nz = qmask[1:-1,1:-1,1:-1].flatten().nonzero()[0]
+    x = N.sort(qual.flatten()[nz])
+    npts = x.shape[0]
+    cutoff = x[int(round(npts*pct/100.))]    
+    N.putmask(qmask[1:-1,1:-1,1:-1], qual > cutoff, 0)
+    return qmask

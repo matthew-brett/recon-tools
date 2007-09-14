@@ -497,6 +497,7 @@ class sliceview (gtk.Window):
             return
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
         im = self.sliceplot.getImage().make_image()
+        im.flipud_out()
         im.write_png(fname)
 
     #-------------------------------------------------------------------------

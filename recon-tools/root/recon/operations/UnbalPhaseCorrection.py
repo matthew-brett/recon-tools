@@ -45,7 +45,6 @@ class UnbalPhaseCorrection (Operation):
             self.log("Could be performing Balanced Phase Correction!")
 
         self.volShape = image.shape[-3:]
-        self.image = image
         refVol = image.ref_data[0]        
         n_slice, n_pe, n_fe = self.refShape = refVol.shape
         # iscentric says whether kspace is multishot centric;
@@ -56,9 +55,8 @@ class UnbalPhaseCorrection (Operation):
         self.alpha, self.beta = image.epi_trajectory()
         # get slice positions (in order) so we can throw out the ones
         # too close to the backplane of the headcoil
-        acq_order = image.acq_order
-        s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(n_slice)])
-        self.pss = N.take(image.slice_positions, s_ind)
+        self.good_slices = tag_backplane_slices(image)
+        
         # want to fork the code based on sampling style
         if iscentric:
             theta = self.run_centric(ifft(refVol))
@@ -73,7 +71,6 @@ class UnbalPhaseCorrection (Operation):
             for dvol in image:
                 dvol[:] = apply_phase_correction(dvol[:], phase)
 
-
     def run_linear(self, inv_ref):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
@@ -84,12 +81,15 @@ class UnbalPhaseCorrection (Operation):
         # (remember not to count the lines contaminated by artifact!)
         pos_order = N.nonzero(self.alpha > 0)[0][self.xleave:]
         neg_order = N.nonzero(self.alpha < 0)[0][:-self.xleave]
-        phs_vol = unwrap_ref_volume(inv_ref)
 
+        print "unwrapping"
+        phs_vol = unwrap_ref_volume(inv_ref)
+        print "finding avgs"
         phs_mean, q1_mask = self.mean_and_mask(phs_vol[:,pos_order,:],
                                                phs_vol[:,neg_order,:])
             
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
+        print "solving"
         self.coefs = self.solve_phase(phs_mean, q1_mask)
         print self.coefs
         return self.correction_volume()
@@ -126,22 +126,17 @@ class UnbalPhaseCorrection (Operation):
 
     def mean_and_mask(self, phs_evn, phs_odd):
         (n_slice, _, n_fe) = self.refShape
+        s_idx = self.good_slices
         phs_mean = N.empty((n_slice, 2, n_fe), N.float64)
         sigma = N.empty((n_slice, 2, n_fe), N.float64)
         phs_mean[:,0,:] = phs_evn.sum(axis=-2)/phs_evn.shape[-2]
         phs_mean[:,1,:] = phs_odd.sum(axis=-2)/phs_odd.shape[-2]
-        sigma[:,0,:] = N.power(N.std(phs_evn, axis=-2), 2.0)
-        sigma[:,1,:] = N.power(N.std(phs_odd, axis=-2), 2.0)
-        q1_mask = N.ones((n_slice, 2, n_fe))
-##         bad_slices = (self.pss < -25.0)
-##         if bad_slices.any():
-##             last_good_slice = bad_slices.nonzero()[0][0]
-##         else: 
-##         last_good_slice = n_slice           
-##         q1_mask[last_good_slice:] = 0.0
-
-        q1_mask[:,0,:] = qual_map_mask(phs_evn, self.percentile)
-        q1_mask[:,1,:] = qual_map_mask(phs_odd, self.percentile)
+        #sigma[:,0,:] = N.power(N.std(phs_evn, axis=-2), 2.0)
+        #sigma[:,1,:] = N.power(N.std(phs_odd, axis=-2), 2.0)
+        q1_mask = N.zeros((n_slice, 2, n_fe))
+        q1_mask[s_idx] = 1
+        q1_mask[s_idx,0,:] = qual_map_mask(phs_evn[s_idx], self.percentile)
+        q1_mask[s_idx,1,:] = qual_map_mask(phs_odd[s_idx], self.percentile)
         
 
         # ditch any lines with less than 4 good pts
@@ -195,7 +190,6 @@ class UnbalPhaseCorrection (Operation):
         P = P[nz1]
 
         [u,s,vt] = N.linalg.svd(A, full_matrices=0)
-        #V = N.dot(N.transpose(vt), N.dot(N.diag(1/s), N.dot(N.transpose(u),P)))
         V = N.dot(vt.transpose(), N.dot(N.diag(1/s), N.dot(u.transpose(), P)))
         
 ##         import pylab as pl
@@ -297,7 +291,9 @@ def qual_map_mask(phs, pct):
     # set a major cutoff to throw out the real bad points
     cutoff = 0.2
     N.putmask(qmask[1:-1,1:-1], qual <= cutoff, 1)
-    import pylab as P
+    #################################################################
+    
+##     import pylab as P
 ##     import matplotlib.axes3d as p3
 ##     ax = P.axes()
 ##     ax.hold(True)
@@ -318,26 +314,55 @@ def qual_map_mask(phs, pct):
 ##     ax = p3.Axes3D(fig)
 ##     ax.plot_wireframe(Rx2,Sx2, qmask*phs.mean(axis=-2))
 ##     P.show()
+
+    #################################################################
     nz = qmask[1:-1,1:-1].flatten().nonzero()[0]
-##     P.hist(qual.flatten()[nz], bins=20)
-##     P.show()
-    cutoff = P.prctile(qual.flatten()[nz], pct)
+    x = N.sort(qual.flatten()[nz])
+    npts = x.shape[0]
+    cutoff = x[int(round(npts*pct/100.))]
+    # prctile seems to be dangerous!!
+    #cutoff = P.prctile(qual.flatten()[nz], pct)
     N.putmask(qmask[1:-1,1:-1], qual > cutoff, 0)
+    #################################################################
+
+##     P.hist(qual.flatten(), bins=50)
+##     P.title("all qualities")
+##     P.show()
+##     P.hist(qual.flatten()[nz], bins=20)
+##     P.title("after major cutoff")
+##     P.show()    
 ##     nz = qmask[1:-1,1:-1].flatten().nonzero()[0]
 ##     P.hist(qual.flatten()[nz], bins=20)
+##     P.title("after final %2.2fth percentile cutoff"%pct)
 ##     P.show()
 ##     ax = P.axes()
 ##     ax.hold(True)
 ##     ax.imshow(qual)
 ##     ax.imshow(qmask[1:-1,1:-1], alpha=.6, cmap=P.cm.copper)
+##     P.show()
+##     fig = P.figure()
+##     ax = p3.Axes3D(fig)
+##     ax.hold(True)
+##     ax.plot_wireframe(Rx2, Sx2, qmask*phs.mean(axis=-2))
 ##     P.show()    
+
+    #################################################################
     return qmask
 
-def plot_surface(surf):
-    import pylab as P
-    import matplotlib.axes3d as p3
-    Xx,Yx = P.meshgrid(N.arange(surf.shape[1]), N.arange(surf.shape[0]))
-    fig = P.figure()
-    ax = p3.Axes3D(fig)
-    ax.plot_wireframe(Xx,Yx,surf)
-    P.show()
+def tag_backplane_slices(image):
+    # 1st determine if the slice direction heads off towards the
+    # backplane... this will be the case if:
+    # theta is 0 +/- 10-deg (top slices) or 180 +/- 10-deg (bottom slices)
+    # and if psi is 0 +/- 10-deg ( ||psi|| always < 90 ??? )
+    # ignore phi, as this turns around the axis of the bore
+    theta = image.theta - 360 * int(image.theta/180)
+    psi = image.psi
+    good_slices = N.arange(image.nslice)
+    if psi >= -10 and psi <= 10:
+        s_ind = N.concatenate([N.nonzero(image.acq_order==s)[0]
+                               for s in range(image.nslice)])
+        pss = N.take(image.slice_positions, s_ind)
+        
+        if (theta>=-10 and theta<=10) or (theta<=-170 and theta>=170):
+            good_slices = (pss >= -25.0).nonzero()[0]
+    return good_slices

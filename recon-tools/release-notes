@@ -1,3 +1,17 @@
+recon-tools-0.5-r3  (beta)                                         07/20/2007
+- many speedups, yielding ~ 30% reduction in processing time
+- UnbalPhaseCorrection has been re-factored to use more data in the model
+  fitting. Most importantly, the parameters have changed: there is now a
+  single parameter called "percentile" (default 75.0). This controls how
+  many of the higher quality point will be used.
+- New 3D phase unwrapping method, implemented in fieldmap calculations. This
+  appears to be much more robust than the former 3D unwrapping
+- Improvements to the Sliceview util
+- A new orthogonal plotter a la SPM
+- There is a new computational library dependency: FFTW3 compiled in double
+  precision and single precision mode.
+
+------------------------------------------------------------------------------
 recon-tools-0.5-r2  (beta)                                         06/26/2007
 - a new BalPhaseCorrection routine is available
 - several new features in sliceviewer, including image overlays
@@ -9,7 +23,7 @@ recon-tools-0.5-r2  (beta)                                         06/26/2007
   (You no longer need to follow RotPlane by FlipSlices.)
 - UnbalPhaseCorrection "thresh" parameter is 0.1 by default (was 1.0)
 
-
+------------------------------------------------------------------------------
 recon-tools-0.5-r1  (beta)                                         02/26/2007
 - switching numerical routines to use numpy library for speedup
 - major overhaul of image class

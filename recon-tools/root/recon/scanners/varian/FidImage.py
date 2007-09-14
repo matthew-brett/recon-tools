@@ -2,7 +2,7 @@
 import os.path
 import sys
 import numpy as N
-from recon.util import euler2quat, qmult, eulerRot, Quaternion, reverse
+from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle
 from recon.scanners import ScannerImage
 from recon.scanners.varian import tablib
 from recon.scanners.varian.ProcPar import ProcPar, ProcParImageMixin
@@ -110,14 +110,16 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Qrot = Quaternion(M=Qr_mat)
 
         phi,psi,theta = self.phi, self.psi, self.theta
-        phi,theta,psi = map(lambda x: (N.pi/2)*int((x+N.sign(x)*45.)/90),
-                                                 (phi,theta,psi))
+        ang = N.array([self.phi, self.psi, self.theta])
+        ang = normalize_angle(N.pi/2 * \
+                              ((ang + N.sign(ang)*45.)/90).astype(N.int32))
+        phi, psi, theta = ang.tolist()
         # find out the (closest) image plane
         if theta == 0 and psi == 0:
             self.image_plane = "axial"
-        elif theta == N.pi/2 and psi != N.pi/2:
+        elif abs(theta) == N.pi/2 and psi == 0:
             self.image_plane = "coronal"
-        elif theta == N.pi/2 and psi == N.pi/2:
+        elif abs(theta) == N.pi/2 and abs(psi) == N.pi/2:
             self.image_plane = "sagittal"
         else:
             self.image_plane = "oblique"

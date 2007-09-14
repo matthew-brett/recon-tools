@@ -32,7 +32,14 @@
 //-encoding points. 
 
 #include "Munther_2D_unwrap.h"
+
+// OS X has malloc.h in /usr/include/malloc/malloc.h
+#ifdef DARWIN
+#include <malloc/malloc.h>
+#else
 #include <malloc.h>
+#endif // ifdef DARWIN
+
 #include <stdlib.h>
 #include <stdio.h> 
 #include <math.h> 
