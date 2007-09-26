@@ -151,19 +151,15 @@ field_formats = struct_fields.values()
 
 
 ##############################################################################
-class AnalyzeImage (ReconImage):
+class AnalyzeReader:
     """
-    Image interface conformant Analyze7.5 file reader.
+    Loads image data from an ANALYZE 7.5 file.
     """
 
     #-------------------------------------------------------------------------
     def __init__(self, filestem, target_dtype=None, vrange=()):
         self.load_header(filestem+".hdr")
         self.load_image(filestem+".img", target_dtype, vrange)
-
-    #-------------------------------------------------------------------------
-    def _dump_header(self):
-        for att in struct_fields.keys(): print att,"=",`getattr(self,att)`
 
     #-------------------------------------------------------------------------
     def load_header(self, filename):
@@ -187,29 +183,7 @@ class AnalyzeImage (ReconImage):
         # now load values into self
         hd_vals = dict()
         map(hd_vals.__setitem__, struct_fields.keys(), values)
-        (self.idim, self.jdim, self.kdim, self.tdim) = \
-                    (hd_vals['idim'], hd_vals['jdim'],
-                     hd_vals['kdim'], hd_vals['tdim'])
-        (self.isize, self.jsize, self.ksize, self.tsize) = \
-                     (hd_vals['isize'], hd_vals['jsize'],
-                      hd_vals['ksize'], hd_vals['tsize'])
-        self.orientation = orientcode2orientname.get(hd_vals['orient'], "")
-        
-        xform_mat = xforms.get(self.orientation, N.identity(3))
-        self.orientation_xform = Quaternion(M=xform_mat)
-
-        (self.x0, self.y0, self.z0) = \
-                  -N.dot(xform_mat,N.array((hd_vals['x0']*self.isize,
-                                            hd_vals['y0']*self.jsize,
-                                            hd_vals['z0']*self.ksize)))
-
-        # various items:
-        self.datatype, self.bitpix, self.scaling = (hd_vals['datatype'],
-                                                    hd_vals['bitpix'],
-                                                    hd_vals['scale_factor'],)
-        if not self.scaling:
-            self.scaling = 1.0
-
+        self.__dict__.update(hd_vals)
     #-------------------------------------------------------------------------
     def load_image(self, filename, target_dtype, vrange):
         # bytes per pixel
@@ -234,15 +208,29 @@ class AnalyzeImage (ReconImage):
         datasize = bytepix * N.product(dims)
         fp = file(filename)
         fp.seek(byteoffset, 1)
-        image = N.fromstring(fp.read(datasize),numtype)
-        if self.swapped: image = image.byteswap()
+        data = N.fromstring(fp.read(datasize),numtype).reshape(dims)
+        if self.swapped: data = data.byteswap()
         if target_dtype is not None and target_dtype != numtype:
             if target_dtype not in integer_ranges.keys():
-                image = (image*self.scaling).astype(target_dtype)
+                scale = self.scale_factor or 1.0
+                self.data = (data*scale).astype(target_dtype)
             else:
-                image = image.astype(target_dtype)
-        self.setData(N.reshape(image, dims))
+                self.data = data.astype(target_dtype)
+        else:
+            self.data = data
         fp.close()
+    #-------------------------------------------------------------------------
+    def toImage(self):
+        orient_name = orientcode2orientname.get(self.orient, "")
+        M = xforms.get(orient_name, N.identity(3))
+        quat = Quaternion(M=M)
+        offset_ana = N.array([self.x0*self.isize, self.y0*self.jsize,
+                              self.z0*self.ksize])
+        offset = tuple(-N.dot(M, offset_ana))
+        return ReconImage(self.data.copy(), self.isize, self.jsize,
+                          self.ksize, self.tsize, offset=offset,
+                          scaling=(self.scale_factor or 1.0),
+                          orient_xform=quat, orient_name=orient_name)
 
 ##############################################################################
 class AnalyzeWriter (object):
@@ -361,7 +349,7 @@ def _construct_dataview(static_dtype, new_dtype, scaling):
 
 #-----------------------------------------------------------------------------
 def readImage(filename, **kwargs):
-    return AnalyzeImage(filename, **kwargs)
+    return AnalyzeReader(filename, **kwargs).toImage()
 #-----------------------------------------------------------------------------
 def writeImage(image, filestem, **kwargs):
     AnalyzeWriter(image,**kwargs).write(filestem)

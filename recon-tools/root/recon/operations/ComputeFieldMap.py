@@ -3,26 +3,15 @@ import numpy as N
 from recon.punwrap import unwrap3D
 from recon.operations import Operation, Parameter
 
-from recon.util import unwrap1D, shift
-
 def build_3Dmask(vol, threshfactor):
     mask = N.ones(vol.shape, N.float32)
     p = N.sort(vol.flatten())
-    t2 = p[int(round(.02*len(p)))]
-    t98 = p[int(round(.98*len(p)))]
+    npts = p.shape[0]
+    t2 = p[int(round(.02*npts))]
+    t98 = p[int(round(.98*npts))]
     thresh = threshfactor*(t98 - t2) + t2
     N.putmask(mask, vol<thresh, 0)
     return mask
-
-def unwrap_3Dphase(vols, threshfactor):
-    shape = vols.shape
-    uw_phase = N.empty(shape, N.float32)
-    masks = N.empty(shape, N.float32)
-    for t in range(shape[0]):
-        wr_phase = N.angle(vols[t])
-        masks[t] = build_3Dmask(N.power(abs(vols[t]), 0.5), threshfactor)
-        uw_phase[t] = unwrap3D(wr_phase)            
-    return uw_phase*masks, masks
 
 ##############################################################################
 class ComputeFieldMap (Operation):
@@ -43,12 +32,10 @@ class ComputeFieldMap (Operation):
     def run(self, image):
 
         # Make sure it's an asems image
-        if not hasattr(image._procpar, "asym_time") and \
-               not hasattr(image._procpar, "te"):
+        if not hasattr(image, "asym_times") and not hasattr(image, "te"):
             self.log("No asym_time, can't compute field map.")
             return
-        asym_times = image._procpar.get('asym_time', False) or \
-                     image._procpar.get('te', False)
+        asym_times = image.asym_times or image.te
 
         # Make sure there are at least two volumes
         if image.tdim < 2:
@@ -56,21 +43,28 @@ class ComputeFieldMap (Operation):
                      "  Must have at least two volumes.")
             return
 
-        # Unwrap phases.
-        diffshape = (image.tdim-1, image.kdim, image.jdim, image.idim)
-        diff_vols = N.zeros(diffshape, N.complex64)
-        for vol in range(image.tdim-1):
-            diff_vols[vol] = N.conjugate(image[vol])*image[vol+1]
-        phase_map, bytemasks = unwrap_3Dphase(diff_vols, self.threshfactor)
-        for vol in range(image.tdim-1):
-            asym_time = asym_times[vol+1] - asym_times[vol]
-            #asym_time = 1.0
-            phase_map[vol] /= asym_time
-        fmap_im = image._subimage(phase_map)
-        bmask_im = image._subimage(bytemasks)
+        diffshape = (image.tdim-1,) + image.shape[-3:]
+        diffshape = image.tdim > 2 and diffshape or diffshape[-3:]
+        diff_vols = image._subimage(N.empty(diffshape, N.complex64))
+        phase_map = image._subimage(N.empty(diffshape, N.float32))
+        bytemask = image._subimage(N.empty(diffshape, N.float32))
+        # Get phase difference between scan n+1 and scan n
+        # Then find the mask and unwrapped phase, and compute
+        # the field strength in terms of rad/s
+        for dsub, psub, msub in zip(diff_vols, phase_map, bytemask):
+            del_te = asym_times[dsub.num+1] - asym_times[dsub.num]
+            dsub[:] = image[dsub.num+1] * N.conjugate(image[dsub.num])
+            msub[:] = build_3Dmask(N.power(abs(dsub[:]), 0.5),
+                                   self.threshfactor)
+            psub[:] = (unwrap3D(N.angle(dsub[:])) * msub[:]) / del_te
+
         # for each diff vol, write a file with vol0 = fmap, vol1 = mask
-        for index in range(phase_map.shape[0]):
-            catIm = fmap_im.subImage(index).concatenate(
-                bmask_im.subImage(index), newdim=True)
-            catIm.writeImage(self.fmap_file+"-%d"%index,
-                             format_type="nifti-single")
+        if phase_map.ndim > 3:
+            for index in range(phase_map.tdim):
+                catIm = phase_map.subImage(index).concatenate(
+                    bytemask.subImage(index), newdim=True)
+                catIm.writeImage(self.fmap_file+"-%d"%index,
+                                 format_type="nifti-single")
+        else:
+            catIm = phase_map.concatenate(bytemask, newdim=True)
+            catIm.writeImage(self.fmap_file, format_type="nifti-single")

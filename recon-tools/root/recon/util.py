@@ -251,10 +251,12 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, kdim, jdim, idim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, sigma=None, mask=None, axis=-1): 
-    # find best linear line through data:
-    # solve for (b,m,res) = (crossing, slope, avg residual from fit)
-    # if sigma is None, let sigma = 1 for every y-point
+def linReg(Y, X=None, sigma=None, mask=None, plot=False, axis=-1): 
+    """
+    Find best linear line through data, using Numerical Recipes formulas.
+    Solve for (b,m,res) = (crossing, slope, avg residual from fit)
+    if sigma is None, proceed as if sigma = 1 for every y-point
+    """
 
     if axis != -1:
         Y = N.swapaxes(Y, axis, -1)
@@ -268,40 +270,94 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
     Yshape = Y.shape
     nrows = N.product(Yshape[:-1])
     npts = Yshape[-1]
+    Y = Y.reshape((nrows,npts))
     if X is None:
         # if no X provided, get the right number of rows of [0,1,2,...,N]
-        X = N.reshape(N.outer(N.ones((nrows,)), N.arange(npts)), Yshape)
-    if sigma is None:
-        sigma = N.ones(Yshape)
-    
-    # want to only count points where x/y are not zero'd out
-    if mask is not None:
-        S = (mask*N.power(sigma, -1.0)).sum(axis=-1)
-        npts = N.asarray(mask.sum(axis=-1))
-        N.putmask(npts, npts==0, 1)
+        X = N.outer(N.ones((nrows,)), N.arange(npts))
     else:
-        S = N.power(sigma, -1.0).sum(axis=-1)
-        npts = N.ones(Yshape[:-1])*Yshape[-1]
+        X = X.reshape((nrows,npts))
+    if mask is not None:
+        # enforce the masking if there is a mask..
+        # this will allow transparency in the summation formulas
+        mask = mask.reshape((nrows,npts))
+        Y = Y*mask
+        X = X*mask
+    if sigma is not None:
+        sigma = sigma.reshape((nrows,npts))
+            
+    
+    b = N.zeros((nrows,))
+    m = N.zeros((nrows,))
+    nzpts = mask.sum(axis=-1) if mask is not None else Yshape[-1]*N.ones(nrows)
+    nzrows = nzpts.nonzero()[0]
+    # reduce the problem.. if it's a zero'd row, b,m will remain zero
+    Xn = X[nzrows]; Yn = Y[nzrows]
+    if sigma is not None: sigma = sigma[nzrows]
+    # avoiding vector divisions if there is no sigma
+    Sx = (Xn/sigma).sum(axis=-1) if sigma is not None else Xn.sum(axis=-1)
+    Sy = (Yn/sigma).sum(axis=-1) if sigma is not None else Yn.sum(axis=-1)
+    Sxx = (N.power(Xn,2)/sigma).sum(axis=-1) \
+          if sigma is not None else N.power(Xn,2).sum(axis=-1)
+    Sxy = (Xn*Yn/sigma).sum(axis=-1) \
+          if sigma is not None else (Xn*Yn).sum(axis=-1)
+    # calculating S = sum(1/sigma**2) is sticky...
+    if sigma is not None:
+        if mask is not None:
+            S = (mask[nzrows]*N.power(sigma, -1.0)).sum(axis=-1)
+        else:
+            S = N.power(sigma, -1.0).sum(axis=-1)
+    else:
+        S = nzpts[nzrows]
 
-    Sx = (X/sigma).sum(axis=-1)
-    Sy = (Y/sigma).sum(axis=-1)
-    Sxx = (N.power(X,2)/sigma).sum(axis=-1)
-    Sxy = (X*Y/sigma).sum(axis=-1)
     delta = S*Sxx - N.power(Sx,2)
-    b = N.asarray((Sxx*Sy - Sx*Sxy)/delta)
-    m = N.asarray((S*Sxy - Sx*Sy)/delta)
+    b[nzrows] = N.asarray((Sxx*Sy - Sx*Sxy)/delta)
+    m[nzrows] = N.asarray((S*Sxy - Sx*Sy)/delta)
     
     if mask is not None:
-        res = abs(Y - mask*(m[...,None]*X+b[...,None])).sum(axis=-1)/npts
+        res = abs(Y - mask*(m[:,None]*X+b[:,None])).sum(axis=-1)/npts
     else:
-        res = abs(Y - (m[...,None]*X+b[...,None])).sum(axis=-1)/npts
+        res = abs(Y - (m[:,None]*X+b[:,None])).sum(axis=-1)/npts
+
+    if plot:
+        import pylab as P
+        if mask is None:
+            mask = N.ones(Y.shape)
+        soln = m[:,None]*X + b[:,None]
+        xrow = N.arange(Y.shape[-1])
+        if len(Y.shape) > 1:
+            for drow, srow, mrow in zip(Y, soln, mask):
+                P.plot(xrow,drow, 'b')
+                P.plot(xrow[mrow==1], drow[mrow==1], 'bo')
+                P.plot(xrow,srow, 'r--')
+        else:
+            P.plot(xrow,Y, 'b')
+            P.plot(xrow[mask==1], Y[mask==1], 'bo')
+            P.plot(xrow,soln[0], 'r--')
+        P.show()
+
+    b = b.reshape(Yshape[:-1])
+    m = m.reshape(Yshape[:-1])
+    res = res.reshape(Yshape[:-1])
+    Y = Y.reshape(Yshape)
+    X = X.reshape(Yshape)
+    if sigma is not None:
+        sigma = sigma.reshape(Yshape)
+    if mask is not None:
+        mask = mask.reshape(Yshape)
     if axis != -1:
         Y = N.swapaxes(Y, axis, -1)
-        # swap these back too, even if they're just local
+        # swap X back too, even if they're just local
         X = N.swapaxes(X, axis, -1)
-        sigma = N.swapaxes(sigma, axis, -1)
+        if sigma is not None:
+            sigma = N.swapaxes(sigma, axis, -1)
         if mask is not None:
             mask = N.swapaxes(mask, axis, -1)
+        # add a null dimension into b,m,res where the solved-for dimension was
+        slicer = [slice(0,d) for d in b.shape]
+        slicer.insert(axis, None)
+        b = b[slicer]
+        m = m[slicer]
+        res = res[slicer]
     return (b, m, res)
 
 #-----------------------------------------------------------------------------
@@ -576,7 +632,8 @@ def unwrap_ref_volume(vol, fe1=None, fe2=None):
     @param phases is a volume of wrapped phases
     @return: uphases an unwrapped volume, shrunk to masked region
     """
-    oslice = (fe1 and fe2) and (slice(None),slice(None),slice(fe1,fe2)) or \
+    oslice = (fe1 is not None and fe2 is not None) and \
+             (slice(None),slice(None),slice(fe1,fe2)) or \
              (slice(None),)*3
     uphases = N.empty(vol.shape, N.float64)
     zeropt = vol.shape[2]/2
@@ -732,7 +789,7 @@ class Quaternion:
     def __init__(self, i=0., j=0., k=0., qfac=1., M=None):
         self.Q = None
         if M is not None:
-            self.matrix2quat(M)
+            self.matrix2quat(N.asarray(M))
         else:
             self.Q = N.array([i, j, k])
             self.qfac = qfac

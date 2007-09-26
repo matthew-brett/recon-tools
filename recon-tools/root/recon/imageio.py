@@ -235,9 +235,14 @@ class ReconImage (object):
         return self._subimage(self.data[subnum])
 
     #-------------------------------------------------------------------------
+    def iama(self):
+        print type(self)
+    #-------------------------------------------------------------------------
     def subImages(self):
         "yeilds all images of dimension self.ndim-1"
-        for subnum in xrange(len(self.data)):
+        if len(self.shape) < 2:
+            raise StopIteration("can't iterate subdimensions of a 2D image")
+        for subnum in xrange(self.shape[0]):
             yield self.subImage(subnum)
 
     #-------------------------------------------------------------------------

@@ -34,6 +34,7 @@
 #include "Munther_2D_unwrap.h"
 
 // OS X has malloc.h in /usr/include/malloc/malloc.h
+// so compile with -DDARWIN if on Mac MJT
 #ifdef DARWIN
 #include <malloc/malloc.h>
 #else
@@ -45,111 +46,12 @@
 #include <math.h> 
 #include <string.h>
 
-/*typedef unsigned char         BYTE; */ 
 
 static float PI = 3.141592654;
 static float TWOPI = 6.283185307;
 int x_connectivity = 1;
 int y_connectivity = 1;
 int No_of_edges = 0;
-
-/*//PIXELM information
-struct PIXELM
-{
-  //int x;                        //x coordinate of the pixel
-  //int y;                        //y coordinate
-  int increment;                  //No. of 2*pi to add to the pixel to unwrap it
-  int number_of_pixels_in_group;  //No. of pixel in the pixel group
-  float value;                    //value of the pixel
-  float reliability;
-  BYTE input_mask;                //0 pixel is masked. 255 pixel is not masked
-  BYTE extended_mask;             //0 pixel is masked. 255 pixel is not masked
-  int group;                      //group No.
-  int new_group;
-  struct PIXELM *head;            //pointer to the first pixel in the group in the linked list
-  struct PIXELM *last;            //pointer to the last pixel in the group
-  struct PIXELM *next;            //pointer to the next pixel in the group
-};
-
-typedef struct PIXELM    PIXELM; 
-
-//the EDGE is the line that connects two pixels.
-//if we have S pixels, then we have S horizental edges and S vertical edges
-struct EDGE
-{    
-  float reliab;	      //reliabilty of the edge and it depends on the two pixels
-  PIXELM *pointer_1;  //pointer to the first pixel
-  PIXELM *pointer_2;  //pointer to the second pixel
-  int increment;      //No. of 2*pi to add to one of the pixels to unwrap it with respect to the second 
-}; 
-
-typedef struct EDGE    EDGE;*/
-
-/*void read_data(char *inputfile,float *Data, int length)
-{
-  printf("Reading the Wrapped Values from Binary File.............>");
-  FILE *ifptr;
-  ifptr = fopen(inputfile,"rb");
-  if(ifptr == NULL) printf("Error opening the file\n");
-  fread(Data,sizeof(float),length,ifptr);
-  fclose(ifptr);
-  printf(" Done.\n");
-}
-
-void write_data(char *outputfile,float *Data,int length)
-{
-  printf("Writing the Wrapped Values to Binary File.............>");
-  FILE *ifptr;
-  ifptr = fopen(outputfile,"wb");
-  if(ifptr == NULL) printf("Error opening the file\n");
-  fwrite(Data,sizeof(float),length,ifptr);
-  fclose(ifptr);
-  printf(" Done.\n");
-}
-
-void read_mask(char *inputfile,BYTE *Data, int length)
-{
-  printf("Reading the mask form Binary File.............>");
-  FILE *ifptr;
-  ifptr = fopen(inputfile,"rb");
-  if(ifptr == NULL) printf("Error opening the file\n");
-  fread(Data,sizeof(char),length,ifptr);
-  fclose(ifptr);
-  printf(" Done.\n");
-}*/
-
-/*__int64 gFreq, lCounter1, lCounter2;
-int gHaveHiResTimer = 0;
-double resolution = 0.0;
-void start_timer()
-{
-    if (QueryPerformanceFrequency( (LARGE_INTEGER *) &gFreq))
-	{
-        gHaveHiResTimer = 1;
-		resolution = (double) 1./gFreq;
-		QueryPerformanceCounter( (LARGE_INTEGER *) &lCounter1);
-	}
-	else
-	{
-		resolution = 0.001;
-		lCounter1 = (__int64) clock();
-	}
-}
-
-void stop_timer()
-{
-	unsigned long elapsed_time;
-	if (gHaveHiResTimer)
-	{
-		QueryPerformanceCounter( (LARGE_INTEGER *) &lCounter2);
-		elapsed_time = (lCounter2 - lCounter1)*1000*resolution;		
-	}
-	else
-	{
-		elapsed_time = lCounter1 - clock();
-	}
-	printf("The consumed time to run this program is %ld\n", elapsed_time);
-}*/
 
 
 //---------------start quicker_sort algorithm --------------------------------
@@ -820,48 +722,38 @@ void returnImage(PIXELM *pixel, float *unwrappedImage, int image_width,
   }
 }
 
-
-
-
-/*int main()
-{  
-  float *WrappedImage, *UnwrappedImage;
-  BYTE *input_mask;
-  int image_width = 64;
-  int image_height = 64;
-  int n, n_pe, n_fe, image_size;
-  int No_of_Edges_initially; 
-
-  int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage, 
-                    BYTE* input_mask, int n_pe, int n_fe);
-
-  image_size = image_height * image_width;
-  No_of_Edges_initially = (image_width)*(image_height) 
-                        + (image_width)*(image_height);
-
-  WrappedImage = (float *) calloc(image_size, sizeof(float));
-  read_data("Data/wrapped_field.img", WrappedImage, image_size);
-
-  input_mask = (BYTE *) calloc(image_size, sizeof(BYTE));
-  //FILL input_mask with 255 (ie. good everywhere).   
-  for(n=0; n<image_size; n++){
-    input_mask[n] = 255;
-  }   
-
-  UnwrappedImage = (float *) calloc(image_size, sizeof(float));
-
-  n_pe = image_height;
-  n_fe = image_width;
-  phase_unwrap_2D(WrappedImage, UnwrappedImage, input_mask, n_pe, n_fe);
-  	
-  write_data("unwrapped_2D_2.img", UnwrappedImage, image_size);
-  free(UnwrappedImage);
-  free(WrappedImage);
-  free(input_mask);
-
-  return 1;
-}*/
-
+// Scan the mask quickly to determine whether it will crash the program.
+// Two contiguous (vertical or horizontal) unmasked points should be enough
+// (added by MJT)
+int isSaneMask(BYTE* input_mask, int n_pe, int n_fe)
+{
+  int l, m;
+  BYTE *mp;
+  mp = input_mask;
+  for(l=0; l<n_pe; l++) {
+    for(m=0; m<n_fe; m++) {
+      if (!(*mp == 255)) {
+	  mp++;
+	  continue;
+      }
+      
+      if ((m < n_fe-1) && (l < n_pe-1)) {
+	if (*(mp+1) == 255 || *(mp+n_fe)==255)
+	  return 1;
+      }
+      else if (m < n_fe-1) {
+	if (*(mp+1) == 255)
+	  return 1;
+      }
+      else if (l < n_pe-1) {
+	if (*(mp+n_fe) == 255)
+	  return 1;
+      }
+      mp++;
+    }
+  }
+  return 0;
+}
 
 int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage, 
                     BYTE* input_mask, int n_pe, int n_fe)  
@@ -872,16 +764,18 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   int image_size;
   int No_of_Edges_initially;
 
-  // restoring global counter
-  No_of_edges = 0;
-  
   image_size = n_pe * n_fe;
   No_of_Edges_initially = 2* n_pe * n_fe; 
   //Allocate some memory for internal arrays.
   extended_mask = (BYTE *) calloc(image_size, sizeof(BYTE));
   pixel = (PIXELM *) calloc(image_size, sizeof(PIXELM));
-  edge = (EDGE *) calloc(No_of_Edges_initially, sizeof(EDGE));;
+  edge = (EDGE *) calloc(No_of_Edges_initially, sizeof(EDGE));
 
+  // if the mask is insane, then no unwrapping will happen (MJT)
+  if (!isSaneMask(input_mask, n_pe, n_fe)) {
+    memmove(UnwrappedImage, WrappedImage, n_pe*n_fe*sizeof(float));
+    return 0;
+  }
   extend_mask(input_mask, extended_mask, n_fe, n_pe);
   initialisePIXELs(WrappedImage, input_mask, extended_mask, pixel, n_fe, n_pe);
   calculate_reliability(WrappedImage, pixel, n_fe, n_pe);
@@ -906,5 +800,8 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   free(pixel);
   free(extended_mask);
 
+  // restoring global counter (MJT)
+  No_of_edges = 0;
+  
   return 1;
 }

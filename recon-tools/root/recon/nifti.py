@@ -5,7 +5,7 @@ import exceptions
 import sys
 
 from odict import odict
-from recon.util import struct_unpack, struct_pack, NATIVE, euler2quat, qmult, \
+from recon.util import struct_unpack, struct_pack, NATIVE, \
      Quaternion, range_exceeds, integer_ranges
 from recon.imageio import ReconImage
 from recon.analyze import byteorders, _construct_dataview, canonical_orient
@@ -136,19 +136,18 @@ struct_fields = odict((
     ('magic','4s'),
 ))
 field_formats = struct_fields.values()
-
+    
 #define a 4 blank bytes for a null extension
 default_extension = struct.pack('l', 0)
 
 ##############################################################################
-class NiftiImage (ReconImage):
+class NiftiReader:
     """
-    Loads an image from a NIFTI file as a ReconImage
+    Loads image data from a NIFTI file.
     """
     def __init__(self, filestem, target_dtype=None, vrange=()):
         self.load_header(filestem)
-        self.load_image(filestem, target_dtype, vrange)
-        
+        self.load_data(filestem, target_dtype, vrange)
     #-------------------------------------------------------------------------
     def load_header(self, filestem):
         try:
@@ -179,45 +178,10 @@ class NiftiImage (ReconImage):
            or (self.filetype == 'dual' and hd_vals['magic'] != 'ni1\x00'):
             raise ValueError("Got file %s, but magic string is incorrect: %s"%\
                   (filestem, hd_vals['magic']))
-
-        # These values are required to be a ReconImage
-        (self.idim, self.jdim, self.kdim, self.tdim) = \
-                    (hd_vals['idim'], hd_vals['jdim'],
-                     hd_vals['kdim'], hd_vals['tdim'])
-        (self.isize, self.jsize, self.ksize, self.tsize) = \
-                     (hd_vals['isize'], hd_vals['jsize'],
-                      hd_vals['ksize'], hd_vals['tsize'])
-        # what about orientation name?
-        if hd_vals['qform_code']:
-            qb, qc, qd, qfac = \
-                (hd_vals['quatern_b'], hd_vals['quatern_c'],
-                 hd_vals['quatern_d'], hd_vals['qfac'])
-            self.orientation_xform = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
-            (self.x0, self.y0, self.z0) = \
-                      (hd_vals['qoffset_x'], hd_vals['qoffset_y'],
-                       hd_vals['qoffset_z'])
-
-        elif hd_vals['sform_code']:
-            M = N.array([[ hd_vals['srow_x0'],hd_vals['srow_x1'],hd_vals['srow_x2'] ],
-                         [ hd_vals['srow_y0'],hd_vals['srow_y1'],hd_vals['srow_y2'] ],
-                         [ hd_vals['srow_z0'],hd_vals['srow_z1'],hd_vals['srow_z2'] ]])
-            self.orientation_xform = Quaternion(M=M)
-            (self.x0, self.y0, self.z0) = \
-                      (hd_vals['srow_x3'], hd_vals['srow_y3'],
-                       hd_vals['srow_z3'])
-        else:
-            self.orientation_xform = Quaternion(M=N.identity(3))
-            self.x0, self.y0, self.z0 = (0,0,0)
-        self.orientation = canonical_orient(self.orientation_xform.tomatrix())
-        self.vox_offset, self.datatype, self.bitpix = \
-                         (hd_vals['vox_offset'], hd_vals['datatype'],
-                          hd_vals['bitpix'])
-        self.scaling,self.yinter = (hd_vals['scl_slope'],hd_vals['scl_inter'])
-        if not self.scaling:
-            self.scaling = 1.0
-        
+        #self.hdr = hd_vals
+        self.__dict__.update(hd_vals)
     #-------------------------------------------------------------------------
-    def load_image(self, filestem, target_dtype, vrange):
+    def load_data(self, filestem, target_dtype, vrange):
         bytepix = self.bitpix/8
         numtype = datatype2dtype[self.datatype]
         byteoffset = 0
@@ -244,18 +208,50 @@ class NiftiImage (ReconImage):
                or (self.jdim, self.idim)
         datasize = bytepix * N.product(dims)
         fp.seek(byteoffset, 1)
-        image = N.fromstring(fp.read(datasize), numtype)
-        if self.swapped: image = image.byteswap()
+        data = N.fromstring(fp.read(datasize), numtype).reshape(dims)
+        if self.swapped: data = data.byteswap()
 
         if target_dtype is not None and target_dtype != numtype:
             if target_dtype not in integer_ranges.keys():
-                image = (image*self.scaling+self.yinter).astype(target_dtype)
+                scaling = self.scl_slope or 1.0
+                yinter = self.scl_inter
+                self.data = (data*scaling+yinter).astype(target_dtype)
             else:
-                image = image.astype(target_dtype)
-        self.setData(N.reshape(image, dims))
+                self.data = data.astype(target_dtype)
+        else:
+            self.data = data
         fp.close()
+    #-------------------------------------------------------------------------
+    def _get_xform(self):
+        "forms a Quaternion object and the r0 vector given a hdr dictionary"
+        # The hdr dictionary is guaranteed to be full, if not specific
+        if self.qform_code:
+            qb, qc, qd, qfac = (self.quatern_b, self.quatern_c,
+                                self.quatern_d, self.qfac)
+            quat = Quaternion(i=qb, j=qc, k=qd, qfac=qfac)
+            offset = (self.qoffset_x, self.qoffset_y, self.qoffset_z)
+        elif self.sform_code:
+            M = [[ self.srow_x0,self.srow_x1,self.srow_x2 ],
+                 [ self.srow_y0,self.srow_y1,self.srow_y2 ],
+                 [ self.srow_z0,self.srow_z1,self.srow_z2 ]]
+            quat = Quaternion(M=M)
+            offset = (self.srow_x3, self.srow_y3, self.srow_z3)
+        else:
+            quat = Quaternion(M=N.identity(3))
+            offset = (0,0,0)
+        return quat, offset
+    #-------------------------------------------------------------------------
+    def toImage(self):
+        "Returns a ReconImage built out of the current NiftiReader"
+        quat, offset = self._get_xform()
+        orient_name = canonical_orient(quat.tomatrix())
+        return ReconImage(self.data.copy(), self.isize, self.jsize,
+                          self.ksize, self.tsize, offset=offset,
+                          scaling=(self.scl_slope or 1.0),
+                          orient_xform=quat, orient_name=orient_name)
+                          
 
-
+        
 ##############################################################################
 class NiftiWriter (object):
     """
@@ -374,7 +370,7 @@ class NiftiWriter (object):
 
 #-----------------------------------------------------------------------------
 def readImage(filestem, **kwargs):
-    return NiftiImage(filestem, **kwargs)
+    return NiftiReader(filestem, **kwargs).toImage()
 #-----------------------------------------------------------------------------
 def writeImage(image, filestem, **kwargs):
     NiftiWriter(image,**kwargs).write(filestem)

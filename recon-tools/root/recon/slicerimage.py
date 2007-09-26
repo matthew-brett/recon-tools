@@ -1,6 +1,4 @@
 from recon.imageio import ReconImage
-from recon.nifti import NiftiImage
-from recon.analyze import AnalyzeImage
 from recon.util import reverse
 import numpy as N
 
