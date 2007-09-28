@@ -7,44 +7,47 @@
 static char doc_Unwrap3D[] = "Performs 3D phase unwrapping on an ndarray";
 
 PyObject *punwrap3D_Unwrap3D(PyObject *self, PyObject *args) {
-  PyObject *op1;
-  PyArrayObject *ap1, *ret;
-  int typenum_phs;
-  PyArray_Descr *dtype;
-  PyTypeObject *subtype;
+  PyObject *op;
+  PyArrayObject *phsArray, *retArray;
+  float *wr_phs, *uw_phs;
+  npy_intp *dims;
+  int typenum_phs, ndim;
+  PyArray_Descr *dtype_phs;
     
-  if(!PyArg_ParseTuple(args, "O", &op1)) {
-    printf("couldn't parse any args\n");
+  if(!PyArg_ParseTuple(args, "O", &op)) {
+    PyErr_SetString(PyExc_Exception, "Unwrap3D: Couldn't parse any args");
     return NULL;
   }
-  if(op1==NULL) {
-    printf("op1 not read correctly\n");
-    return NULL;
-  }
-  typenum_phs = PyArray_ObjectType(op1,0);
-  if(typenum_phs != PyArray_FLOAT) {
-    PyErr_SetString(PyExc_TypeError, "Currently I can only handle single-precision floating point numbers");
-    return NULL;
-  }
-  dtype = PyArray_DescrFromType(typenum_phs);
-  ap1 = (PyArrayObject *)PyArray_FROM_OTF(op1, typenum_phs, NPY_IN_ARRAY);
-  subtype = ap1->ob_type;
-  if(ap1->nd < 3) {
-    PyErr_SetString(PyExc_ValueError, "I can only unwrap 3D arrays");
-    Py_XDECREF(ap1);
+  if(op==NULL) {
+    PyErr_SetString(PyExc_Exception, "Unwrap3D: Arguments not read correctly");
     return NULL;
   }
 
-  ret = (PyArrayObject *)PyArray_New(subtype, ap1->nd, ap1->dimensions,
-				     typenum_phs, NULL, NULL, 0, 0,
-				     (PyObject *) ap1);
-  unwrap_phs((float *) ap1->data, (float *) ret->data, 
-	     (int) ap1->dimensions[0], 
-	     (int) ap1->dimensions[1], 
-	     (int) ap1->dimensions[2]);
+  typenum_phs = PyArray_TYPE(op);
+  ndim = PyArray_NDIM(op);
+  dims = PyArray_DIMS(op);
+  if(typenum_phs != PyArray_FLOAT) {
+    PyErr_SetString(PyExc_Exception, "Unwrap3D: I can only handle single-precision floating point numbers");
+    return NULL;
+  }
+  if(ndim < 3) {
+    PyErr_SetString(PyExc_Exception, "Unwrap3D: I can only unwrap 3D arrays");
+    return NULL;
+  }
+
+  dtype_phs = PyArray_DescrFromType(typenum_phs);
+  /* increasing reference here */
+  phsArray = (PyArrayObject *)PyArray_FROM_OTF(op, typenum_phs, NPY_IN_ARRAY);
+  /* create a new, empty ndarray with floats */
+  retArray = (PyArrayObject *)PyArray_SimpleNewFromDescr(ndim, dims, dtype_phs);
   
-  Py_DECREF(ap1);
-  return PyArray_Return(ret);
+  wr_phs = (float *)PyArray_DATA(phsArray);
+  uw_phs = (float *)PyArray_DATA(retArray);
+
+  unwrap_phs(wr_phs, uw_phs, (int) dims[0], (int) dims[1], (int) dims[2]);
+  
+  Py_DECREF(phsArray);
+  return PyArray_Return(retArray);
     
 }
 

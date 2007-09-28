@@ -20,8 +20,11 @@ static char doc_fft1d[] = "Performs the (I)FFT repeatedly on the last dimension 
 
 PyObject *fftmod_fft1d(PyObject *self, PyObject *args) {
   PyObject *op1;
-  PyArrayObject *ap1, *ret;
-  int type, dir, shift, len_xform, len_array, dim;
+  PyArrayObject *inArray, *retArray;
+  fftw_complex *z1=NULL, *z2=NULL;
+  fftwf_complex *c1=NULL, *c2=NULL;
+  int type, dir, shift, len_xform, len_array, ndim;
+  npy_intp *dims;
   PyTypeObject *pytype;
   PyArray_Descr *dtype;
 
@@ -29,37 +32,38 @@ PyObject *fftmod_fft1d(PyObject *self, PyObject *args) {
     printf("error parsing args in fft1d()\n");
     return NULL;
   }
-  type = PyArray_ObjectType(op1, 0);
+  type = PyArray_TYPE(op1);
   if(type != PyArray_CFLOAT && type != PyArray_CDOUBLE) {
     PyErr_SetString(PyExc_TypeError, "Attempted a complex FFT on non-complex data\n");
     return NULL;
   }
-  dtype = PyArray_DescrFromType(type);
-  // this presents a PyArrayObject with the correct type and contiguous data
-  ap1 = (PyArrayObject *)PyArray_FROM_OTF(op1, type, NPY_IN_ARRAY);
-  if(ap1==NULL) return NULL;
-  pytype = ap1->ob_type;
-  if (ap1->nd < 1) {
-    PyErr_SetString(PyExc_ValueError, "Can't transform a 0-d array");
-    Py_XDECREF(ap1);
+  ndim = PyArray_NDIM(op1);
+  if (ndim < 1) {
+    PyErr_SetString(PyExc_Exception, "Can't transform a 0-d array");
     return NULL;
   }
-  dim = ap1->nd-1;
-  len_xform = ap1->dimensions[dim];
-  len_array = 1;
-  while(dim >= 0) len_array *= ap1->dimensions[dim--];
-  //ret = (PyArrayObject *)PyArray_Empty(ap1->nd, ap1->dimensions, dtype, 0);
-  ret = (PyArrayObject *)PyArray_New(pytype, ap1->nd, ap1->dimensions,
-				     type, NULL, NULL, 0, 0, (PyObject *) ap1);
-  if(type == PyArray_CFLOAT)
-    cfft1d((fftwf_complex *)ap1->data, (fftwf_complex *)ret->data, 
-	   len_xform, len_array, dir, shift);
-  else
-    zfft1d((fftw_complex *)ap1->data, (fftw_complex *)ret->data,
-	   len_xform, len_array, dir, shift);
-  
-  Py_DECREF(ap1);
-  return PyArray_Return(ret);
+
+  dtype = PyArray_DescrFromType(type);
+  /* This gives a PyArrayObject with the correct type and contiguous data */
+  /* It also increases the reference count! */
+  inArray = (PyArrayObject *)PyArray_FROM_OTF(op1, type, NPY_IN_ARRAY);
+  len_array = PyArray_SIZE(inArray);
+  dims = PyArray_DIMS(inArray);
+  /* work on the last axis of the data */
+  len_xform = (int) dims[ndim-1];
+
+  retArray = (PyArrayObject *)PyArray_SimpleNewFromDescr(ndim, dims, dtype);
+  if(type == PyArray_CFLOAT) {
+    c1 = (fftwf_complex *)PyArray_DATA(inArray);
+    c2 = (fftwf_complex *)PyArray_DATA(retArray);
+    cfft1d(c1, c2, len_xform, len_array, dir, shift);
+  } else {
+    z1 = (fftw_complex *)PyArray_DATA(inArray);
+    z2 = (fftw_complex *)PyArray_DATA(retArray);
+    zfft1d(z1, z2, len_xform, len_array, dir, shift);
+  }
+  Py_DECREF(inArray);
+  return PyArray_Return(retArray);
 
 }
 
@@ -67,10 +71,14 @@ static char doc_fft2d[] = "Performs the (I)FFT-2D repeatedly on the last 2 dimen
 
 PyObject *fftmod_fft2d(PyObject *self, PyObject *args) {
   PyObject *op1;
-  PyArrayObject *ap1, *ret;
-  int type, dir, shift, xdim, ydim, len_array, dim;
+  PyArrayObject *inArray, *retArray;
+  fftw_complex *z1=NULL, *z2=NULL;
+  fftwf_complex *c1=NULL, *c2=NULL;
+  int type, dir, shift, xdim, ydim, ndim, len_array;
+  npy_intp *dims;
   PyTypeObject *pytype;
   PyArray_Descr *dtype;
+  
   if(!PyArg_ParseTuple(args, "Oii", &op1, &dir, &shift)) {
     printf("error parsing args in fft2d()\n");
     return NULL;
@@ -80,82 +88,88 @@ PyObject *fftmod_fft2d(PyObject *self, PyObject *args) {
     PyErr_SetString(PyExc_TypeError, "Attempted a complex FFT2D on non-complex data\n");
     return NULL;
   }
-  dtype = PyArray_DescrFromType(type);
-  // this presents a PyArrayObject with the correct type and contiguous data
-  ap1 = (PyArrayObject *) PyArray_FROM_OTF(op1, type, NPY_IN_ARRAY);
-  pytype = ap1->ob_type;
-  if (ap1->nd < 2) {
-    PyErr_SetString(PyExc_ValueError, "Can't transform a 1-d array");
-    Py_XDECREF(ap1);
+  
+  ndim = PyArray_NDIM(op1);
+  if (ndim < 2) {
+    PyErr_SetString(PyExc_Exception, "Can't transform a 1-d array");
     return NULL;
   }
-  dim = ap1->nd-1;
-  xdim = ap1->dimensions[dim];   // n_fe
-  ydim = ap1->dimensions[dim-1]; // n_pe
-  len_array = 1;
-  while(dim >= 0) len_array *= ap1->dimensions[dim--];
-  //ret = (PyArrayObject *)PyArray_Empty(ap1->nd, ap1->dimensions, dtype, 0);
-  ret = (PyArrayObject *)PyArray_New(pytype, ap1->nd, ap1->dimensions,
-				     type, NULL, NULL, 0, 0, (PyObject *) ap1);
-  if(type == PyArray_CFLOAT)
-    cfft2d((fftwf_complex *)ap1->data, (fftwf_complex *)ret->data,
-	   xdim, ydim, len_array, dir, shift);
-  else
-    zfft2d((fftw_complex *)ap1->data, (fftw_complex *)ret->data,
-	   xdim, ydim, len_array, dir, shift);
-  Py_DECREF(ap1);
-  return PyArray_Return(ret);
+
+  dtype = PyArray_DescrFromType(type);
+  /* This gives a PyArrayObject with the correct type and contiguous data */
+  /* It also increases the reference count! */
+  inArray = (PyArrayObject *)PyArray_FROM_OTF(op1, type, NPY_IN_ARRAY);
+  len_array = PyArray_SIZE(inArray);
+  dims = PyArray_DIMS(inArray);
+  xdim = dims[ndim-1];   // n_fe
+  ydim = dims[ndim-2];   // n_pe
+  
+  retArray = (PyArrayObject *)PyArray_SimpleNewFromDescr(ndim, dims, dtype);
+  
+  if(type == PyArray_CFLOAT) {
+    c1 = (fftwf_complex *)PyArray_DATA(inArray);
+    c2 = (fftwf_complex *)PyArray_DATA(retArray);
+    cfft2d(c1, c2, xdim, ydim, len_array, dir, shift);
+  } else {
+    z1 = (fftw_complex *)PyArray_DATA(inArray);
+    z2 = (fftw_complex *)PyArray_DATA(retArray);
+    zfft2d(z1, z2, xdim, ydim, len_array, dir, shift);
+  }
+  Py_DECREF(inArray);
+  return PyArray_Return(retArray);
 }
    
 /**************************************************************************
-* fft1d                                                                   *
+* (z/c)fft1d                                                              *
 *                                                                         *
 * Repeatedly takes a 1D FFT of length len_xform by advancing the zin and  *
-* zout pointers len_z/len_xform times. "direction" indices whether the    *
+* zout pointers len_z/len_xform times. "direction" indicates whether the  *
 * transform is a forward of reverse FFT. Quadrant shifting a la fftshift  *
-* in Matlab is done by modulation in both domains.                        *
+* in Matlab is done by modulation in both domains. Always normalize ifft. *
 **************************************************************************/
 
 void zfft1d(fftw_complex *zin, fftw_complex *zout, 
 	    int len_xform, int len_z, int direction, int shift)
 {
   fftw_plan FT1D;
-  double tog = 1.0;
+  fftw_complex *zptr1=NULL, *zptr2=NULL;
+  double tog = 1.0, alpha;
   int k, nxforms = len_z/len_xform;
+
   FT1D = fftw_plan_many_dft(1, &len_xform, nxforms, zin, NULL, 1, len_xform,
 			    zout, NULL, 1, len_xform, direction,
 			    FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   // if shifting, modulate the input
   if(shift) {
+    zptr1 = zin;
     for(k=0; k<len_z; k++) {
-      zin[k][0] *= tog;
-      zin[k][1] *= tog;
+      *((double *) (zptr1)) *= tog;
+      *((double *) (zptr1++) + 1) *= tog;
       tog *= -1.0;
     }
   }
   fftw_execute(FT1D);
   tog = 1.0;
   // demodulate output (and restore input if it's a separate array)
+  zptr2 = zout;
   if(shift) {
+    zptr1 = (zin != zout) ? zin : NULL;
     for(k=0; k<len_z; k++) {
-      if(zin != zout) {
-	zin[k][0] *= tog;
-	zin[k][1] *= tog;
+      if(zptr1) {
+	*((double *) (zptr1)) *= tog;
+	*((double *) (zptr1++) + 1) *= tog;
       }
-      if(direction == INVERSE) {
-	zout[k][0] *= (tog/ (double) len_xform);
-	zout[k][1] *= (tog/ (double) len_xform);
-      } else {
-	zout[k][0] *= tog;
-	zout[k][1] *= tog;
-      }
+      alpha = (direction==INVERSE) ? tog/(double) len_xform : tog;
+      *((double *) (zptr2)) *= alpha;
+      *((double *) (zptr2++) + 1) *= alpha;
       tog *= -1.0;
     }
   } else {
     if(direction == INVERSE) {
+      alpha = 1.0 / (double) len_xform;
       for(k=0; k<len_z; k++) {
-	zout[k][0] *= (1.0/ (double) len_xform);
-	zout[k][1] *= (1.0/ (double) len_xform);
+	*((double *) (zptr2)) *= alpha;
+	*((double *) (zptr2++) + 1) *= alpha;
       }
     }
   }
@@ -167,42 +181,43 @@ void cfft1d(fftwf_complex *zin, fftwf_complex *zout,
 	    int len_xform, int len_z, int direction, int shift)
 {
   fftwf_plan FT1D;
-  float tog = 1.0;
+  fftwf_complex *cptr1=NULL, *cptr2=NULL;
+  float tog = 1.0, alpha;
   int k, nxforms = len_z/len_xform;
   FT1D = fftwf_plan_many_dft(1, &len_xform, nxforms, zin, NULL, 1, len_xform,
 			     zout, NULL, 1, len_xform, direction,
 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   // modulate the input
   if(shift) {
+    cptr1 = zin;
     for(k=0; k<len_z; k++) {
-      zin[k][0] *= tog;
-      zin[k][1] *= tog;
+      *((float *) (cptr1)) *= tog;
+      *((float *) (cptr1++) + 1) *= tog;
       tog *= -1.0;
     }
   }
   fftwf_execute(FT1D);
   tog = 1.0;
   // demodulate output (and restore input if it's a separate array)
+  cptr2 = zout;
   if(shift) {
+    cptr1 = (zin != zout) ? zin : NULL;
     for(k=0; k<len_z; k++) {
-      if(zin != zout) {
-	zin[k][0] *= tog;
-	zin[k][1] *= tog;
+      if(cptr1) {
+	*((float *) (cptr1)) *= tog;
+	*((float *) (cptr1++) + 1) *= tog;	
       }
-      if(direction == INVERSE) {
-	zout[k][0] *= (tog/ (float) len_xform);
-	zout[k][1] *= (tog/ (float) len_xform);
-      } else {
-	zout[k][0] *= tog;
-	zout[k][1] *= tog;
-      }
+      alpha = (direction==INVERSE) ? tog/(float) len_xform : tog;
+      *((float *) (cptr2)) *= alpha;
+      *((float *) (cptr2++) + 1) *= alpha;
       tog *= -1.0;
     }
   } else {
     if(direction == INVERSE) {
+      alpha = 1.0 / (float) len_xform;
       for(k=0; k<len_z; k++) {
-	zout[k][0] *= (1.0/ (float) len_xform);
-	zout[k][1] *= (1.0/ (float) len_xform);
+	*((float *) (cptr2)) *= alpha;
+	*((float *) (cptr2++) + 1) *= alpha;
       }
     }
   }
@@ -212,27 +227,31 @@ void cfft1d(fftwf_complex *zin, fftwf_complex *zout,
 
 
 /**************************************************************************
-* fft2d                                                                  *
+* (z/c)fft2d                                                              *
 *                                                                         *
-* Transforms the kspace slices to image-space slices. Quadrant "shifting" *
-* a la fftshift in Matlab is done by modulation in both domains.          *
+* Repeatedly take a 2D FFT of length xdim*ydim across the input array.    *
+* "direction" incidates the sign on the complex exponential's argument.   *
+* Quadrant "shifting" a la fftshift in Matlab is done by modulation in    *
+* both domains. Always normalize the output of the inverse FFT.           *
 **************************************************************************/
 void zfft2d(fftw_complex *zin, fftw_complex *zout, int xdim, int ydim,
 	    int len_z, int direction, int shift)
 {
-  double tog = 1.0;
+  double tog = 1.0, alpha;
   int k, size_xform = xdim*ydim, nxforms = len_z/(xdim*ydim);
   int dims[2] = {ydim, xdim};
   fftw_plan FT2D;
+  fftw_complex *zptr1, *zptr2;
   
   FT2D = fftw_plan_many_dft(2, dims, nxforms, 
 			    zin, NULL, 1, size_xform,
 			    zout, NULL, 1, size_xform,
 			    direction, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   if(shift) {
+    zptr1 = zin;
     for(k=0; k<len_z; k++) {
-      zin[k][0] *= tog;
-      zin[k][1] *= tog;
+      *((double *) (zptr1)) *= tog;
+      *((double *) (zptr1++) + 1) *= tog;
       if( (k+1)%xdim ) {
 	tog *= -1.0;
       }
@@ -240,28 +259,27 @@ void zfft2d(fftw_complex *zin, fftw_complex *zout, int xdim, int ydim,
   }
   fftw_execute(FT2D);
   tog = 1.0;
+  zptr2 = zout;
   if(shift) {
+    zptr1 = (zin != zout) ? zin : NULL;
     for(k=0; k<len_z; k++) {
-      if(zin != zout) {
-	zin[k][0] *= tog;
-	zin[k][1] *= tog;
+      if(zptr1) {
+	*((double *) (zptr1)) *= tog;
+	*((double *) (zptr1++) + 1) *= tog;
       }
-      if(direction==INVERSE) {
-	zout[k][0] *= (tog/ (double) size_xform);
-	zout[k][1] *= (tog/ (double) size_xform);
-      } else {
-	zout[k][0] *= tog;
-	zout[k][1] *= tog;
-      }
+      alpha = (direction==INVERSE) ? tog/(double) size_xform : tog;
+      *((double *) (zptr2)) *= alpha;
+      *((double *) (zptr2++) + 1) *= alpha;
       if( (k+1)%xdim ) {
 	tog *= -1.0;
       }
     }
   } else {
     if(direction==INVERSE) {
+      alpha = 1.0 / (double) size_xform;
       for(k=0; k<len_z; k++) {
-	zout[k][0] *= (1.0/ (double) size_xform);
-	zout[k][1] *= (1.0/ (double) size_xform);
+	*((double *) (zptr2)) *= alpha;
+	*((double *) (zptr2++) + 1) *= alpha;
       }
     }
   }
@@ -274,18 +292,21 @@ void zfft2d(fftw_complex *zin, fftw_complex *zout, int xdim, int ydim,
 void cfft2d(fftwf_complex *zin, fftwf_complex *zout, int xdim, int ydim,
 	    int len_z, int direction, int shift)
 {
-  float tog = 1.0;
+  float tog = 1.0, alpha;
   int k, size_xform = xdim*ydim, nxforms = len_z/(xdim*ydim);
   int dims[2] = {ydim, xdim};
   fftwf_plan FT2D;
+  fftwf_complex *cptr1, *cptr2;
+
   FT2D = fftwf_plan_many_dft(2, dims, nxforms, 
 			     zin, NULL, 1, size_xform,
 			     zout, NULL, 1, size_xform,
 			     direction, FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
   if(shift) {
+    cptr1 = zin;
     for(k=0; k<len_z; k++) {
-      zin[k][0] *= tog;
-      zin[k][1] *= tog;
+      *((float *) (cptr1)) *= tog;
+      *((float *) (cptr1++) + 1) *= tog;
       if( (k+1)%xdim ) {
 	tog *= -1.0;
       }
@@ -293,28 +314,27 @@ void cfft2d(fftwf_complex *zin, fftwf_complex *zout, int xdim, int ydim,
   }
   fftwf_execute(FT2D);
   tog = 1.0;
+  cptr2 = zout;
   if(shift) {
+    cptr1 = (zin != zout) ? zin : NULL;
     for(k=0; k<len_z; k++) {
-      if(zin != zout) {
-	zin[k][0] *= tog;
-	zin[k][1] *= tog;
+      if(cptr1) {
+	*((float *) (cptr1)) *= tog;
+	*((float *) (cptr1++) + 1) *= tog;
       }
-      if(direction==INVERSE) {
-	zout[k][0] *= (tog/ (float) size_xform);
-	zout[k][1] *= (tog/ (float) size_xform);
-      } else {
-	zout[k][0] *= tog;
-	zout[k][1] *= tog;
-      }
+      alpha = (direction==INVERSE) ? tog/(float) size_xform : tog;
+      *((float *) (cptr2)) *= alpha;
+      *((float *) (cptr2++) + 1) *= alpha;
       if( (k+1)%xdim ) {
 	tog *= -1.0;
       }
     }
   } else {
     if(direction==INVERSE) {
+      alpha = 1.0 / (float) size_xform;
       for(k=0; k<len_z; k++) {
-	zout[k][0] *= (1.0/ (float) size_xform);
-	zout[k][1] *= (1.0/ (float) size_xform);
+	*((float *) (cptr2)) *= alpha;
+	*((float *) (cptr2++) + 1) *= alpha;
       }
     }
   }

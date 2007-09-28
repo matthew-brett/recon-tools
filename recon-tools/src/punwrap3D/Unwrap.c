@@ -60,8 +60,6 @@ int unwrap_phs(float* wrapped, float* unwrapped, int n_sl, int n_pe, int n_fe)
 	
 	UnwrapImage(Voxels_Pointer,wrapped,x,y,z);
 
-	//write_data(outputfile,wrapped,total_no_voxels); // WHAT WAS THIS FOR?
-
         memcpy(unwrapped, wrapped, total_no_voxels*sizeof(float));
 
 	
