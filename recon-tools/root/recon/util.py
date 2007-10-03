@@ -251,7 +251,7 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, kdim, jdim, idim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, sigma=None, mask=None, plot=False, axis=-1): 
+def linReg(Y, X=None, sigma=None, mask=None, axis=-1): 
     """
     Find best linear line through data, using Numerical Recipes formulas.
     Solve for (b,m,res) = (crossing, slope, avg residual from fit)
@@ -317,23 +317,6 @@ def linReg(Y, X=None, sigma=None, mask=None, plot=False, axis=-1):
         res = abs(Y - mask*(m[:,None]*X+b[:,None])).sum(axis=-1)/npts
     else:
         res = abs(Y - (m[:,None]*X+b[:,None])).sum(axis=-1)/npts
-
-    if plot:
-        import pylab as P
-        if mask is None:
-            mask = N.ones(Y.shape)
-        soln = m[:,None]*X + b[:,None]
-        xrow = N.arange(Y.shape[-1])
-        if len(Y.shape) > 1:
-            for drow, srow, mrow in zip(Y, soln, mask):
-                P.plot(xrow,drow, 'b')
-                P.plot(xrow[mrow==1], drow[mrow==1], 'bo')
-                P.plot(xrow,srow, 'r--')
-        else:
-            P.plot(xrow,Y, 'b')
-            P.plot(xrow[mask==1], Y[mask==1], 'bo')
-            P.plot(xrow,soln[0], 'r--')
-        P.show()
 
     b = b.reshape(Yshape[:-1])
     m = m.reshape(Yshape[:-1])
