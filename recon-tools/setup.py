@@ -73,6 +73,7 @@ setup(
     'recon.conf',
     'recon.operations',
     'recon.punwrap',
+    'recon.punwrap.tests',
     'recon.fftmod',
     'recon.tools',
     'recon.scanners',
