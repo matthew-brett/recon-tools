@@ -7,7 +7,7 @@ from recon.imageio import available_writers as output_format_choices, \
      output_datatypes as output_datatype_choices
 from recon.tools import OrderedConfigParser, ConsoleTool
 from recon.operations import OperationManager, RunLogger
-from recon.scanners.varian.FidImage import getPulseSeq
+from recon.scanners.varian import getPulseSeq
 
 # here is a global flag to control fast/slow array logic
 _FAST_ARRAY = False

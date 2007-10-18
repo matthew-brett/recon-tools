@@ -7,8 +7,8 @@ from recon.util import import_from, Quaternion, integer_ranges, scale_data
 _readers = odict((
     ("analyze", ("recon.analyze","readImage")),
     ("nifti", ("recon.nifti","readImage")),
-    ("fid", ("recon.scanners.varian.FidImage","FidImage")),
-    ("fdf", ("recon.scanners.varian.FDFImage","FDFImage"))))
+    ("fid", ("recon.scanners.varian","FidImage")),
+    ("fdf", ("recon.scanners.varian","FDFImage"))))
 available_readers = _readers.keys()
 
 # module-private dict specifying available image writers
@@ -164,6 +164,7 @@ class ReconImage (object):
         self.shape = (self.tdim, self.kdim, self.jdim, self.idim)
         while self.shape[0] < 2:
             self.shape = self.shape[1:]
+        self.data.shape = self.shape
 
     #-------------------------------------------------------------------------
     def concatenate(self, image, axis=0, newdim=False):
@@ -234,9 +235,6 @@ class ReconImage (object):
         "returns subnum-th sub-image with dimension ndim-1"
         return self._subimage(self.data[subnum])
 
-    #-------------------------------------------------------------------------
-    def iama(self):
-        print type(self)
     #-------------------------------------------------------------------------
     def subImages(self):
         "yeilds all images of dimension self.ndim-1"

@@ -1,4 +1,26 @@
+"""
+This module describes a type of MR Image that comes from a scanner's
+raw output file. It will have certain properties that a general
+processed image (eg Analyze, NIFTI) may not, but that are necessary for
+artifact correction techniques.
+
+This module also has helper code to describe two basic things that
+will come up in these scanner files:
+   * Bit-masked words, where individual bits mark off flags or fields.
+     These objects have a number of "property" objects, whose "getters"
+     check the data word against some bitmask, and indicating whether the
+     flag is on or off, or giving the value of the field (see example below)
+
+   * Data headers, which are just chunks of bytes that are broken up into
+     a number of primary types (ints, longs, floats, etc). A generic data
+     header class is provided (_HeaderBase), which given field names and
+     struct composition, will decode the header and define attributes named
+     by the field names. Typically _HeaderBase will be extended by an
+     object that also yields data. A header may include bit-masked words.
+"""
+
 import numpy as N
+import struct
 try:
     from recon.imageio import ReconImage
     from recon import util
@@ -82,4 +104,58 @@ class ScannerImage (ReconImage):
             
 
     
-    
+##############################################################################
+class _HeaderBase (object):
+    """
+    This class is an all-purpose header representation using the built-in
+    "struct" module. A subclass must implement:
+    HEADER_FMT (struct format string),
+    HEADER_FIELD_NAMES (an iterable of names for each of the fields)
+
+    Anything that is a _HeaderBase will have those names as attributes.
+    """
+
+    #-------------------------------------------------------------------------
+    def __init__( self, file_handle ):
+        
+        # read and validate header
+        header_size = struct.calcsize(self.HEADER_FMT)
+        header = file_handle.read( header_size )
+        assert len(header) == header_size, \
+            "Bad header size: expected %d but got %d" % \
+            (header_size, len(header))
+
+        # translate header bytes according to format string
+        header_fields = struct.unpack( self.HEADER_FMT, header )
+        assert len(header_fields) == len(self.HEADER_FIELD_NAMES), \
+            "Wrong number of header fields for format '%s':\n" \
+            "  expected %d but got %d" % (self.HEADER_FMT,
+                                          len(self.HEADER_FIELD_NAMES),
+                                          len(header_fields))
+
+        # add header fields to self
+        header_dict = dict( zip( self.HEADER_FIELD_NAMES, header_fields) )
+        self.__dict__.update( header_dict )
+
+##############################################################################
+class _BitMaskedWord (object):
+    """
+    Represents a data word comprised of several arbitrary-length bitmasked
+    encodings. This class only provides a handy to-string method. Any real
+    subclass implementations should use a built-in Python "property" to
+    represent each flag or field, For example, if bits 2-3 are a small number:
+
+    ZeroToThree = property(lambda self: (self._word & 0xC) >> 2,
+                           doc="retrieves a short int from bits 2-3")
+
+    The word argument must be some size of integer.
+    """
+    def __init__( self, word ):
+        self._word = word
+	
+    def __str__( self ):
+        names = dir( self.__class__ )
+        props = [name for name in names if \
+                 isinstance( getattr( self.__class__, name ), property )]
+        return "(%s)" % (", ".join( ["%s=%s"%(name,getattr( self, name )) \
+                                     for name in props ] ))

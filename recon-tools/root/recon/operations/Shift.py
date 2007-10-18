@@ -13,7 +13,7 @@ class Shift (Operation):
 
     def run(self, image):
         if self.xshift:
-            shift(image[:], 0, self.xshift)
+            shift(image[:], self.xshift, axis=-1)
         if self.yshift:
-            shift(image[:], 1, self.yshift)
+            shift(image[:], self.yshift, axis=-2)
 

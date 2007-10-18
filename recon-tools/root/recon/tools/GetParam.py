@@ -3,7 +3,7 @@ import sys
 import os.path
 
 from recon.tools import ConsoleTool
-from recon.scanners.varian.ProcPar import ProcPar
+from recon.scanners.varian import ProcPar
 
 ##############################################################################
 class GetParam (ConsoleTool):

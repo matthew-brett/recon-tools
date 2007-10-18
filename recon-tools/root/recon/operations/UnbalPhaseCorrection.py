@@ -95,8 +95,11 @@ class UnbalPhaseCorrection (Operation):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
         conj_order = N.arange(n_pe)
-        shift(conj_order[:n_pe/2],0,1)
-        shift(conj_order[n_pe/2:],0,-1)
+        #shift(conj_order[:n_pe/2],0,1)
+        #shift(conj_order[n_pe/2:],0,-1)
+        # shift 1st half forward by 1, and 2nd half backwards by one
+        shift(conj_order[:n_pe/2], 1)
+        shift(conj_order[n_pe/2:],-1)
         inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
         # set up data indexing helpers, based on acquisition order.            
         # pos_order, neg_order define which rows in a slice are grouped

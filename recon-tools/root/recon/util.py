@@ -88,30 +88,32 @@ def range_exceeds(new_dtype, old_dtype):
     return True
     
 #-----------------------------------------------------------------------------
-def shift(matrix, axis, shift):
+def shift(matrix, shift, axis=-1):
     """
     Perform an in-place circular shift of the given matrix by the given
     number of pixels along the given axis.
 
-    @param axis: Axis of shift: 0=x (rows), 1=y (columns), 2=z (slices), etc...
+    @param axis: Axis of shift
     @param shift: Number of pixels to shift.
     """
     dims = matrix.shape
     ndim = len(dims)
+    while axis < 0:
+        axis += ndim
     if axis >= ndim: raise ValueError("bad axis %s"%axis)
     if shift==0: return
-    axis_dim = ndim - 1 - axis
+    #axis_dim = ndim - 1 - axis
 
     # construct slices
     slices = [slice(0,d) for d in dims]
     slices_new1 = list(slices)
-    slices_new1[axis_dim] = slice(shift, dims[axis_dim])
+    slices_new1[axis] = slice(shift, dims[axis])
     slices_old1 = list(slices)
-    slices_old1[axis_dim] = slice(0, -shift)
+    slices_old1[axis] = slice(0, -shift)
     slices_new2 = list(slices)
-    slices_new2[axis_dim] = slice(0, shift)
+    slices_new2[axis] = slice(0, shift)
     slices_old2 = list(slices)
-    slices_old2[axis_dim] = slice(-shift, dims[axis_dim])
+    slices_old2[axis] = slice(-shift, dims[axis])
 
     # apply slices
     new = N.empty(dims, matrix.dtype)

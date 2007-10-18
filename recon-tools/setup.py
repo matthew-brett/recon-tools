@@ -73,11 +73,10 @@ setup(
     'recon.conf',
     'recon.operations',
     'recon.punwrap',
-    'recon.punwrap.tests',
     'recon.fftmod',
     'recon.tools',
     'recon.scanners',
-    'recon.scanners.varian',
+    #'recon.scanners.varian',
     'recon.visualization',],
 
   scripts=[
@@ -89,7 +88,7 @@ setup(
     'scripts/recon'],
 
   package_data = {'recon.conf':['*.ops'],
-                  'recon.scanners.varian': psfiles},
+                  'recon.scanners': psfiles},
   
   ext_modules=[Extension('recon.punwrap._punwrap2D',
                          punwrap2_src,
