@@ -21,6 +21,7 @@ class test_unwrap(NumpyTestCase):
         grid[0] -= 32
         grid[1] -= 32
         grid[2] -= 32
+        # get distance of each point in the grid from 0
         grid = power(power(grid, 2.0).sum(axis=0), 0.5)
         wr_grid = normalize_angle(grid)
         uw_grid = unwrap3D(wr_grid)

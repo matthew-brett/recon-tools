@@ -315,10 +315,7 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
     b[nzrows] = N.asarray((Sxx*Sy - Sx*Sxy)/delta)
     m[nzrows] = N.asarray((S*Sxy - Sx*Sy)/delta)
     
-    if mask is not None:
-        res = abs(Y - mask*(m[:,None]*X+b[:,None])).sum(axis=-1)/npts
-    else:
-        res = abs(Y - (m[:,None]*X+b[:,None])).sum(axis=-1)/npts
+    res = abs(Y - (m[:,None]*X+b[:,None])).sum(axis=-1)/npts
 
     b = b.reshape(Yshape[:-1])
     m = m.reshape(Yshape[:-1])
@@ -338,11 +335,11 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
         if mask is not None:
             mask = N.swapaxes(mask, axis, -1)
         # add a null dimension into b,m,res where the solved-for dimension was
-        slicer = [slice(0,d) for d in b.shape]
-        slicer.insert(axis, None)
+        slicer = [slice(0,d) for d in b.shape]  + [None]
         b = b[slicer]
         m = m[slicer]
         res = res[slicer]
+        (b,m,res) = map(lambda x: N.swapaxes(x, axis, -1), (b,m,res))
     return (b, m, res)
 
 #-----------------------------------------------------------------------------

@@ -531,6 +531,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
         self.loadData(datadir)
         self.realizeOrientation()
         # scanner image will init ReconImage, which will set the data dims
+        if not self.vrange:
+            # this is a badly behaved FidImage.. might be a BRS
+            return
         ScannerImage.__init__(self)
         ref_path = self.path.replace("data.fid", "ref_2.fid")
         if ref_path is not self.path and path.exists(ref_path):

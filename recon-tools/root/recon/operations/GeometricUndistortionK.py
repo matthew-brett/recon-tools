@@ -4,7 +4,7 @@ import numpy as N
 
 from recon.operations import Operation, Parameter, verify_scanner_image
 from recon.imageio import readImage
-from recon.util import fft, ifft
+from recon.util import fft, ifft, checkerline
 
 class GeometricUndistortionK (Operation):
     """
@@ -34,25 +34,17 @@ class GeometricUndistortionK (Operation):
         # fmap and chi-mask are swapped to be of shape (M1,M2)
         fmap = N.swapaxes(regrid(fmapIm[0], regrid_fac, axis=-2).astype(N.float64), -1, -2)
         chi = N.swapaxes(regrid(fmapIm[1], regrid_fac, axis=-2), -1, -2)
-
         M1,M2 = fmap.shape[-2:]
         N2 = N2P = npe
+        
         # compute T_n2 vector
         Tl = image.T_pe
         delT = image.delT
+
         a, b = image.epi_trajectory()
 
-        T_n2 = (a*delT/2. + b*Tl)
-        K = N.empty((nslice, M1, N2, M2), N.complex128)
-        zarg = fmap[:,:,None,:] * \
-               T_n2[None,None,:,None] - \
-               (2*N.pi*N.outer(N.arange(M2)-M2/2,
-                               N.arange(N2)-N2/2)/M2)
-        K.real = N.cos(zarg)
-        K.imag = N.sin(zarg)
-        K = K * chi[:,:,None,:]
-        
-        K = ifft(K)
+        K = get_kernel(nslice, M1, N2, M2, Tl, b, fmap, chi)
+            
         idnt = N.identity(N2, N.complex128)
         for s in range(nslice):
             # dchunk is shaped (nvol, npe, nfe)
@@ -70,10 +62,19 @@ class GeometricUndistortionK (Operation):
                 # as opposed to LAPACK's linear solver. For smaller values
                 # of nvol, the overhead seems to outweigh the benefit.
                 #iK = solve_reg_eqs(K[s,fe], idnt, self.lmbda)
-                iK2 = regularized_inverse(K[s,fe], self.lmbda)
-                dchunk[fe] = N.dot(iK2, dchunk[fe])
+                iK = regularized_inverse(K[s,fe], self.lmbda)
+                dchunk[fe] = N.dot(iK, dchunk[fe])
             dchunk = N.swapaxes(dchunk, 0, 2)
             image[:,s,:,:] = fft(dchunk)
+
+def get_kernel(ns, M1, N2, M2, Tl, b, fmap, chi):
+    T_n2 = b*Tl
+    zarg = fmap[:,:,None,:] * T_n2[None,None,:,None] - \
+           (2*N.pi*N.outer(N.arange(M2)-M2/2, b)/M2)
+    K = N.exp(1.j*zarg)
+    N.multiply(K, chi[:,:,None,:], K)
+    K = ifft(K)
+    return K
 
 def regularized_inverse(A, lmbda):
     # I think N.linalg.solve can be sped-up for this special case
