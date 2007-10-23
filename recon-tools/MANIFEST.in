@@ -4,7 +4,7 @@ include root/recon/conf/*.ops
 include release-notes
 include LICENSE
 include README
-recursive-include root/recon/scanners/varian/tablib *
-prune root/recon/scanners/varian/tablib/TODOs
+recursive-include root/recon/scanners/tablib *
+prune root/recon/scanners/tablib/TODOs
 
 

@@ -33,20 +33,7 @@ class SlicerImage (ReconImage):
         #self.xform[-1] = abs(self.xform[-1])
         # These variables describe which dimension a given standard slicing
         # (axial, saggital, coronal) slices in the data array
-        self.ax, self.cor, self.sag = abs(N.dot(self.xform, N.arange(3)).astype(N.int32)).tolist()
-        # IF the data is Analyze style, make a conversion of the r0 offset
-        # to allow for a universal transformation formula.
-        # keep this internal until later.. this is the r0 in zyx space
-
-##         if not isinstance(image, NiftiImage):
-##             # the NIFTI (r1,r2,r3) -> (x,y,z) transform is:
-##             # xyz = N.dot(xform, dr*r) + r0_n
-##             # the Analyze transform is:
-##             # xyz = N.dot(xform, dr*r - r0_a)
-##             # .... Then r0_n = -N.dot(xform, r0_a)
-##             # (this should work for FidImages also)
-##             self.r0 = -N.dot(self.xform, self.r0)
-            
+        self.ax, self.cor, self.sag = abs(N.dot(self.xform, N.arange(3)).astype(N.int32)).tolist()            
         self.prefilter = None
         self.vox_coords = self.zyx2vox([0,0,0])
 

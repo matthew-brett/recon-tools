@@ -151,13 +151,14 @@ class sliceview (gtk.Window):
         self.overlay_data = None
         self.orient_mode = -1
         # if data is complex, show the magnitude by default
-        self.transform = iscomplex(self.data[:]) and abs_xform or ident_xform
+        self.iscomplex = iscomplex(self.data[:])
+        self.transform = self.iscomplex and abs_xform or ident_xform
         # widget layout table
         table = gtk.Table(4, 2)        
 
         # control panel
         self.control_panel = \
-          ControlPanel(self.data.shape, dim_names, iscomplex(self.data[:]))
+          ControlPanel(self.data.shape, dim_names, self.iscomplex)
         self.control_panel.connect(
             self.radioHandler,
             self.sliderHandler,
@@ -613,9 +614,12 @@ class sliceview (gtk.Window):
     #-------------------------------------------------------------------------
     def orient_handler(self, action, current):
         self.orient_mode = current.get_current_value()
-        for button in self.control_panel.radios:
-            if button.get_active():
-                prefilter = button.transform
+        if self.iscomplex:
+            for button in self.control_panel.radios:
+                if button.get_active():
+                    prefilter = button.transform
+        else:
+            prefilter = ident_xform
         if self.orient_mode >= 0:
             ax, cor, sag = self.data.slicing()
             trans_dims = {

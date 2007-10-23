@@ -287,11 +287,12 @@ class AnalyzeWriter (object):
         r0_ana = (-N.dot(inv_xform, r0)/dimscl).astype(N.int16)
 
         dtype = datatype2dtype[self.datatype]
-        if dtype in N.sctypes['int'] + N.sctypes['uint']:
+        if dtype in N.sctypes['int']:
+            glmax = 2**(datatype2bitpix[self.datatype]-1) - 1
+        elif dtype in N.sctypes['uint']:
             glmax = 2**(datatype2bitpix[self.datatype]) - 1
         else:
             glmax = 1
-        
         imagevalues = {
           'datatype': self.datatype,
           'bitpix': datatype2bitpix[self.datatype],

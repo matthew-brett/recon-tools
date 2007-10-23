@@ -146,7 +146,6 @@ class test_utils(NumpyTestCase):
 
         q3 = q2*q1
         rot3 = q3.tomatrix()
-        print rot3
         assert_array_equal(rot3, N.dot(rot2, rot1))
         
         

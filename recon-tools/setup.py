@@ -10,14 +10,14 @@ from distutils.core import setup, Extension
 
 # grab extra file names to include in varian.tablib package
 psfiles = glob.glob(recon.scanners.varian.tablib+'/*')
-psfiles = ['tablib/'+os.path.split(file)[1] for file in psfiles]
+psfiles = ['tablib/'+os.path.split(fname)[1] for fname in psfiles]
 # with RPM builds, TODOs is already pruned from MANIFEST.in
 if 'tablib/TODOs' in psfiles:
     psfiles.remove('tablib/TODOs')
 
 # grab the Extension modules source files
-punwrap2_src = glob.glob(os.path.join("src/punwrap2D","*.c"))
-punwrap3_src = glob.glob(os.path.join("src/punwrap3D", "*.c"))
+punwrap2_src = glob.glob("src/punwrap2D/*.c")
+punwrap3_src = glob.glob("src/punwrap3D/*.c")
 fftmod_src = ['src/fftmod/cmplx_fft.c',]
 
 # get the Numpy include directory and get_info utility
@@ -45,6 +45,7 @@ macros = []
 if sys.platform.find("darwin") > -1:
     macros.append( ('DARWIN', None) )
 
+### The setup script ....
 setup(
 
   name='python-recon-tools',
@@ -70,13 +71,16 @@ setup(
   packages=[
     '',
     'recon',
+    'recon.tests',
     'recon.conf',
     'recon.operations',
+    'recon.operations.tests',
     'recon.punwrap',
+    'recon.punwrap.tests',
     'recon.fftmod',
+    'recon.fftmod.tests',
     'recon.tools',
     'recon.scanners',
-    #'recon.scanners.varian',
     'recon.visualization',],
 
   scripts=[
