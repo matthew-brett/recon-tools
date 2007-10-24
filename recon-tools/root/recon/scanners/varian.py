@@ -8,10 +8,8 @@ from tokenize import generate_tokens
 
 import numpy as N
 from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle
-from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord
+from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord, tablib
 from recon.imageio import ReconImage
-
-tablib = path.join(path.split(__file__)[0], "tablib")
 
 #-----------------------------------------------------------------------------
 def getPulseSeq(datadir):

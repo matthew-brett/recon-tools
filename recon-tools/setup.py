@@ -2,14 +2,14 @@
 import sys
 sys.path = ["./root"]+sys.path
 import recon
-import recon.scanners.varian
+import recon.scanners
 import os, glob
 from distutils.core import setup, Extension
 
 ### A little help to make setup go smoothly ....
 
-# grab extra file names to include in varian.tablib package
-psfiles = glob.glob(recon.scanners.varian.tablib+'/*')
+# grab extra file names to include in tablib directory
+psfiles = glob.glob(recon.scanners.tablib+'/*')
 psfiles = ['tablib/'+os.path.split(fname)[1] for fname in psfiles]
 # with RPM builds, TODOs is already pruned from MANIFEST.in
 if 'tablib/TODOs' in psfiles:

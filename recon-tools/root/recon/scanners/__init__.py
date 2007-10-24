@@ -21,6 +21,7 @@ will come up in these scanner files:
 
 import numpy as N
 import struct
+from os import path
 try:
     from recon.imageio import ReconImage
     from recon import util
@@ -30,6 +31,8 @@ except ImportError:
     class ReconImage (object):
         def __init__(self):
             pass
+
+tablib = path.join(path.split(__file__)[0], "tablib")
 
 class ScannerImage (ReconImage):
     """
