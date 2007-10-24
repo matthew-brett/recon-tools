@@ -43,8 +43,7 @@ class GeometricUndistortionK (Operation):
         a, b = image.epi_trajectory()
 
         K = get_kernel(M2, Tl, b, fmap, chi)
-            
-        idnt = N.identity(N2, N.complex128)
+
         for s in range(nslice):
             # dchunk is shaped (nvol, npe, nfe)
             # inverse transform along nfe

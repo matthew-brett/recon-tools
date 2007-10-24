@@ -12,9 +12,7 @@ class Rerun (Recon):
     #-------------------------------------------------------------------------
     def __init__(self, logFile):
         self.logFile = os.path.abspath(logFile)
-        OptionParser.__init__(self)  # don't expect any args
-        self.add_options(self.options)
-        
+        Recon.__init__(self)        
     #-------------------------------------------------------------------------
     def _cleanLog(self):
         startkey = RunLogger(file('/dev/null', 'w'))._start_string
@@ -30,7 +28,6 @@ class Rerun (Recon):
             except StopIteration:
                 read = False
         return ops_str
-    
     #-------------------------------------------------------------------------
     def getOptions(self):
         options, args = self.parse_args()
