@@ -43,8 +43,6 @@ class BalPhaseCorrection (Operation):
         
         n_slice, n_pe, n_fe = self.refShape = inv_ref0.shape
 
-        self.alpha, self.beta = image.epi_trajectory()
-
         #phs_vol comes back shaped (n_slice, n_pe, lin2-lin1)
         phs_vol = unwrap_ref_volume(inv_ref)
         

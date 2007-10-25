@@ -79,10 +79,19 @@ class ScannerImage (ReconImage):
 
     # may change this this ksp_trajectory and handle different cases
     def epi_trajectory(self, pe0=None):
+        """
+        This method is helpful for computing T[n2] in the artifact
+        correction algorithms.
+        Returns:
+        a) the ksp trajectory (-1 or +1) of each row (alpha)
+        b) the index of each row in acq. order in its segment (beta)
+        c) the index of each row, based on the number of rows in a segment (n2)
+        """
         M = self.shape[-2]
-        # sometimes you want to force pe0
         if not pe0:
             pe0 = self.pe0
+        # the n2 vector is always this
+        n2 = N.arange(M) + pe0        
         if self.sampstyle == "centric":
             if self.nseg > 2:
                 raise NotImplementedError("centric sampling not implemented for nseg > 2")
@@ -97,7 +106,7 @@ class ScannerImage (ReconImage):
                 a[n:M:2*self.nseg] = 1
                 a[n+self.nseg:M:2*self.nseg] = -1
                 b = N.floor((N.arange(float(M))+pe0)/float(self.nseg)).astype(N.int32)
-        return (a, b) 
+        return (a, b, n2) 
 
     def check_attributes(self):
         for key in ScannerImage.necessary_params.keys():

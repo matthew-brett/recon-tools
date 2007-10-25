@@ -52,7 +52,7 @@ class UnbalPhaseCorrection (Operation):
         # (in the case of multishot interleave)
         iscentric = image.sampstyle is "centric"
         self.xleave = iscentric and 1 or image.nseg
-        self.alpha, self.beta = image.epi_trajectory()
+        self.alpha, self.beta, _ = image.epi_trajectory()
         # get slice positions (in order) so we can throw out the ones
         # too close to the backplane of the headcoil
         self.good_slices = tag_backplane_slices(image)
@@ -95,8 +95,6 @@ class UnbalPhaseCorrection (Operation):
         n_slice, n_pe, n_fe = self.refShape
         # conj order tells us how to make the unbalanced phase differences
         conj_order = N.arange(n_pe)
-        #shift(conj_order[:n_pe/2],0,1)
-        #shift(conj_order[n_pe/2:],0,-1)
         # shift 1st half forward by 1, and 2nd half backwards by one
         shift(conj_order[:n_pe/2], 1)
         shift(conj_order[n_pe/2:],-1)

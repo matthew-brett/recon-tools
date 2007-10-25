@@ -40,9 +40,9 @@ class GeometricUndistortionK (Operation):
         Tl = image.T_pe
         delT = image.delT
 
-        a, b = image.epi_trajectory()
+        a, b, n2 = image.epi_trajectory()
 
-        K = get_kernel(M2, Tl, b, fmap, chi)
+        K = get_kernel(M2, Tl, b, n2, fmap, chi)
 
         for s in range(nslice):
             # dchunk is shaped (nvol, npe, nfe)
@@ -64,17 +64,17 @@ class GeometricUndistortionK (Operation):
             dchunk = N.swapaxes(dchunk, 0, 2)
             image[:,s,:,:] = fft(dchunk)
 
-def get_kernel(M2, Tl, b, fmap, chi):
+def get_kernel(M2, Tl, b, n2, fmap, chi):
     T_n2 = b*Tl
     zarg = fmap[:,:,None,:] * T_n2[None,None,:,None] - \
-           (2*N.pi*N.outer(b, N.arange(M2)-M2/2)/M2)
+           (2*N.pi*N.outer(n2, N.arange(M2)-M2/2)/M2)
     K = N.exp(1.j*zarg)
     del zarg    
     N.multiply(K, chi[:,:,None,:], K)
     K = ifft(K)
-    # a little hacky here..
-    n_pe_really = 2*(b>=0).sum()
-    if b.shape[0] < n_pe_really:
+    #a little hacky here..
+    n_pe_really = 2*(n2>=0).sum()
+    if n2.shape[0] < n_pe_really:
         filled = N.zeros(n_pe_really)
         filled[(b+n_pe_really/2).astype(N.int32)] = 1.0
         keep = filled.nonzero()[0]
