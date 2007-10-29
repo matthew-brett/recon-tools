@@ -20,14 +20,10 @@ class test_reconstruction(NumpyTestCase):
     """
 
     def setUp(self):
-##         recon_list = ['ax_asems.log', 'ph_asems.log', 'ax_epidw.log',
-##                       'epi1sh.log', 'epi2shcen.log', 'epi2shlin.log',
-##                       'nsepidw.log', 'gems.log', 'mpflash.log']
         self.pwd = path.split(__file__)[0]
         self.recon_list = glob(self.pwd+'/*.log')
+        # do this so that all the asems log-scripts get run first!
         self.recon_list.sort()
-        #self.recon_list = [path.join(self.pwd, log) for log in recon_list]
-        #print self.recon_list
         self._fixpaths()
 
     def _fixpaths(self):

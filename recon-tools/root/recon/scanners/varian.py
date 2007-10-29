@@ -181,20 +181,23 @@ class ProcParImageMixin (object):
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty    
     def isepi(self):
-        return self.pulse_sequence.find('epidw') > -1 or \
-               self.pulse_sequence.find('testbrs') > -1
+        pslabel = self.pulse_sequence
+        return pslabel.find('epidw') > -1 or pslabel.find('testbrs') > -1
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def isravi(self):
-        return not self.isepi and self.pulse_sequence.find('epi') > -1
+        pslabel = self.pulse_sequence        
+        return not self.isepi and pslabel.find('epi') > -1
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def ismultislice(self):
-        return self.pulse_sequence in ('gems', 'asems', 'asems_mod')
+        pslabel = self.pulse_sequence        
+        return pslabel in ('gems', 'asems', 'asems_mod')
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def ismpflash_like(self):
-        return self.pulse_sequence in ('box3d_slab', 'box3d_v2', 'mp_flash3d')
+        pslabel = self.pulse_sequence        
+        return pslabel in ('box3d_slab', 'box3d_v2', 'mp_flash3d')
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def pe0(self):
@@ -229,11 +232,7 @@ class ProcParImageMixin (object):
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def pulse_sequence(self):
-        pslabel = self._procpar.pslabel[0]
-        if pslabel == "Vsparse": pslabel = "epidw"
-        elif self.spinecho and pslabel== 'epidw':
-            pslabel = "epi%dse%dk" % (self.n_pe, self.nseg)
-        return pslabel
+        return self._procpar.pslabel[0]
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def petable_name(self):
