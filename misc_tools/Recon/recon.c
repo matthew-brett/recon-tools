@@ -96,7 +96,7 @@ int main(int argc, char* argv[])
 
 void read_oplist(char *oplist_path, op_struct *op_seq)
 {   
-  char line[70];         
+  char line[200];         
   int n;            
   FILE *fp;
  
@@ -220,6 +220,9 @@ void read_oplist(char *oplist_path, op_struct *op_seq)
 void read_image(image_struct *image, op_struct op)
 {
   int fidtype;
+  int is_brs;
+  printf("%s, %s\n", op.param_1, op.param_2);
+  is_brs = strcmp(op.param_2, "brs") > -1 ? 1 : 0;
   read_procpar(op.param_1, image);
   fidtype = get_fid_type(image, op.param_1);
   image->data = c4tensor_alloc(image->n_vol, image->n_slice,
@@ -229,12 +232,19 @@ void read_image(image_struct *image, op_struct op)
     return;
   } else if(fidtype == COMPRESSED || fidtype == UNCOMPRESSED) {
     image->ref1 = c3tensor_alloc(image->n_slice, image->n_pe, image->n_fe);
-    image->ref2 = c3tensor_alloc(image->n_slice, image->n_pe, image->n_fe);
-    /* if <file-exists: blahblah_ref_2.fid> */
-    get_epibrs_data(op.param_1, image, fidtype);
-    image->n_refs++;
-    /* else <only get_epi_data (no brs) > */
-    return;
+    if (is_brs) {
+      image->ref2 = c3tensor_alloc(image->n_slice, image->n_pe, image->n_fe);
+      /* if <file-exists: blahblah_ref_2.fid> */
+      printf("reading brs data\n");
+      get_epibrs_data(op.param_1, image, fidtype);
+      image->n_refs++;
+      return;
+      /* else <only get_epi_data (no brs) > */
+    } else {
+      printf("reading 1ref epidw data\n");
+      get_epidw_data(op.param_1, image, fidtype);
+      return;
+    }
   } else {
     printf("not reading data!\n");
     exit(1);

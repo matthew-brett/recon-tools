@@ -1,5 +1,7 @@
-#read_image image-path
-read_image standard_brs_data.fid
+#read_image image-path [brs distinguishes brs from epidw]
+#for epidw: read_image epidw.fid
+#for brs: read_image brs_data.fid brs
+read_image standard_brs_data.fid brs
 
 #bal_phs_corr (no params)
 bal_phs_corr

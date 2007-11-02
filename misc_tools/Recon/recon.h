@@ -93,11 +93,11 @@ typedef struct{
 
 typedef struct{
   void (*op) ();
-  char op_name[30];
-  char param_1[20];
-  char param_2[20];
-  char param_3[20];
-  char param_4[20];
+  char op_name[50];
+  char param_1[50];
+  char param_2[50];
+  char param_3[50];
+  char param_4[50];
   int  op_active;
 } op_struct;
 
@@ -117,7 +117,10 @@ void surf_plot(image_struct *image, op_struct op);
 /* Declaration of Data IO functions */
 void read_procpar(char *procpar_path, image_struct *image);
 void read_oplist(char *oplist_path, op_struct *op_seq);
-int get_data(char *data_path, image_struct *image);
+int get_multislice_data(char *data_path, image_struct *image);
+int get_epibrs_data(char *data_path, image_struct *img, int filetype);
+int get_epidw_data(char *data_path, image_struct *img, int filetype);
+
 
 /* Declaration of helper functions */
 void swap_bytes(unsigned char *x, int size);

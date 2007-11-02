@@ -165,8 +165,8 @@ int get_multislice_data(char *base_path, image_struct *img)
 
 /**************************************************************************
  * EPI data should be in either "compressed" (1 data block = 1 volume) or *
- * "uncompressed" (1 data block = 1 slice) format. In ??? case, the 
- * alternate PE lines should be reversed.
+ * "uncompressed" (1 data block = 1 slice) format. In compressed case,    *
+ * alternate PE lines should be reversed.                                 *
 **************************************************************************/ 
 
 int get_epibrs_data(char *base_path, image_struct *img, int filetype)
@@ -231,6 +231,8 @@ int get_epibrs_data(char *base_path, image_struct *img, int filetype)
 
   if( !(filetype==COMPRESSED || filetype==UNCOMPRESSED) ) {
     printf("unknown FID file type for EPI data.\n");
+    fclose(fp_data);
+    fclose(fp_ref2);
     exit(1);
   }
   /* ???could check here to make sure the file length is correct */
@@ -341,6 +343,133 @@ int get_epibrs_data(char *base_path, image_struct *img, int filetype)
 
   printf("Finished reading the data file. \n\n");
 
+  return 1;
+}
+
+/**************************************************************************
+ * EPI data should be in either "compressed" (1 data block = 1 volume) or *
+ * "uncompressed" (1 data block = 1 slice) format. In compressed case,    *
+ * alternate PE lines should be reversed.                                 *
+**************************************************************************/ 
+int get_epidw_data(char *base_path, image_struct *img, int filetype)
+{
+  char data_path[200], str[20];
+  sub_hdr_struct *sub_hdr;
+  main_hdr_struct *main_hdr;
+  int main_hdr_size, sub_hdr_size, expected_file_size;
+  int block_data_size, swap = 0;
+  int n_pe, n_fe, precision, n_vol, n_slice;
+  int vol, pe, fe, b, t, s, n, b_idx, d_idx, ref;
+  int nblocks, ntraces, npts, bbytes, tbytes, ebytes;
+  int re, im;
+  int *acq_order;
+  unsigned char *block;
+  float b_real, b_imag;
+  fftw_complex *data;
+  FILE *fp;
+  
+  // A few assignments to make the code easier to read 
+  main_hdr_size = sizeof(main_hdr_struct);
+  sub_hdr_size = sizeof(sub_hdr_struct);
+  n_pe = img->n_pe;
+  n_fe = img->n_fe;
+  precision = img->precision;
+  n_vol = img->n_vol;
+  n_slice = img->n_slice;
+
+  sub_hdr = (sub_hdr_struct *) malloc(sub_hdr_size);
+  main_hdr = (main_hdr_struct *) malloc(main_hdr_size);
+
+  // Create a string containing the full path to the data. 
+  strcpy(data_path, base_path);
+  strcat(data_path, "/fid");
+  
+  if((fp = fopen(data_path,"rb")) == NULL){
+    printf("Error opening fid file for data read: %s.\n", data_path);
+    exit(1);
+  }
+
+  fread(main_hdr, main_hdr_size, 1, fp);
+
+  nblocks = (int) ntohl((uint32_t) main_hdr->nblocks);
+  ntraces = (int) ntohl((uint32_t) main_hdr->ntraces);
+  npts = (int) ntohl((uint32_t) main_hdr->np);
+  bbytes = (int) ntohl((uint32_t) main_hdr->bbytes);
+  tbytes = (int) ntohl((uint32_t) main_hdr->tbytes);
+  ebytes = (int) ntohl((uint32_t) main_hdr->ebytes);
+  if (ebytes != main_hdr->ebytes) swap = 1;
+
+  if( !(filetype==COMPRESSED || filetype==UNCOMPRESSED) ) {
+    printf("unknown FID file type for EPI data.\n");
+    fclose(fp);
+    exit(1);
+  }
+
+  block_data_size = ntraces*npts;
+
+  block = (unsigned char *) malloc(block_data_size * precision);
+
+  // Create an array which maps the spatial location of a slice, given by its
+  // slice number index, to the temporal order in which it was acquired. 
+  acq_order = (int *) malloc(n_slice*sizeof(int));
+  n = 0;
+  for(s=n_slice-1; s>-1; s-=2){
+    acq_order[n++] = s;
+  }
+  for(s=n_slice-2; s>-1; s-=2){
+    acq_order[n++] = s;
+  }
+
+  /* if we're on volume 0, then data = img->ref1 */
+  for(b=0; b<nblocks; b++) {
+    fread(sub_hdr, sub_hdr_size, 1, fp);
+    if (swap) {
+      swap_bytes((unsigned char *) &(sub_hdr->lvl), sizeof(float));
+      swap_bytes((unsigned char *) &(sub_hdr->tlt), sizeof(float));
+    }
+    fread(block, precision, block_data_size, fp);
+    for(t=0; t<ntraces; t++) {
+      if (filetype == COMPRESSED) {
+	vol = b;
+	s = acq_order[t/n_pe];
+	pe = t%n_pe;
+      } else {
+	vol = b/n_slice;
+	s = acq_order[b%n_slice];
+	pe = t;
+      }
+      /* if we're on an image volume, set this to effect an index offset */
+      ref = vol ? 1 : 0;
+      data = vol ? ***(img->data) : **(img->ref1);
+      /* now we're set up to scan through the traces */
+      for(fe=0; fe<n_fe; fe++) {
+	b_idx = t*npts + 2*fe;
+	/* do a time-reverse if necessary on every other PE line */
+	if (filetype==COMPRESSED && pe%2)
+	  d_idx = (n_fe - fe - 1) + n_fe*(pe + n_pe*(s + n_slice*(vol-ref)));
+	else 
+	  d_idx = fe + n_fe*(pe + n_pe*(s + n_slice*(vol-ref)));
+	if (precision == 4) {
+	  /* ntohl() and ntohs() do nothing if this machine is big-endian */
+	  re = (int) ntohl( ((uint32_t *)block)[b_idx] );
+	  im = (int) ntohl( ((uint32_t *)block)[b_idx+1] );
+	} else {
+	  re = (short) ntohs( ((uint16_t *)block)[b_idx] );
+	  im = (short) ntohs( ((uint16_t *)block)[b_idx+1] );
+	}
+	data[d_idx][0] = (double) re - (double) sub_hdr->lvl;
+	data[d_idx][1] = (double) im - (double) sub_hdr->tlt;
+      }
+    }
+  }
+
+  fclose(fp);
+  free(main_hdr);
+  free(sub_hdr);
+  free(block);
+  free(acq_order);
+  
+  printf("Finished reading the data file. \n\n");
   return 1;
 }
 
