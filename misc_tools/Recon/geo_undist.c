@@ -64,7 +64,7 @@ void geo_undistort(image_struct *image, op_struct op)
      3) (forward) xform data back to ksp
      4) 
   */
-  printf("correting data... ");
+  printf("correcting data... ");
   for(l=0; l<n_slice; l++) {
     /* slice across array at slice=l and put the data in dchunk */
     for(k=0; k<n_vol; k++) {
@@ -178,7 +178,7 @@ void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
     }
   }
   /* If the fmap is of a different resolution, this will need to be a
-     M2 -> N2 transform (M2 >= N2).. so potentially, only a subset of 
+     M2 -> N2 transform (M2 >= N2).. so potentially, only a subset of
      computed frequencies will be kept. */
   fft1d(***F, ***kernel, M2, ns*M1*N2*M2, INVERSE);
   

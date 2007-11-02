@@ -15,8 +15,12 @@
 //#include <gtk/gtk.h>
 #include <fftw3.h>
 #include <netinet/in.h>
-#include <vecLib/cblas.h>
 
+#ifdef DARWIN
+#include <vecLib/cblas.h>
+#else
+#include <atlas/cblas.h>
+#endif // ifdef DARWIN
 
 #define   MAX_OPS                    100 
 #define MULTISLICE 0
@@ -103,6 +107,7 @@ void read_image(image_struct *image, op_struct op);
 void write_image(image_struct *image, op_struct op);
 void ifft2d(image_struct *image, op_struct op);
 void bal_phs_corr(image_struct *image, op_struct op);
+void unbal_phs_corr(image_struct *image, op_struct op);
 void get_fieldmap(image_struct *image, op_struct op);
 void geo_undistort(image_struct *image, op_struct op);
 void viewer(image_struct *image, op_struct op);
@@ -125,8 +130,6 @@ void compute_field_map(image_struct *image, double threshold);
 */
 void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
 			    int rowsize, int volsize, int nvols);
-void unwrap_ref_volume(double *uphase, fftw_complex ***vol, 
-		       int zdim, int ydim, int xdim, int xstart, int xstop);
 void maskbyfit(double *line, double *sigma, double *mask, double tol, 
 	       double tol_growth, int len);
 

@@ -13,3 +13,19 @@ void dsolve_svd(double *A, double *y, double *x, int M, int N);
 void linReg(double *y, double *x, double *sigma, int len, 
 	    double *m, double *b, double *res);
 
+void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
+			    int rowsize, int volsize, int nvols);
+
+void unwrap_ref_volume(double *uphase, fftw_complex ***vol, 
+		       int zdim, int ydim, int xdim, int seg);
+
+void maskbyfit(double *line, double *sigma, double *mask, double tol, 
+	       double tol_growth, int len);
+
+void qual_map_mask_3d(double ***phs, double ***mask, 
+		      int nz, int ny, int nx, double pct);
+
+void qual_map_mask_2d(double ***phs, double **mask, 
+		      int nz, int ny, int nx, double pct);
+
+void d2_xyz(double ***box, double ***d2, int nz, int ny, int nx, double *min);

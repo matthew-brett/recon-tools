@@ -43,7 +43,7 @@ double *dvector(int np)
 {
 	double *v;
 
-	v=(double *)malloc((size_t) (np*sizeof(double)));
+	v=(double *)calloc((size_t) np, sizeof(double));
 	if (!v) nrerror("allocation failure in dvector()");
 	return v;
 }
@@ -60,7 +60,7 @@ float **matrix(int nrow, int ncol)
 
 
 	/* allocate rows and set pointers to them */
-	m[0]=(float *) malloc((size_t)((nrow*ncol)*sizeof(float)));
+	m[0]=(float *) calloc((size_t)(nrow*ncol), sizeof(float));
 	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
 	for(i=1;i<nrow;i++) m[i]=m[i-1]+ncol;
@@ -79,7 +79,7 @@ double **dmatrix(int nrow, int ncol)
 	if (!m) nrerror("allocation failure 1 in matrix()");
 
 	/* allocate rows and set pointers to them */
-	m[0]=(double *) malloc((size_t)((nrow*ncol)*sizeof(double)));
+	m[0]=(double *) calloc((size_t)(nrow*ncol), sizeof(double));
 	if (!m[0]) nrerror("allocation failure 2 in matrix()");
 
 	for(i=1;i<nrow;i++) m[i]=m[i-1]+ncol;
@@ -97,7 +97,7 @@ double **dmatrix_colmajor(int nrow, int ncol)
   m = (double **) malloc(ncol * sizeof(double*));
   if (!m) nrerror("allocation failure in dim 1 in dmatrix_colmajor()");
 
-  m[0] = (double *) malloc((ncol*nrow) * sizeof(double));
+  m[0] = (double *) calloc((size_t)(ncol*nrow), sizeof(double));
   if (!m[0]) nrerror("allocation failure in dim 2 in dmatrix_colmajor()");
 
   for(i=1; i<ncol; i++) m[i] = m[i-1]+nrow;
@@ -274,7 +274,7 @@ double ****d4tensor_alloc(int nvol, int nsl, int nrow, int ncol)
   t[0][0] = (double **) malloc( (nvol*nsl*nrow) * sizeof(double *));
   if (!t[0][0]) nrerror("dimension 2 allocation failed c4tensor()");
 
-  t[0][0][0] = (double *) malloc( (nvol*nsl*nrow*ncol) * sizeof(double));
+  t[0][0][0] = (double *) calloc((size_t)(nvol*nsl*nrow*ncol), sizeof(double));
   if(!t[0][0][0]) nrerror("dimension 3 allocation failed c4tensor()");
 
   /* arange 0th level pointers:  t[0][0...nsl-1][0...nrow-1]  */

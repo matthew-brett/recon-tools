@@ -22,6 +22,7 @@
 
 #include "recon.h"
 #include "data.h"
+#include "util.h"
 
 int main(int argc, char* argv[])
 {
@@ -121,6 +122,9 @@ void read_oplist(char *oplist_path, op_struct *op_seq)
     }
     else if(strcmp(op_seq[n].op_name,"bal_phs_corr")==0){
       op_seq[n].op = bal_phs_corr;
+    }
+    else if(strcmp(op_seq[n].op_name,"unbal_phs_corr")==0){
+      op_seq[n].op = unbal_phs_corr;
     }
     else if(strcmp(op_seq[n].op_name,"geo_undistort")==0){
       op_seq[n].op = geo_undistort;
@@ -318,7 +322,7 @@ void ifft2d(image_struct *image, op_struct op)
   /* it's not really necessary to have buffer space */
   imspc_vec = (fftw_complex *) fftw_malloc(dsize * sizeof(fftw_complex));
   
-  IFT2D = fftw_plan_dft_2d(npe, nfe, ***(image->data), imspc_vec, +1,
+  IFT2D = fftw_plan_dft_2d(npe, nfe, ***(image->data), imspc_vec, INVERSE,
 			   FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
 
   
@@ -552,7 +556,7 @@ void swap_bytes(unsigned char *x, int size)
 
 void compute_field_map(image_struct *img, double threshold)
 {
-  int sl, pe, fe, n_pe, n_fe, n_slice, offset, slice_sz;
+  int sl, pe, fe, n_pe, n_fe, n_slice, vol_sz;
   float delta_te;
   float *pwr, *puw;
   double re, im, re1, re2, im1, im2;
@@ -563,11 +567,11 @@ void compute_field_map(image_struct *img, double threshold)
   n_pe = img->n_pe;
   n_fe = img->n_fe;
   n_slice = img->n_slice;
-  slice_sz = n_pe*n_fe;
+  vol_sz = n_slice*n_pe*n_fe;
 
   // Allocate memory for some temporary workspace arrays.
-  pwr = (float *) malloc(sizeof(float)*slice_sz);
-  puw = (float *) malloc(sizeof(float)*slice_sz);
+  pwr = (float *) malloc(sizeof(float)*vol_sz);
+  puw = (float *) malloc(sizeof(float)*vol_sz);
 
   // Calculate the difference between the TEs of the 1st and 2nd ASEMS.
   delta_te = img->asym_times[1] - img->asym_times[0];
@@ -578,41 +582,33 @@ void compute_field_map(image_struct *img, double threshold)
   for(sl=0; sl<n_slice; sl++){
     for(pe=0; pe<n_pe; pe++){
       for(fe=0; fe<n_fe; fe++){
-        re1 = img->data[0][sl][pe][fe][0];
+	re1 = img->data[0][sl][pe][fe][0];
         im1 = -img->data[0][sl][pe][fe][1];
         re2 = img->data[1][sl][pe][fe][0];
         im2 = img->data[1][sl][pe][fe][1];
         re = re1*re2 - im1*im2; 
         im = re1*im2 + re2*im1;
-        img->fmap[sl][pe][fe] = atan2(im, re); 
+	*(pwr++) = (float) atan2(im, re);
        }
     }
   }
+  pwr -= vol_sz;
 
   // Create a 3D mask indicating where the field-map SNR is sufficient.
   create_mask(img, threshold);
- 
-  // Unwrap the volume of phase data. 
+  // Unwrap 3D field
+  unwrap_phs(pwr, puw, n_slice, n_pe, n_fe);
   for(sl=0; sl<n_slice; sl++){
-    // Put wrapped phase into a 1D array needed by the unwrapper function.
     for(pe=0; pe<n_pe; pe++){
-      offset = pe*n_fe;
       for(fe=0; fe<n_fe; fe++){
-        // Apply the mask 
-        pwr[offset + fe] = (float)(img->fmap[sl][pe][fe])
-                           * (float)(img->mask[sl][pe][fe]);
-      }
-    }
-    // Unwrap a 2D slice.
-    doUnwrap(pwr, puw, n_pe, n_fe);
-    // Put the 1D float result in the 3D double fmap array.
-    for(pe=0; pe<n_pe; pe++){
-      offset = pe*n_fe;
-      for(fe=0; fe<n_fe; fe++){
-        img->fmap[sl][pe][fe] = (double) puw[offset + fe]/delta_te;
+	if (img->mask[sl][pe][fe] > 0.0)
+	  img->fmap[sl][pe][fe] = ((double) *(puw++))/delta_te;
+	else
+	  puw++;
       }
     }
   }
+  puw -= vol_sz;
   
   free(puw);
   free(pwr);
@@ -669,8 +665,6 @@ unsigned char* create_mask(image_struct *img, double thresh_fact)
   p98 = tmp_1d[ (int) (.98 * dsize) ]; // EXPERIMENT WITH p98
   //thresh = 0.35*(p98 - p02) + p02;
   thresh = thresh_fact*(p98 - p02) + p02;      // EXPERIMENT WITH 0.1
-  printf("%2.7f, %2.7f\n", tmp_1d[0], tmp_1d[dsize-1]);
-  printf("%2.7f, %2.7f, %2.7f\n", p98, p02, thresh);
 
   // Create the mask from the threshold value and the 3D magnitude data array.
   for(sl=0; sl<n_slice; sl++){
