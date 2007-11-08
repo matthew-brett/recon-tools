@@ -24,7 +24,6 @@ void geo_undistort(image_struct *image, op_struct op)
   fftw_complex ****kern, *dchunk, *dist_chunk, *soln_chunk;
   double lambda;
   int k, l, m, n, n_vol, n_slice, n_pe, n_fe;
-  FILE *fp;
 
   n_vol = image->n_vol;
   n_slice = image->n_slice;
@@ -140,8 +139,8 @@ void get_kernel(fftw_complex ****kernel, double ***fmap, double ***vmask,
 
   double *t_n2;
   fftw_complex ****F;
-  int N2, N2P, M1, M2, n2, n2p, m1, m2, sl, idx;
-  double re, im, zarg;
+  int N2, N2P, M1, M2, n2, m1, m2, sl;
+  double zarg;
   double pi = acos(-1.0);
 
   // this isn't strictly true.. n2/n2p and m2 can be different
@@ -374,7 +373,6 @@ void zsolve_regularized(fftw_complex *A, fftw_complex *y, fftw_complex *x,
 void zregularized_inverse(fftw_complex *A,
 			  int M, int N, double lambda)
 {
-  char UPLO='U';
   fftw_complex *A2;
   int INFO, *IPIV, k, l, idx, idx_xp, sum = 0;
   double re, im, lmsq = lambda*lambda;
@@ -394,7 +392,7 @@ void zregularized_inverse(fftw_complex *A,
 	      (void *) A, M,
 	      (void *) A, N,
 	      oneD, (void *) A2, N);
-  //zposv_(&UPLO, &N, &M, A2, &N, A, &N, &INFO);
+ 
   zgesv_(&N, &M, A2, &N, IPIV, A, &N, &INFO);
 
   /* A is now the hermitian transpose of the desired solution MxN*/

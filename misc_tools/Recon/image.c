@@ -70,13 +70,12 @@ int get_multislice_data(char *base_path, image_struct *img)
   char data_path[200], str[20];
   sub_hdr_struct *sub_hdr;
   main_hdr_struct *main_hdr;
-  int num, block_data_size, nblocks, ntraces, npts, ebytes, swap;
+  int block_data_size, nblocks, ntraces, npts, ebytes, swap;
   int n_pe, n_fe, precision, n_vol, n_slice;
   int vol, pe, fe, b, t, s, n, idx;
   int re, im;
   int *acq_order;
   unsigned char *block;
-  float b_real, b_imag;
   FILE *fp_data; 
 
   // A few assignments to make the code easier to read 
@@ -171,10 +170,10 @@ int get_multislice_data(char *base_path, image_struct *img)
 
 int get_epibrs_data(char *base_path, image_struct *img, int filetype)
 {  
-  char data_path[200], ref2_path[200], str[20];
+  char data_path[200], ref2_path[200];
   sub_hdr_struct *sub_hdr;
   main_hdr_struct *main_hdr_data, *main_hdr_ref;
-  int main_hdr_size, sub_hdr_size, expected_file_size;
+  int main_hdr_size, sub_hdr_size;
   int block_data_size, swap = 0;
   int n_pe, n_fe, precision, n_vol, n_slice;
   int vol, pe, fe, b, t, s, n, idx;
@@ -182,7 +181,6 @@ int get_epibrs_data(char *base_path, image_struct *img, int filetype)
   int re, im;
   int *acq_order;
   unsigned char *block;
-  float b_real, b_imag;
   fftw_complex ***data;
   FILE *fp_data, *fp_ref2, *fp; 
   
@@ -353,10 +351,10 @@ int get_epibrs_data(char *base_path, image_struct *img, int filetype)
 **************************************************************************/ 
 int get_epidw_data(char *base_path, image_struct *img, int filetype)
 {
-  char data_path[200], str[20];
+  char data_path[200];
   sub_hdr_struct *sub_hdr;
   main_hdr_struct *main_hdr;
-  int main_hdr_size, sub_hdr_size, expected_file_size;
+  int main_hdr_size, sub_hdr_size;
   int block_data_size, swap = 0;
   int n_pe, n_fe, precision, n_vol, n_slice;
   int vol, pe, fe, b, t, s, n, b_idx, d_idx, ref;
@@ -364,7 +362,6 @@ int get_epidw_data(char *base_path, image_struct *img, int filetype)
   int re, im;
   int *acq_order;
   unsigned char *block;
-  float b_real, b_imag;
   fftw_complex *data;
   FILE *fp;
   
@@ -602,16 +599,15 @@ void read_procpar(char *base_path, image_struct *image)
  * iterates_on says which dimension the xform works on (eg 3 = slicewise) *
  **************************************************************************/
 
-void write_analyze(image_struct *image, double *xform (), 
+void write_analyze(image_struct *image, void (*xform) (), 
 		   char *out_file, int iterates_on, double *altdata)
 {
   header_key *hdrkey;
   image_dimension *imgdim;
   data_history *datahist;
   char hdr[220], img[220];//, image_type[20];//, out_type[20];
-  int n_vol, n_slice, n_pe, n_fe, vol, slice, pe, fe, slice_sz, val_1;
+  int n_vol, n_slice, n_pe, n_fe;
   int l, m, chunk_sz, offset, loop_sz;
-  double im1, im2, re1, re2, mag;
   float *cplx_data_chunk;
   double *data_chunk;
   FILE *fp;
@@ -678,7 +674,8 @@ void write_analyze(image_struct *image, double *xform (),
   }
   /* allocate data chunks if necessary (don't do anything fancy for complex,
      just make room for 2*chunk_sz floats) */
-  if (xform != NULL) data_chunk = (double *) malloc(chunk_sz * sizeof(double));
+  if (xform != NULL) 
+    data_chunk = (double *) malloc(chunk_sz * sizeof(double));
   if (xform == NULL && altdata == NULL)
     cplx_data_chunk = (float *) malloc(chunk_sz * 2*sizeof(float));
 

@@ -9,8 +9,7 @@ void bal_phs_corr(image_struct *image, op_struct op)
   double ***working_msk, ***working_phs;
   double **A, *col, *soln;
   double re1, re2, im1, im2, zarg;
-  int k, l, m, n, n_fe, n_pe, n_slice, dsize, nrows, rc;
-  FILE *fp;
+  int k, l, m, n_fe, n_pe, n_slice, dsize, nrows, rc;
 
   n_fe = image->n_fe;
   n_pe = image->n_pe;
@@ -125,7 +124,7 @@ void bal_phs_corr(image_struct *image, op_struct op)
 void reverse_fe(fftw_complex *z, int n_fe, int len_z) {
   fftw_complex *dp;
   double re, im;
-  int fe, k, m, nrows = len_z/n_fe;
+  int k, m, nrows = len_z/n_fe;
   for(k=0; k<nrows; k++) {
     dp = z + k*n_fe;
     for(m=0; m<n_fe/2; m++) {

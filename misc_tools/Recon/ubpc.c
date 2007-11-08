@@ -4,14 +4,13 @@
 
 void unbal_phs_corr(image_struct *image, op_struct op)
 {
-  fftw_complex ***conjref, *ir1, *ir2, *ir, ***pcor_vol;
+  fftw_complex ***conjref, ***pcor_vol;
   double ***phsvol_ev, ***phsvol_od, **q1_mask_ev, **q1_mask_od;
   double **phsvol_mean_ev, **phsvol_mean_od;
   double **working_phs, **working_msk;
   double **A, *col, *soln;
   double re1, re2, im1, im2, zarg, sum1, sum2, b;
-  int k, l, m, n, n_fe, n_pe, n_ref_rows, n_conj_rows, n_slice, dsize, nSVDrows, rc;
-  FILE *fp;
+  int k, l, m, n_fe, n_pe, n_ref_rows, n_conj_rows, n_slice, dsize, nSVDrows, rc;
 
   n_fe = image->n_fe;
   n_pe = image->n_pe;

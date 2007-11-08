@@ -117,15 +117,17 @@ void surf_plot(image_struct *image, op_struct op);
 /* Declaration of Data IO functions */
 void read_procpar(char *procpar_path, image_struct *image);
 void read_oplist(char *oplist_path, op_struct *op_seq);
+int get_fid_type(image_struct *img, char *base_path);
 int get_multislice_data(char *data_path, image_struct *image);
 int get_epibrs_data(char *data_path, image_struct *img, int filetype);
 int get_epidw_data(char *data_path, image_struct *img, int filetype);
-
+void write_analyze(image_struct *image, void (*xform) (), 
+		   char *out_file, int iterates_on, double *altdata);
 
 /* Declaration of helper functions */
 void swap_bytes(unsigned char *x, int size);
 unsigned char* create_mask(image_struct *img, double thresh_fact);
-int comparator(double *a, double *b);
+int comparator(const void *a, const void *b);
 void compute_field_map(image_struct *image, double threshold);
 
 /* Helper functions auxiliary to Balanced Phase Correction

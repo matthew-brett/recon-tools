@@ -24,62 +24,13 @@ double array_max(double *array, int len, int *max_idx) {
   return max;
 }
 
-/* repeatedly takes a 1D FFT of length len_xform by advancing the zin and
-   zout pointers len_z/len_xform times. "direction" indices whether the
-   transform is a forward of reverse FFT */
-/* void fft1d(fftw_complex *zin, fftw_complex *zout,  */
-/* 	   int len_xform, int len_z, int direction) */
-/* { */
-/*   fftw_plan FT1D; */
-/*   double tog = 1.0; */
-/*   fftw_complex *dp_in, *dp_out; */
-/*   int x, k, nxforms = len_z/len_xform; */
-
-/*   FT1D = fftw_plan_dft_1d(len_xform, zin, zout, direction,  */
-/* 			  FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); */
-  
-/*   for(x=0; x<nxforms; x++) { */
-/*     dp_in = zin + x*len_xform; */
-/*     dp_out = zout + x*len_xform; */
-/* /\*     FT1D = fftw_plan_dft_1d(len_xform, dp_in, dp_out, direction,  *\/ */
-/* /\* 			     FFTW_ESTIMATE | FFTW_PRESERVE_INPUT); *\/ */
-/*     for(k=0; k<len_xform; k++) { */
-/*       dp_in[k][0] *= tog; */
-/*       dp_in[k][1] *= tog; */
-/*       tog *= -1.0; */
-/*     } */
-/*     fftw_execute_dft(FT1D, dp_in, dp_out); */
-/* /\*     fftw_destroy_plan(FT1D);    *\/ */
-/*     tog = 1.0; */
-/*     for(k=0; k<len_xform; k++) { */
-/*       /\* undo the modulation in both spaces *\/ */
-/*       if(dp_in != dp_out) { */
-/* 	dp_in[k][0] *= tog; */
-/* 	dp_in[k][1] *= tog; */
-/*       } */
-/*       /\* FFTW does not normalize on the inverse, so do it here *\/ */
-/*       if(direction == INVERSE) { */
-/* 	dp_out[k][0] *= (tog/ (double) len_xform); */
-/* 	dp_out[k][1] *= (tog/ (double) len_xform); */
-/*       } else { */
-/* 	dp_out[k][0] *= tog; */
-/* 	dp_out[k][1] *= tog; */
-/*       } */
-/*       tog *= -1.0; */
-/*     } */
-/*   } */
-/*   fftw_destroy_plan(FT1D); */
-/*   fftw_cleanup(); */
-/* } */
-
 void fft1d(fftw_complex *zin, fftw_complex *zout, 
 	   int len_xform, int len_z, int direction)
 {
   fftw_plan FT1D;
   double tog = 1.0;
-  int x, k, nxforms = len_z/len_xform;
-  //n[0] = len_xform;
-  // n[0] = N; howmany = nxforms; idist=N; istride=1; inembed = NULL
+  int k, nxforms = len_z/len_xform;
+
   FT1D = fftw_plan_many_dft(1, &len_xform, nxforms, zin, NULL, 1, len_xform,
 			    zout, NULL, 1, len_xform, direction,
 			    FFTW_ESTIMATE | FFTW_PRESERVE_INPUT);
@@ -139,8 +90,8 @@ double var(double *points, int npts)
 void dsolve_svd(double *A, double *y, double *x, int M, int N)
 {
   char JOBZ = 'S';
-  int LDA, LDU, LDVT, LWORK, IWORK, LRWORK, INFO, ns, k;
-  double *is, *s, *u, *vt, *work, *vec1, *vec2, cond;
+  int LDA, LDU, LDVT, LWORK, IWORK, INFO, ns, k;
+  double *is, *s, *u, *vt, *work, *vec1, *vec2;
 
   /* A' is shaped (N,M) */
   LDA = N;
@@ -241,7 +192,7 @@ void linReg(double *y, double *x, double *sigma, int len,
 void apply_phase_correction(fftw_complex *data, fftw_complex *corrector,
 			    int rowsize, int volsize, int nvols)
 {
-  int k, l, m, nrows = volsize/rowsize;
+  int l, m;
   fftw_complex *d;
   double re1, re2, im1, im2;
   fft1d(data, data, rowsize, volsize*nvols, INVERSE);
@@ -317,14 +268,15 @@ void maskbyfit(double *line, double *sigma, double *mask, double tol,
 {
   
   int k, n;
-  double m, b, res, mask_start, mask_end, fit;
+  int mask_start, mask_end;
+  double m, b, res, fit;
   double *line_um, *sigma_um, *x_um;
   
-  mask_start = cblas_dasum(len, mask, 1);
+  mask_start = (int) cblas_dasum(len, mask, 1);
   if (!mask_start) {
     return;
   }
-  line_um = (double *) malloc(mask_start * sizeof(double));
+  line_um = (double *) malloc((size_t) (mask_start * sizeof(double)));
   sigma_um = (double *) malloc(mask_start * sizeof(double));
   x_um = (double *) malloc(mask_start * sizeof(double));
   n=0;
@@ -347,7 +299,7 @@ void maskbyfit(double *line, double *sigma, double *mask, double tol,
     fit = ((double) k)*m + b;
     if ( ABS(line[k] - fit) > tol*res ) mask[k] = 0.0;
   }
-  mask_end = cblas_dasum(len, mask, 1);
+  mask_end = (int) cblas_dasum(len, mask, 1);
   /* limiting case */
   if (mask_end == mask_start) return;
   /* recursive case */
@@ -362,12 +314,12 @@ void qual_map_mask_3d(double ***phs, double ***mask,
 		      int nz, int ny, int nx, double pct)
 {
   
-  double ***d2, *d2_sort, *tmp;
+  double ***d2, *d2_sort;
   double sum,  minbad;
   /* this is an emperical cut off, not the user defined one */
   double cutoff = 2.0;
   int i, j, k, pctile_idx;
-  int (*comp) ();  
+  int (*comp) (const void*, const void*);  
 
   d2 = d3tensor_alloc(nz-2, ny-2, nx-2);
   d2_sort = (double *) malloc((nz-2)*(ny-2)*(nx-2)*sizeof(double));
@@ -442,7 +394,7 @@ void qual_map_mask_2d(double ***phs, double **mask,
   double sum;
   double cutoff = 0.2;
   int i, j, k, pctile_idx, d2_ysize;
-  int (*comp) ();
+  int (*comp) (const void*, const void*);
   d2_ysize = MAX(ny-2,1);
   d2 = d3tensor_alloc(nz-2, d2_ysize, nx-2);
   d2_mean = dmatrix(nz-2, nx-2);
@@ -499,18 +451,21 @@ void d2_xyz(double ***box, double ***d2, int nz, int ny, int nx, double *min)
   minbad = 1e6;
   
   /* if ny < 3, can't do a 2nd derivative in the Y-direction */
+  /* so just calculate ny planes of 2nd derivatives */
   if(ny < 3) {
     for(k=1; k<nz-1; k++) {
-      for(i=1; i<nx-1; i++) {
-	sum = 0.0;
-	/* x-diff */
-	dbox = box[k][0][i+1] + box[k][0][i-1] - 2*box[k][0][i];
-	sum += dbox*dbox;
-	/* z-diff */
-	dbox = box[k+1][0][i] + box[k-1][0][i] - 2*box[k][0][i];
-	sum += dbox*dbox;
-	if (sum < minbad) minbad = sum;
-	d2[k-1][0][i-1] = sqrt(sum);
+      for(j=0; j<ny; j++) {
+	for(i=1; i<nx-1; i++) {
+	  sum = 0.0;
+	  /* x-diff */
+	  dbox = box[k][j][i+1] + box[k][j][i-1] - 2*box[k][j][i];
+	  sum += dbox*dbox;
+	  /* z-diff */
+	  dbox = box[k+1][j][i] + box[k-1][j][i] - 2*box[k][j][i];
+	  sum += dbox*dbox;
+	  if (sum < minbad) minbad = sum;
+	  d2[k-1][j][i-1] = sqrt(sum);
+	}
       }
     }
   } else {

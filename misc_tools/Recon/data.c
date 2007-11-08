@@ -396,7 +396,7 @@ void free_zarray(fftw_complex *t)
 }
 
 
-double *mag(double *r, const fftw_complex *z, int N) 
+void mag(double *r, const fftw_complex *z, int N) 
 {
   int k;
   double re, im;
@@ -407,19 +407,19 @@ double *mag(double *r, const fftw_complex *z, int N)
   }
 }
 
-double *angle(double *r, const fftw_complex *z, int N)
+void angle(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = atan2(z[k][1], z[k][0]);
 }
 
-double *real(double *r, const fftw_complex *z, int N)
+void real(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = z[k][0];
 }
 
-double *imag(double *r, const fftw_complex *z, int N)
+void imag(double *r, const fftw_complex *z, int N)
 {
   int k;
   for(k=0; k<N; k++) r[k] = z[k][1];

@@ -34,7 +34,7 @@ double ****d4tensor_alloc(int nvol, int nsl, int nrow, int ncol);
 fftw_complex *zarray(int dsize);
 
 /* Definitions for typical complex->real data conversions */
-double *mag(double *r, const fftw_complex *z, int N);
-double *angle(double *r, const fftw_complex *z, int N);
-double *real(double *r, const fftw_complex *z, int N);
-double *imag(double *r, const fftw_complex *z, int N);
+void mag(double *r, const fftw_complex *z, int N);
+void angle(double *r, const fftw_complex *z, int N);
+void real(double *r, const fftw_complex *z, int N);
+void imag(double *r, const fftw_complex *z, int N);

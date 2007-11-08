@@ -29,7 +29,7 @@ int main(int argc, char* argv[])
 
   image_struct *img;
   op_struct  *op_seq;
-  char oplist_path[200], base_path[200];//, str[10]; 
+  char oplist_path[200];
   //char out_path[200];
   int n;
   double *f ();
@@ -570,7 +570,6 @@ void compute_field_map(image_struct *img, double threshold)
   float delta_te;
   float *pwr, *puw;
   double re, im, re1, re2, im1, im2;
-  fftw_complex ***conj_vol;
   printf("Calculating the field map. \n");
 
   // Make some assignments for convenience.
@@ -693,11 +692,9 @@ unsigned char* create_mask(image_struct *img, double thresh_fact)
   return 0;
 }
 
-
-int comparator(double *a, double *b)
+int comparator(const void *a, const void *b)
 {
-  if (a[0] == b[0]) return 0;
-  if (a[0] > b[0]) return 1;
+  if (*((double *) a) == *((double *) b)) return 0;
+  if (*((double *) a) > *((double *) b)) return 1;
   else return -1;
 }
-
