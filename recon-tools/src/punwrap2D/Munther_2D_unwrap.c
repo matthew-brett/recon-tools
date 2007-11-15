@@ -49,8 +49,8 @@
 
 static float PI = 3.141592654;
 static float TWOPI = 6.283185307;
-int x_connectivity = 1;
-int y_connectivity = 1;
+int x_connectivity_2D = 1;
+int y_connectivity_2D = 1;
 int No_of_edges = 0;
 
 
@@ -215,7 +215,7 @@ void extend_mask(BYTE *input_mask, BYTE *extended_mask, int image_width, int ima
 		IMP += 2;
 	}
 
-	if (x_connectivity == 0)
+	if (x_connectivity_2D == 0)
 	{
 		//extend the mask for the left border of the image
 		IMP = input_mask    + image_width;
@@ -248,7 +248,7 @@ void extend_mask(BYTE *input_mask, BYTE *extended_mask, int image_width, int ima
 		}
 	}
 
-	if (y_connectivity == 0)
+	if (y_connectivity_2D == 0)
 	{
 		//extend the mask for the top border of the image
 		IMP = input_mask    + 1;
@@ -281,7 +281,7 @@ void extend_mask(BYTE *input_mask, BYTE *extended_mask, int image_width, int ima
 		}
 	}		
 
-	if (x_connectivity == 1)
+	if (x_connectivity_2D == 1)
 	{
 		//extend the mask for the right border of the image
 		IMP = input_mask    + 2 * image_width - 1;
@@ -316,7 +316,7 @@ void extend_mask(BYTE *input_mask, BYTE *extended_mask, int image_width, int ima
 		}
 	}
 
-	if (y_connectivity == 1)
+	if (y_connectivity_2D == 1)
 	{
 		//extend the mask for the top border of the image
 		IMP = input_mask    + 1;
@@ -381,7 +381,7 @@ void calculate_reliability(float *wrappedImage, PIXELM *pixel, int image_width, 
 		WIP += 2;
 	}
 
-	if (x_connectivity == 1)
+	if (x_connectivity_2D == 1)
 	{
 		//calculating the raliability for the left border of the image
 		PIXELM *pixel_pointer = pixel + image_width;
@@ -420,7 +420,7 @@ void calculate_reliability(float *wrappedImage, PIXELM *pixel, int image_width, 
 		}
 	}
 
-	if (y_connectivity == 1)
+	if (y_connectivity_2D == 1)
 	{
 		//calculating the raliability for the top border of the image
 		PIXELM *pixel_pointer = pixel + 1;
@@ -488,7 +488,7 @@ void  horizentalEDGEs(PIXELM *pixel, EDGE *edge, int image_width, int image_heig
 		pixel_pointer++;
 	}
 	//construct edges at the right border of the image
-	if (x_connectivity == 1)
+	if (x_connectivity_2D == 1)
 	{
 		pixel_pointer = pixel + image_width - 1;
 		for (i = 0; i < image_height; i++)
@@ -534,7 +534,7 @@ void  verticalEDGEs(PIXELM *pixel, EDGE *edge, int image_width, int image_height
 	} // i loop
 
 	//construct edges that connect at the bottom border of the image
-	if (y_connectivity == 1)
+	if (y_connectivity_2D == 1)
 	{
 		pixel_pointer = pixel + image_width *(image_height - 1);
 		for (i = 0; i < image_width; i++)
@@ -763,7 +763,7 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   EDGE *edge;
   int image_size;
   int No_of_Edges_initially;
-
+  int k;
   image_size = n_pe * n_fe;
   No_of_Edges_initially = 2* n_pe * n_fe; 
   //Allocate some memory for internal arrays.
@@ -771,6 +771,10 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   pixel = (PIXELM *) calloc(image_size, sizeof(PIXELM));
   edge = (EDGE *) calloc(No_of_Edges_initially, sizeof(EDGE));
 
+  if(input_mask==NULL) {
+    input_mask = (BYTE *) calloc(image_size, sizeof(BYTE));
+    for(k=0; k<image_size; k++) *(input_mask+k) = 255;
+  }
   // if the mask is insane, then no unwrapping will happen (MJT)
   if (!isSaneMask(input_mask, n_pe, n_fe)) {
     memmove(UnwrappedImage, WrappedImage, n_pe*n_fe*sizeof(float));
