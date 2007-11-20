@@ -2,8 +2,8 @@
 
 import gtk
 
-from recon.imageio import readImage
-
+from recon import imageio, util
+from recon.operations.ReorderSlices import ReorderSlices
 
 from matplotlib.backends.backend_gtkagg import FigureCanvasGTKAgg as FigureCanvas
 import pylab as P
@@ -11,7 +11,7 @@ import matplotlib.axes3d as P3
 import matplotlib as M
 import numpy as N
 
-class fmapsurf (gtk.Window):
+class surfplot (gtk.Window):
 
     def __init__(self, data, dimarrays=None,
                  dimnames=("phase","slice","read-out"),
@@ -24,6 +24,7 @@ class fmapsurf (gtk.Window):
                                           N.arange(self.data.shape[-2]))
         else:
             self.Xx, self.Yy = dimarrays
+
         self.dimnames = dimnames
         hbox = gtk.HBox()
 
@@ -77,10 +78,101 @@ class fmapsurf (gtk.Window):
         self.ax3d.set_ylabel(dimnames[1])
         self.ax3d.set_xlabel(dimnames[2])
         self.surf_plot.draw()
+
+class FID_ref_pdiff_plot(surfplot):
+    def __init__(self, fidname, zextent=None, vrange=None, rtype="bal"):
+        brs1 = imageio.readImage(fidname, "fid", vrange=vrange)
+        ReorderSlices().run(brs1)
+        rvol = brs1.ref_data
+        if rtype == "bal":
+            inv_ref = util.ifft(rvol[0]) * N.conjugate(util.ifft(util.reverse(rvol[1], axis=-1)))
+        elif rtype == "unbal":
+            conj_order = N.arange(brs1.shape[-2])
+            xleave = brs1.nseg
+            util.shift(conj_order, -xleave)
+            inv_ref = util.ifft(rvol[0]) * \
+                      N.conjugate(N.take(util.ifft(rvol[0]), conj_order, axis=-2))
+        else:
+            inv_ref = util.ifft(rvol[0])
+        phs_vol = util.unwrap_ref_volume(inv_ref, 0, 64)
+            
+        S = brs1.shape[-3]
+        acq_order = brs1.acq_order
+        s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(S)])
+        pss = N.take(brs1.slice_positions, s_ind)
+        ro_line = N.arange(brs1.shape[-1]) - (brs1.shape[-1]/2)
+        Ro,Sp = P.meshgrid(ro_line,pss)
+        surfplot.__init__(self, N.swapaxes(phs_vol, 0, 1), dimarrays=(Ro, Sp),
+                          zextent=zextent, title=fidname)
+
+
+class fmap_surf_plot(surfplot):
+    def __init__(self, fmapname):
+        fmap = imageio.readImage(fmapname, "nifti")
+        surfplot.__init__(self, fmap.subImage(0), title=fmapname)
+
+class Siemens_ref_pdiff_plot(surfplot):
+    "takes a filename indicating the ref phase data block file"
+    def __init__(self, dblock_name, dblock_shape, dtype=N.complex128,
+                 chan=0, vol=0):
+        dblock = N.fromstring(open(dblock_name).read(), dtype=dtype)
+        print dblock.shape
+        print dblock_shape
+        (S,U,R) = dblock_shape[-3:]
+        dblock.shape = dblock_shape
+
+        dblock = dblock[chan,vol]
+        conj_order = N.arange(U)
+        util.shift(conj_order, -1)
+        inv_ref = util.ifft(dblock) * \
+                  N.conjugate(N.take(util.ifft(dblock), conj_order, axis=-2))
+        phs_vol = util.unwrap_ref_volume(inv_ref, 0, R)
+        r_vec = N.arange(R) - R/2
+        #phs_vol = util.unwrap_ref_volume(inv_ref, 49, 76)
+        #r_vec = N.arange(49,76) - R/2
+        Ro,S = P.meshgrid(r_vec, N.arange(S))
+        surfplot.__init__(self, N.swapaxes(phs_vol, 0, 1), dimarrays=(Ro,S),
+                          title=dblock_name)
         
 
 if __name__ == "__main__":
     import sys
     print sys.argv
-    fmap = readImage(sys.argv[1], "nifti")
-    fmapsurf(fmap.subImage(0))
+    if len(sys.argv) < 3:
+        print "basic usage: surf_tool.py surface-type file-name"
+    elif sys.argv[1] == "fid-pdiff":
+        fidname = sys.argv[2]
+        zx = None
+        vrange = None
+        rtype = "bal"
+        if len(sys.argv) > 3:
+            rtype = sys.argv[3]
+        if len(sys.argv) > 4:
+            extents = sys.argv[4].split(":")
+        zx = tuple(map(int, extents))
+        if len(sys.argv) > 5:
+            vrange = sys.argv[5].split(":")
+            vrange = tuple(map(int, vrange))
+        FID_ref_pdiff_plot(fidname, zextent=zx, vrange=vrange, rtype=rtype)
+    elif sys.argv[1] == "fmap":
+        fmap_surf_plot(sys.argv[2])
+    elif sys.argv[1] == "siemens-pdiff":
+        block_name = sys.argv[2]
+        chan, vol = 0, 0
+        dtype = N.complex128        
+        block_shape = tuple(map(int, (sys.argv[3], sys.argv[4], sys.argv[5],
+                                      sys.argv[6], sys.argv[7])))
+
+        if len(sys.argv) > 9:
+            chan, vol = map(int, (sys.argv[8], sys.argv[9]))
+        
+        if len(sys.argv) > 10:
+            dtype = { "z": N.complex128,
+                      "c": N.complex64,
+                      }.get(sys.argv[10])
+        Siemens_ref_pdiff_plot(block_name, block_shape, dtype=dtype)
+    
+    else:
+        print "did not understand plot type"
+        
+    
