@@ -114,26 +114,29 @@ class fmap_surf_plot(surfplot):
 class Siemens_ref_pdiff_plot(surfplot):
     "takes a filename indicating the ref phase data block file"
     def __init__(self, dblock_name, dblock_shape, dtype=N.complex128,
-                 chan=0, vol=0):
+                 chan=0, vol=0, xstart=None, xstop=None):
         dblock = N.fromstring(open(dblock_name).read(), dtype=dtype)
         print dblock.shape
         print dblock_shape
         (S,U,R) = dblock_shape[-3:]
         dblock.shape = dblock_shape
-
         dblock = dblock[chan,vol]
-        conj_order = N.arange(U)
-        util.shift(conj_order, -1)
-        inv_ref = util.ifft(dblock) * \
-                  N.conjugate(N.take(util.ifft(dblock), conj_order, axis=-2))
-        phs_vol = util.unwrap_ref_volume(inv_ref, 0, R)
-        r_vec = N.arange(R) - R/2
-        #phs_vol = util.unwrap_ref_volume(inv_ref, 49, 76)
-        #r_vec = N.arange(49,76) - R/2
+        phs_vol = get_unbal_pdiffs(dblock, xstart, xstop)
+        xstart = xstart or 0
+        xstop = xstop or R
+        r_vec = N.arange(xstart,xstop) - R/2
         Ro,S = P.meshgrid(r_vec, N.arange(S))
         surfplot.__init__(self, N.swapaxes(phs_vol, 0, 1), dimarrays=(Ro,S),
                           title=dblock_name)
         
+
+def get_unbal_pdiffs(data, xstart=None, xstop=None):
+    S,U,R = data.shape
+    rslice = (slice(None), slice(0,U-1), slice(None))
+    cslice = (slice(None), slice(1,U), slice(None))
+    iref = util.ifft(data[rslice]) * N.conjugate(util.ifft(data[cslice]))
+    return util.unwrap_ref_volume(iref, xstart, xstop)
+    
 
 if __name__ == "__main__":
     import sys
@@ -159,7 +162,8 @@ if __name__ == "__main__":
     elif sys.argv[1] == "siemens-pdiff":
         block_name = sys.argv[2]
         chan, vol = 0, 0
-        dtype = N.complex128        
+        dtype = N.complex128
+        ro_range = (None, None)
         block_shape = tuple(map(int, (sys.argv[3], sys.argv[4], sys.argv[5],
                                       sys.argv[6], sys.argv[7])))
 
@@ -167,10 +171,17 @@ if __name__ == "__main__":
             chan, vol = map(int, (sys.argv[8], sys.argv[9]))
         
         if len(sys.argv) > 10:
+            ro_range = sys.argv[10].split(':')
+            ro_range = map(int, ro_range)
+
+        if len(sys.argv) > 11:
             dtype = { "z": N.complex128,
                       "c": N.complex64,
-                      }.get(sys.argv[10])
-        Siemens_ref_pdiff_plot(block_name, block_shape, dtype=dtype)
+                      }.get(sys.argv[11])
+
+        Siemens_ref_pdiff_plot(block_name, block_shape, dtype=dtype,
+                               chan=chan, vol=vol,
+                               xstart=ro_range[0], xstop=ro_range[1])
     
     else:
         print "did not understand plot type"
