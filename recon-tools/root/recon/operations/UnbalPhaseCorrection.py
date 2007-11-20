@@ -46,7 +46,7 @@ class UnbalPhaseCorrection (Operation):
 
         self.volShape = image.shape[-3:]
         refVol = image.ref_data[0]        
-        n_slice, n_pe, n_fe = self.refShape = refVol.shape
+        n_slice, n_ref_rows, n_fe = self.refShape = refVol.shape
         # iscentric says whether kspace is multishot centric;
         # xleave is the factor to which kspace data has been interleaved
         # (in the case of multishot interleave)
@@ -55,7 +55,8 @@ class UnbalPhaseCorrection (Operation):
         self.alpha, self.beta, _ = image.epi_trajectory()
         # get slice positions (in order) so we can throw out the ones
         # too close to the backplane of the headcoil
-        self.good_slices = tag_backplane_slices(image)
+        #self.good_slices = tag_backplane_slices(image)
+        self.good_slices = range(n_slice)
         
         # want to fork the code based on sampling style
         if iscentric:
@@ -72,54 +73,83 @@ class UnbalPhaseCorrection (Operation):
                 dvol[:] = apply_phase_correction(dvol[:], phase)
 
     def run_linear(self, inv_ref):
-        n_slice, n_pe, n_fe = self.refShape
-        # conj order tells us how to make the unbalanced phase differences
-        conj_order = N.array(range(self.xleave, n_pe) + range(self.xleave))
-        inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
-        # set up data indexing helpers, based on acquisition order.            
+        n_slice, n_ref_rows, n_fe = self.refShape
+        
+        # in Varian scans, the phase of the 0th product seems to be
+        # contaminated.. so throw it out if there is at least one more
+        # even-odd product
+        # case < 3 ref rows: can't solve problem
+        # case 3 ref rows: p0 from (0,1), n0 from (1,2)
+        # case >=4 ref rows: p0 from (2,3), n0 from (1,2) (can kick line 0)
+
+        n_conj_rows = n_ref_rows-self.xleave
+        # form the S[u]S*[u+1] array:
+        inv_ref = inv_ref[:,:-self.xleave,:] * \
+                  N.conjugate(inv_ref[:,self.xleave:,:])
+                
+        # partition the phase data based on acquisition order:
         # pos_order, neg_order define which rows in a slice are grouped
         # (remember not to count the lines contaminated by artifact!)
-        pos_order = N.nonzero(self.alpha > 0)[0][self.xleave:]
-        neg_order = N.nonzero(self.alpha < 0)[0][:-self.xleave]
 
+        pos_order = (self.alpha[:n_conj_rows] > 0).nonzero()[0]
+        neg_order = (self.alpha[:n_conj_rows] < 0).nonzero()[0]
+        # if the amount of data can support, it throw out p0
+        if len(pos_order) > 1:
+            pos_order = pos_order[1:]
         phs_vol = unwrap_ref_volume(inv_ref)
         phs_mean, q1_mask = self.mean_and_mask(phs_vol[:,pos_order,:],
                                                phs_vol[:,neg_order,:])
-            
         ### SOLVE FOR THE SYSTEM PARAMETERS FOR UNMASKED SLICES
         self.coefs = self.solve_phase(phs_mean, q1_mask)
         print self.coefs
         return self.correction_volume()
 
     def run_centric(self, inv_ref):
-        n_slice, n_pe, n_fe = self.refShape
-        # conj order tells us how to make the unbalanced phase differences
-        conj_order = N.arange(n_pe)
-        # shift 1st half forward by 1, and 2nd half backwards by one
-        shift(conj_order[:n_pe/2], 1)
-        shift(conj_order[n_pe/2:],-1)
-        inv_ref = N.conjugate(N.take(inv_ref, conj_order, axis=1)) * inv_ref
-        # set up data indexing helpers, based on acquisition order.            
-        # pos_order, neg_order define which rows in a slice are grouped
-        pos_order = N.nonzero(self.alpha > 0)[0]
-        neg_order = N.nonzero(self.alpha < 0)[0]
-        phs_vol = unwrap_ref_volume(inv_ref)
+        # centric sampling for epidw goes [0,..,31] then [-1,..,-32]
+        # in index terms this is [32,33,..,63] + [31,30,..,0]
 
+        # solving for angle(S[u]S*[u+1]) is equal to the basic problem  for u>=0
+        # for u<0:
+        # angle(S[u]S*[u+1]) =   2[sign-flip-terms]*(-1)^(u+1) + [shear-terms]
+        #                    = -(2[sign-flip-terms]*(-1)^u     - [shear-terms])
+        # so by flipping the sign on the phs means data, we can solve for the
+        # sign-flipping (raster) terms and the DC offset terms with the same
+        # equations.
+        
+        n_ref_rows = self.refShape[-2]
+        # this is S[u]S*[u+1].. now with n_ref_rows-1 rows
+        inv_ref = inv_ref[:,:-1,:] * N.conjugate(inv_ref[:,1:,:])
+        # in the lower segment, do NOT grab the n_ref_rows/2-th line..
+        # its product spans the two segments
+        cnj_upper = inv_ref[:,n_ref_rows/2:,:].copy()
+        cnj_lower = inv_ref[:,:n_ref_rows/2-1,:].copy()
+
+        phs_evn_upper = unwrap_ref_volume(cnj_upper[:,0::2,:])
+        phs_odd_upper = unwrap_ref_volume(cnj_upper[:,1::2,:])
+        # 0th phase diff on the upper trajectory is contaminated by eddy curr,
+        # throw it out if possible:
+        if phs_evn_upper.shape[-2] > 1:
+            phs_evn_upper = phs_evn_upper[:,1:,:]
+        phs_evn_lower = unwrap_ref_volume(cnj_lower[:,0::2,:])
+        phs_odd_lower = unwrap_ref_volume(cnj_lower[:,1::2,:])
+        # 0th phase diff on down trajectory (== S[u]S*[u+1] for u=-30)
+        # is contaminated too
+        if phs_evn_lower.shape[-2] > 1:
+            phs_evn_lower = phs_evn_lower[:,:-1,:]
+        
         phs_mean_upper, q1_mask_upper = \
-                        self.mean_and_mask(phs_vol[:,pos_order[n_pe/4+1:],:],
-                                           phs_vol[:,neg_order[n_pe/4:-1],:])
-
+                        self.mean_and_mask(phs_evn_upper, phs_odd_upper)
         phs_mean_lower, q1_mask_lower = \
-                        self.mean_and_mask(phs_vol[:,pos_order[:n_pe/4-1],:],
-                                           phs_vol[:,neg_order[1:n_pe/4],:])
-
+                        self.mean_and_mask(phs_evn_lower, phs_odd_lower)
+        # for upper (u>=0), solve normal SVD
         self.coefs = self.solve_phase(phs_mean_upper, q1_mask_upper)
         print self.coefs
         theta_upper = self.correction_volume()
-        self.coefs = self.solve_phase(phs_mean_lower, q1_mask_lower)
+        # for lower (u < 0), solve with negative data
+        self.coefs = self.solve_phase(-phs_mean_lower, q1_mask_lower)
         print self.coefs
         theta_lower = self.correction_volume()
-        theta_lower[:,n_pe/2:,:] = theta_upper[:,n_pe/2:,:]
+        theta_lower[:,n_ref_rows/2:,:] = theta_upper[:,n_ref_rows/2:,:]
         return theta_lower
 
     def mean_and_mask(self, phs_evn, phs_odd):
@@ -277,12 +307,15 @@ class UnbalPhaseCorrection (Operation):
 def qual_map_mask(phs, pct):
     s,m,n = phs.shape
     qmask = N.zeros((s,n))    
-    qual = N.zeros(( s-2,m-2,n-2 ), phs.dtype)
-
-    hdiff = N.diff(phs[1:-1, 1:-1, :], n=2, axis=-1)
-    vdiff = N.diff(phs[1:-1, :, 1:-1], n=2, axis=-2)
-    udiff = N.diff(phs[:, 1:-1, 1:-1], n=2, axis=-3)
-    sum_sqrs = N.power(hdiff, 2) + N.power(vdiff, 2) + N.power(udiff, 2)
+    if m>2:
+        xdiff = N.diff(phs[1:-1, 1:-1, :], n=2, axis=-1)
+        ydiff = N.diff(phs[1:-1, :, 1:-1], n=2, axis=-2)
+        zdiff = N.diff(phs[:, 1:-1, 1:-1], n=2, axis=-3)
+        sum_sqrs = N.power(xdiff, 2) + N.power(ydiff, 2) + N.power(zdiff, 2)
+    else:
+        xdiff = N.diff(phs[1:-1,:,:], n=2, axis=-1)
+        zdiff = N.diff(phs[:,:,1:-1], n=2, axis=-3)
+        sum_sqrs = N.power(xdiff, 2) + N.power(zdiff, 2)
     
     qual = N.power(sum_sqrs, 0.5).mean(axis=-2)
     qual = qual - qual.min()
@@ -318,8 +351,6 @@ def qual_map_mask(phs, pct):
     x = N.sort(qual.flatten()[nz])
     npts = x.shape[0]
     cutoff = x[int(round(npts*pct/100.))]
-    # prctile seems to be dangerous!!
-    #cutoff = P.prctile(qual.flatten()[nz], pct)
     N.putmask(qmask[1:-1,1:-1], qual > cutoff, 0)
     #################################################################
 

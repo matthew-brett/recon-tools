@@ -18,7 +18,8 @@ def getPulseSeq(datadir):
 
     # Some sequences might require different treatment if conditions are true.
     # if mpflash has the flash_converted flag, then use 2DFFT instead of 3D
-    if ps == "mp_flash3d":
+    #if ps == "mp_flash3d":
+    if pp.ismpflash_like:
         flag = (pp.flash_converted and 1 or 0, )
     # ... add more flags as necessary
     else:
@@ -295,7 +296,8 @@ class ProcParImageMixin (object):
     @CachedReadOnlyProperty
     def slice_gap(self):
         "gap between slice selective bandpasses"
-        if self.pulse_sequence == "mp_flash3d" or self.nslice < 2:
+        #if self.pulse_sequence == "mp_flash3d" or self.nslice < 2:
+        if self.ismpflash_like or self.nslice < 2:
             return 0.
         spos = self.slice_positions
         return ((max(spos) - min(spos) + self.thk)
@@ -304,7 +306,8 @@ class ProcParImageMixin (object):
     @CachedReadOnlyProperty
     def thk(self):
         "slice select bandpass thickness"
-        return self.pulse_sequence == 'mp_flash3d' and \
+##         return self.pulse_sequence == 'mp_flash3d' and \
+        return self.ismpflash_like and \
                10. * self._procpar.lpe2[0] / self.nslice or \
                self._procpar.thk[0]
     #-------------------------------------------------------------------------
