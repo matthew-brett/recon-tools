@@ -226,7 +226,12 @@ class AnalyzeReader:
         quat = Quaternion(M=M)
         offset_ana = N.array([self.x0*self.isize, self.y0*self.jsize,
                               self.z0*self.ksize])
-        offset = tuple(-N.dot(M, offset_ana))
+        offset = -N.dot(M, offset_ana)
+        dimlengths = N.array([self.ksize, self.jsize, self.isize]) * \
+                     N.array(self.data.shape[-3:])
+        # sanity check: if the offset values were funky, don't try to set it
+        if not (N.abs(offset*2) < dimlengths).all():
+            offset = None
         return ReconImage(self.data.copy(), self.isize, self.jsize,
                           self.ksize, self.tsize, offset=offset,
                           scaling=(self.scale_factor or 1.0),

@@ -111,6 +111,19 @@ class BalPhaseCorrection (Operation):
                 B[1,:] = coefs[B2]
                 B[2,:] = coefs[B3]
                 theta[slicing] = N.dot(A,B)[:,None,:]
+
+##         # plotting stuff
+##         import pylab as P
+##         import matplotlib.axes3d as p3
+##         Rx,Sx = P.meshgrid(r_line, s_line)
+##         for u in range(0,n_pe,9):
+##             fig = P.figure()
+##             ax = p3.Axes3D(fig)
+##             ax.hold(True)
+##             ax.plot_wireframe(Rx,Sx, 0.5*phs_vol[:,u,:])
+##             ax.plot_wireframe(Rx,Sx, theta[:,u,:], color=[1.0,0,0,1])
+##             P.show()
+
             
         phase = N.exp(-1.j*theta)
         from recon.tools import Recon

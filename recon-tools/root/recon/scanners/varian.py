@@ -83,13 +83,13 @@ class ProcParImageMixin (object):
     def _set_vrange(self, vrange):
         if vrange:
             skip = len(self.ref_vols)
-            # if vrange[1] is -1 or too big, set it to nvol_true
+            # if vrange[1] is -1 or too big, set it to n_vol_true
             # if it is 0 (for unknown reason), will go to img vol 1
-            vend = vrange[1] in range(self.nvol_true-skip) \
-                   and vrange[1]+1+skip or self.nvol_true
-            max_valid = self.nvol_true - skip
+            vend = vrange[1] in range(self.n_vol_true-skip) \
+                   and vrange[1]+1+skip or self.n_vol_true
+            max_valid = self.n_vol_true - skip
             vend = (vrange[1] >= 0 and vrange[1] < max_valid) \
-                   and (vrange[1] + 1 + skip) or self.nvol_true
+                   and (vrange[1] + 1 + skip) or self.n_vol_true
             # if it is past the last volume, make it one spot less
             # else, make it vrange[0]+skip (even if that == 0)
             max_valid = vend - skip
@@ -99,7 +99,7 @@ class ProcParImageMixin (object):
                 vstart = vend - 1
             self.vrange = range(vstart,vend)
         else:
-            self.vrange = range(len(self.ref_vols), self.nvol_true)
+            self.vrange = range(len(self.ref_vols), self.n_vol_true)
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def n_fe(self):
@@ -125,17 +125,17 @@ class ProcParImageMixin (object):
         return self.n_pe - self.nav_per_slice
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
-    def nslice(self):
+    def n_slice(self):
         return self.ismpflash_like and self._procpar.nv2[0] or \
                len(self.slice_positions)
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
-    def nvol(self):
+    def n_vol(self):
         "the number of image voluems in the fid file"
         return len(self.vrange)
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
-    def nvol_true(self):
+    def n_vol_true(self):
         "the number of total volumes in the fid file"
         if self.isepi or self.isravi:
             return len(self.is_imagevol)
@@ -251,7 +251,7 @@ class ProcParImageMixin (object):
     # seems to be that acq_cycles either equals num volumes, or
     # num slices (in the case num volumes = 1)
     def mpflash_vols(self):
-        return self.acq_cycles != self.nslice and self.acq_cycles or 1
+        return self.acq_cycles != self.n_slice and self.acq_cycles or 1
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def is_imagevol(self):
@@ -261,7 +261,7 @@ class ProcParImageMixin (object):
         elif self.isravi and hasattr(procpar, "cntr"):
             return procpar.cntr
         else:
-            return [1]*self.nvol_true
+            return [1]*self.n_vol_true
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     # image volumes are shown by a "1" index in the is_imagevol list
@@ -289,26 +289,26 @@ class ProcParImageMixin (object):
     #Not exactly in procpar, but useful still
     def acq_order(self):
         "the mapping of acquisition sequence to physical slice ordering"
-        return N.asarray( (self.ismpflash_like and range(self.nslice) or \
-                           (range(self.nslice-1,-1,-2) +
-                            range(self.nslice-2,-1,-2))) )
+        return N.asarray( (self.ismpflash_like and range(self.n_slice) or \
+                           (range(self.n_slice-1,-1,-2) +
+                            range(self.n_slice-2,-1,-2))) )
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def slice_gap(self):
         "gap between slice selective bandpasses"
-        #if self.pulse_sequence == "mp_flash3d" or self.nslice < 2:
-        if self.ismpflash_like or self.nslice < 2:
+        #if self.pulse_sequence == "mp_flash3d" or self.n_slice < 2:
+        if self.ismpflash_like or self.n_slice < 2:
             return 0.
         spos = self.slice_positions
         return ((max(spos) - min(spos) + self.thk)
-                - (self.nslice*self.thk)) / (self.nslice - 1)
+                - (self.n_slice*self.thk)) / (self.n_slice - 1)
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def thk(self):
         "slice select bandpass thickness"
 ##         return self.pulse_sequence == 'mp_flash3d' and \
         return self.ismpflash_like and \
-               10. * self._procpar.lpe2[0] / self.nslice or \
+               10. * self._procpar.lpe2[0] / self.n_slice or \
                self._procpar.thk[0]
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
@@ -524,7 +524,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
     to interface with the actual data on-disk.
     """
     #-------------------------------------------------------------------------
-    def __init__(self, datadir, vrange=None, target_dtype=N.complex64):
+    def __init__(self, filestem, vrange=None, target_dtype=N.complex64):
+        datadir = filestem + ".fid"
         ProcParImageMixin.__init__(self, datadir, vrange=vrange)
         self.path = datadir
         self.initializeData()
@@ -546,8 +547,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
         print "Phase encode table: ", self.petable_name
         print "Pulse sequence: %s" % self.pulse_sequence
         print "Spinecho: %s" % self.spinecho
-        print "Number of volumes: %d" % self.nvol
-        print "Number of slices: %d" % self.nslice
+        print "Number of volumes: %d" % self.n_vol
+        print "Number of slices: %d" % self.n_slice
         print "Number of segments: %d" % self.nseg
         print "Number of navigator echoes per segment: %d" % self.nav_per_seg
         print "Number of phase encodes per slice (including any navigators echoes): %d" % self.n_pe
@@ -563,14 +564,14 @@ class FidImage (ScannerImage, ProcParImageMixin):
     def initializeData(self):
         "Allocate data matrices." # IF NEEDED! look at petable or something
         nrefs = len(self.ref_vols)
-        self.data = N.zeros((self.nvol, self.nslice,
+        self.data = N.zeros((self.n_vol, self.n_slice,
                              self.n_pe_true, self.n_fe_true), N.complex64)
-        self.nav_data = N.zeros((self.nvol, self.nslice,
+        self.nav_data = N.zeros((self.n_vol, self.n_slice,
                                  self.nav_per_slice, self.n_fe_true),
                                 N.complex64)
-        self.ref_data = N.zeros((nrefs, self.nslice,
+        self.ref_data = N.zeros((nrefs, self.n_slice,
                                  self.n_pe_true, self.n_fe_true), N.complex64)
-        self.ref_nav_data = N.zeros((nrefs, self.nslice,
+        self.ref_nav_data = N.zeros((nrefs, self.n_slice,
                                      self.nav_per_slice, self.n_fe_true),
                                     N.complex64)
         
@@ -675,57 +676,58 @@ class FidImage (ScannerImage, ProcParImageMixin):
     def _read_compressed_volume(self, fidfile, vol):
         """
         Reads one volume from a compressed FID file.
-        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
         block = fidfile.getBlock(vol)
         bias = complex(block.lvl, block.tlt)
         volume = complex_fromstring(block.getData(), self.raw_dtype)
         volume = (volume - bias).astype(N.complex64)
-        return N.reshape(volume, (self.nslice, self.n_pe, self.n_fe_true))
+        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_uncompressed_volume(self, fidfile, vol):
         """
         Reads one volume from an uncompressed FID file.
-        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """        
-        volume = N.empty((self.nslice, self.n_pe*self.n_fe_true), N.complex64)
+        volume = N.empty((self.n_slice, self.n_pe*self.n_fe_true), N.complex64)
         for sl_num, sl in enumerate(volume):
-            block = fidfile.getBlock(self.nslice*vol + sl_num)
+            block = fidfile.getBlock(self.n_slice*vol + sl_num)
             bias = complex(block.lvl, block.tlt)
             sl[:] = complex_fromstring(block.getData(), self.raw_dtype)
             sl[:] = (sl - bias)
-        return N.reshape(volume, (self.nslice, self.n_pe, self.n_fe_true))
+        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
-##     def _read_epi2fid_volume(self, fidfile, vol):
-##         """
-##         Reads one volume from an epi2fid FID file.
-##         @return: block of data with shape (nslice*n_pe, n_fe_true)
-##         """
-##         # procpar indicates navigator lines, but none are read in? huh
-##         volume = N.empty(
-##             (self.nslice, self.nseg, self.pe_per_seg, self.n_fe_true),N.complex64)
-##         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
-##         for seg in range(self.nseg):
-##             for sl in range(self.nslice):
-##                 for pe in range(pe_true_per_seg):
-##                     block = fidfile.getBlock(
-##                       self.nslice*(self.nvol_true*(seg*pe_true_per_seg + pe)\
-##                       + vol) + sl)
-##                     volume[sl, seg, self.nav_per_seg+pe, :] = \
-##                       complex_fromstring(block.getData(), self.raw_dtype) 
-##         return N.reshape(volume, (self.nslice, self.n_pe, self.n_fe_true))
+    ### This format is quite poorly understood!
+    def _read_epi2fid_volume(self, fidfile, vol):
+        """
+        Reads one volume from an epi2fid FID file.
+        @return: block of data with shape (n_slice*n_pe, n_fe_true)
+        """
+        # procpar indicates navigator lines, but none are read in? huh
+        volume = N.empty(
+            (self.n_slice, self.nseg, self.pe_per_seg, self.n_fe_true),N.complex64)
+        pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
+        for seg in range(self.nseg):
+            for sl in range(self.n_slice):
+                for pe in range(pe_true_per_seg):
+                    block = fidfile.getBlock(
+                      self.n_slice*(self.n_vol_true*(seg*pe_true_per_seg + pe)\
+                      + vol) + sl)
+                    volume[sl, seg, self.nav_per_seg+pe, :] = \
+                      complex_fromstring(block.getData(), self.raw_dtype) 
+        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _read_asems_nccnn_volume(self, fidfile, vol):
         """
         Reads one volume from an asems_nccnn FID file.
-        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
-        volume = N.empty((self.nslice, self.n_pe, self.n_fe_true), N.complex64)
+        volume = N.empty((self.n_slice, self.n_pe, self.n_fe_true), N.complex64)
         for pe in range(self.n_pe):
-            block = fidfile.getBlock(pe*self.nvol_true + vol)
+            block = fidfile.getBlock(pe*self.n_vol_true + vol)
             bias = complex(block.lvl, block.tlt)
             for sl, trace in enumerate(block):
                 trace = complex_fromstring(trace, self.raw_dtype)
@@ -740,16 +742,16 @@ class FidImage (ScannerImage, ProcParImageMixin):
     def _read_asems_nscsn_volume(self, fidfile, vol):
         """
         Reads one volume from an asems_nccnn FID file.
-        @return: block of data with shape (nslice*n_pe, n_fe_true)
+        @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
         pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
         volume = N.empty(
-            (self.nslice, self.nseg, pe_true_per_seg, self.n_fe_true), N.complex64)
+            (self.n_slice, self.nseg, pe_true_per_seg, self.n_fe_true), N.complex64)
 
         for pe in range(pe_true_per_seg):
             for seg in range(self.nseg):
-                for sl in range(self.nslice):
-                    idx = self.nslice*(self.nvol_true*(pe*self.nseg + seg) + \
+                for sl in range(self.n_slice):
+                    idx = self.n_slice*(self.n_vol_true*(pe*self.nseg + seg) + \
                                        vol) + sl
                     block = fidfile.getBlock(idx)
                     bias = complex(block.lvl, block.tlt)
@@ -759,7 +761,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
                         volume[sl,seg,pe] = trace
                     else:
                         volume[sl,seg,pe] = (trace - bias).astype(N.complex64)
-        return N.reshape(volume, (self.nslice, self.n_pe, self.n_fe_true))
+        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
     def _get_fidformat(self, fidfile):
@@ -774,31 +776,31 @@ class FidImage (ScannerImage, ProcParImageMixin):
         """
         n_pe = self.n_pe
         n_pe_true = self.n_pe_true
-        nslice =  self.nslice
-        nvol_true = self.nvol_true
+        n_slice =  self.n_slice
+        n_vol_true = self.n_vol_true
         nblocks = fidfile.nblocks
         ntraces = fidfile.ntraces
 
         # compressed format has one block per volume
-        if nblocks == nvol_true and ntraces == nslice*n_pe:
+        if nblocks == n_vol_true and ntraces == n_slice*n_pe:
             return "compressed"
 
         # uncompressed format has one block per slice
-        elif nblocks == nvol_true*nslice and ntraces == n_pe:
+        elif nblocks == n_vol_true*n_slice and ntraces == n_pe:
             return "uncompressed"
 
         # epi2fid format has one block per phase encode (but in a weird order!)
-        #elif nblocks == nvol_true*nslice*n_pe_true and ntraces == 1:
+        #elif nblocks == n_vol_true*n_slice*n_pe_true and ntraces == 1:
         #    return "epi2fid"
 
         # asems_nccnn format has one block per phase-encode per volume
         # this is the normal format for ASEMS and GEMS
-        elif nblocks == nvol_true*n_pe and ntraces == nslice:
+        elif nblocks == n_vol_true*n_pe and ntraces == n_slice:
             return "asems_nccnn"
 
         # asems_nscsn format has one block per phase-encode per segment
         # volume per slice. This can happen with processed MP_FLASH
-        elif nblocks == nvol_true*nslice*n_pe and ntraces == 1:
+        elif nblocks == n_vol_true*n_slice*n_pe and ntraces == 1:
             return "asems_nscsn"
 
         else:
@@ -812,22 +814,22 @@ class FidImage (ScannerImage, ProcParImageMixin):
         attributes: 
 
         data: A rank 4 array containing time-domain data. This array is 
-          dimensioned as data(nvol,nslice,n_pe_true,n_fe_true) where nvol 
-          is the number of volumes, nslice is the number of slices per volume,
+          dimensioned as data(n_vol,n_slice,n_pe_true,n_fe_true) where n_vol 
+          is the number of volumes, n_slice is the number of slices per volume,
           n_pe_true is the number of phase-encode lines and n_fe_true is the
           number read-out points.
 
         nav_data: A rank 4 array containing time-domain data for the navigator
           echoes of the image data. This array is dimensioned as 
-          nav_data(nvol,nslice,nav_per_slice,n_fe_true).
+          nav_data(n_vol,n_slice,nav_per_slice,n_fe_true).
 
         ref_data: A rank 4 array containing time-domain reference scan data 
           (phase-encode gradients are kept at zero). This array is dimensioned 
-          as ref_data(numrefs, nslice,n_pe_true,n_fe_true). 
+          as ref_data(numrefs, n_slice,n_pe_true,n_fe_true). 
 
         ref_nav_data: A rank 4 array containing time-domain data for the 
           navigator echoes of the reference scan data which is dimensioned as 
-          ref_nav_data(numrefs, nslice,nav_per_slice,n_fe_true).
+          ref_nav_data(numrefs, n_slice,nav_per_slice,n_fe_true).
         """
         n_pe_true = self.n_pe_true
         n_pe = self.n_pe

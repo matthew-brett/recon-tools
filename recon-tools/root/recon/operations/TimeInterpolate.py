@@ -8,30 +8,35 @@ class TimeInterpolate (Operation):
     #-------------------------------------------------------------------------
     def run(self, image):
         if image.nseg != 2:
-            self.log("Non-segmented data, nothing to do.")
+            self.log("Operation only works on 2-shot data")
             return
-        pe_per_seg = image.n_pe_true/image.nseg
-        old_vols = N.reshape(image.data,
-          (image.nvol, image.nseg, image.nslice*pe_per_seg*image.n_fe_true))
+        if image.n_vol < 2:
+            self.log("Operation can't interpolate from a single volume")
+        
+        n_pe = image.n_pe
+        pe_per_seg = n_pe/image.nseg
         new_vols = N.empty(
-          (2*image.nvol, image.nseg, image.nslice*pe_per_seg*image.n_fe_true),
+          (2*image.n_vol,image.n_slice,n_pe,image.n_fe_true),
           N.complex64)
 
-        # degenerate case for first and last volumes
-        new_vols[0] = old_vols[0]
-        new_vols[-1] = old_vols[-1]
-
-        # interpolate interior volumes
-        for oldvol in range(1,image.nvol):
-            newvol = 2*oldvol
-
-            new_vols[newvol-1,0] = \
-              ((old_vols[oldvol-1,0] + old_vols[oldvol,0])/2.).astype(N.complex64)
-            new_vols[newvol-1,1] = old_vols[oldvol-1,1]
-
-            new_vols[newvol,0] = old_vols[oldvol,0]
-            new_vols[newvol,1] = \
-              ((old_vols[oldvol-1,1] + old_vols[oldvol,1])/2.).astype(N.complex64)
-
-        image.data = N.reshape(new_vols,
-          (2*image.nvol, image.nslice, image.n_pe_true, image.n_fe_true))
+        seg1 = [slice(0,d) for d in image.shape[-3:]]
+        seg1[-2] = image.seg_slicing(0)
+        seg2 = [slice(0,d) for d in image.shape[-3:]]
+        seg2[-2] = image.seg_slicing(1)
+        # handle cases for first and last two volumes
+        new_vols[0] = image[0]
+        new_vols[1][seg1] = (image[0][seg1] + image[1][seg1])/2.0
+        new_vols[1][seg2] = image[0][seg2]
+        new_vols[-2][seg1] = image[-1][seg1]
+        new_vols[-2][seg2] = (image[-1][seg2] + image[-2][seg2])/2.0
+        new_vols[-1] = image[-1]
+        # create volumes with an acquired segment and a mixture of two
+        # surrounding segments
+        for v in range(1,image.n_vol-1):
+            new_vols[2*v][seg1] = image[v][seg1]
+            new_vols[2*v][seg2] = (image[v-1][seg2] + image[v][seg2])/2.0
+            
+            new_vols[2*v+1][seg1] = (image[v][seg1] + image[v+1][seg1])/2.0
+            new_vols[2*v+1][seg2] = image[v][seg2]
+            
+        image.setData(new_vols)

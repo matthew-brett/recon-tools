@@ -256,7 +256,7 @@ class Recon (ConsoleTool):
         if not self._running('ReadImage', options.operations):
             # append ReadImage op to BEGINNING of list
             op_args = {'filename': os.path.abspath(args[0]),
-                       'format': 'fid',
+##                        'format': 'fid',
                        'vrange': options.vrange}
             opclass = self._opmanager.getOperation('ReadImage')
             options.operations.insert(0,(opclass, op_args))

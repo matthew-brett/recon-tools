@@ -3,6 +3,7 @@
 from numpy import flipud, fliplr
 from recon.operations import Operation, Parameter
 from recon.util import Quaternion
+from recon.analyze import canonical_orient
 
 ##############################################################################
 class FlipSlices (Operation):
@@ -36,4 +37,5 @@ class FlipSlices (Operation):
             mat[:,1] = -mat[:,1]
         if self.fliplr:
             mat[:,0] = -mat[:,0]
-        image.orientation_xform = Quaternion(M=mat)        
+        image.orientation_xform = Quaternion(M=mat)
+        image.orientation = canonical_orient(image.orientation_xform.tomatrix())

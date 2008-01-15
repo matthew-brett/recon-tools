@@ -10,7 +10,7 @@ class ReadImage (Operation):
         description="""
     File name prefix for output (extension will be determined by
     the format)."""),
-      Parameter(name="format", type="str", default="analyze",
+      Parameter(name="format", type="str", default=None,
         description="""
     File format to write image as."""),
       Parameter(name="datatype", type="str", default=None,

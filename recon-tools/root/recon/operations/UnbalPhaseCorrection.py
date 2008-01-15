@@ -41,7 +41,7 @@ class UnbalPhaseCorrection (Operation):
         if not hasattr(image, "ref_data"):
             self.log("No reference volume, quitting")
             return -1
-        if len(image.ref_vols) > 1:
+        if len(image.ref_data.shape) > 3 and image.ref_data.shape[-4] > 1:
             self.log("Could be performing Balanced Phase Correction!")
 
         self.volShape = image.shape[-3:]
@@ -386,10 +386,10 @@ def tag_backplane_slices(image):
     # ignore phi, as this turns around the axis of the bore
     theta = image.theta - 360 * int(image.theta/180)
     psi = image.psi
-    good_slices = N.arange(image.nslice)
+    good_slices = N.arange(image.n_slice)
     if psi >= -10 and psi <= 10:
         s_ind = N.concatenate([N.nonzero(image.acq_order==s)[0]
-                               for s in range(image.nslice)])
+                               for s in range(image.n_slice)])
         pss = N.take(image.slice_positions, s_ind)
         
         if (theta>=-10 and theta<=10) or (theta<=-170 and theta>=170):

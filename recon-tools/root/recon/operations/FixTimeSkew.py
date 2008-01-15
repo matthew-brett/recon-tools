@@ -76,8 +76,10 @@ class FixTimeSkew (Operation):
                 subsampInterp(image[:,s,:,:], c, axis=0)
         else:
             # get the appropriate slicing for sampling type
-            sl1 = self.segn(image,0)
-            sl2 = self.segn(image,1)
+            #sl1 = self.segn(image,0)
+            #sl2 = self.segn(image,1)
+            sl1 = image.seg_slicing(0)
+            sl2 = image.seg_slicing(1)
             for s in range(nslice):
                 # want to shift seg1 forward temporally and seg2 backwards--
                 # have them meet halfway (??)
@@ -87,10 +89,4 @@ class FixTimeSkew (Operation):
                 subsampInterp(image[:,s,sl1,:], c1, axis=0)
                 subsampInterp(image[:,s,sl2,:], c2, axis=0)
         
-    def segn(self, image, n):
-        # this is very very limited to 2-shot trajectories!
-        npe = image.shape[-2]
-        if image.sampstyle == "centric":
-            return slice(n*npe/2,npe/(2-n))
-        else: return slice(n,npe,2)
     

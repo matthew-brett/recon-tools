@@ -9,7 +9,7 @@ class ReorderSlices (Operation):
     #-------------------------------------------------------------------------
     def run(self, image):
         if not verify_scanner_image(self, image): return
-        S = image.nslice
+        S = image.n_slice
         acq_order = image.acq_order
         s_ind = N.concatenate([N.nonzero(acq_order==s)[0] for s in range(S)])
         image[:] = N.take(image[:], s_ind, axis=-3)

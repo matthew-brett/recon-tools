@@ -11,7 +11,7 @@ will arise and the image will not change.
 import numpy as N
 from recon.operations import Operation, Parameter
 from recon.imageio import ReconImage
-from recon.analyze import xforms
+from recon.analyze import xforms, canonical_orient
 from recon import util
 
 ##############################################################################
@@ -71,7 +71,7 @@ class RotPlane (Operation):
         image.resize(new_cshape)
         image[:] = temp.copy()
         # name the orientation, for ANALYZE users
-        image.orientation = self.orient_target
+        image.orientation = canonical_orient(qform.tomatrix())
 
 #-----------------------------------------------------------------------------
 def compose_xform(mat):

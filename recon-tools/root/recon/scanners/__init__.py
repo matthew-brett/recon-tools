@@ -55,6 +55,7 @@ class ScannerImage (ReconImage):
         ('asym_times', 'list of te times in an asems scan'),
         ('acq_order', 'order that the slices were acquired'),
         ('nseg', 'number of sampling segments'),
+        ('petable', 'petable[n] = point at which row n was acquired'),
         ('sampstyle', 'style of sampling: linear, centric, interleaved'),
         ('pe0', 'value of the first sampled pe line (normally -N2/2)'),
         ('tr', 'time series step size'),
@@ -62,15 +63,21 @@ class ScannerImage (ReconImage):
         ('dPE', 'phase-encode step size (in mm)'),
         ('dSL', 'slice direction step size (in mm)'),
         ('path', 'path of associated scanner data file'),
+        ('n_vol', 'number of volumes'),
+        ('n_slice', 'number of slices (or pts in the z-direction)'),
+        ('n_pe', 'number of phase encodes'),
+        ('n_fe', 'number of frequency encodes'),
     ))
 
     def __init__(self):
         # should set up orientation info
-        self.check_attributes()
         if not hasattr(self, "orientation_xform"):
             self.orientation_xform = util.Quaternion()
         if not hasattr(self, "orientation"):
             self.orientation = ""
+        if not hasattr(self, "petable"):
+            self.petable = N.arange(self.n_pe)
+        self.check_attributes()
         ReconImage.__init__(self, self.data, self.dFE,
                             self.dPE, self.dSL, self.tr,
                             orient_xform=self.orientation_xform,
@@ -107,6 +114,18 @@ class ScannerImage (ReconImage):
                 a[n+self.nseg:M:2*self.nseg] = -1
                 b = N.floor((N.arange(float(M))+pe0)/float(self.nseg)).astype(N.int32)
         return (a, b, n2) 
+
+    def seg_slicing(self, n):
+        if n >= self.nseg:
+            return self.seg_slicing(n-1)
+        pe_per_seg = self.n_pe/self.nseg
+        seg_group = range( n*pe_per_seg, (n+1)*pe_per_seg )
+        # find the current row indices of this seg group
+        seg_rows = N.array([(n==self.petable).nonzero()[0][0]
+                            for n in seg_group])
+        # this is listed in acq order, and might be backwards (eg centric mode)
+        seg_rows.sort()
+        return seg_rows
 
     def check_attributes(self):
         for key in ScannerImage.necessary_params.keys():

@@ -865,7 +865,7 @@ class Quaternion:
         R[2,0] = 2.*(b*d - a*c)
         R[2,1] = 2.*(c*d + a*b)
         R[2,2] = (a*a + d*d - c*c - b*b)*self.qfac
-        R = N.where(R - N.round(R) < 1e-5, N.round(R), R)
+        R = N.where(abs(R - N.round(R)) < 1e-5, N.round(R), R)
         return R
     
     def mult(self, quat):

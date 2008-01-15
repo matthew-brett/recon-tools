@@ -1,5 +1,5 @@
 import numpy as N
-
+from os import path
 from odict import odict
 from recon.util import import_from, Quaternion, integer_ranges, scale_data
 
@@ -8,7 +8,8 @@ _readers = odict((
     ("analyze", ("recon.analyze","readImage")),
     ("nifti", ("recon.nifti","readImage")),
     ("fid", ("recon.scanners.varian","FidImage")),
-    ("fdf", ("recon.scanners.varian","FDFImage"))))
+    ("fdf", ("recon.scanners.varian","FDFImage")),
+    ("siemens", ("recon.scanners.siemens", "SiemensImage"))))
 available_readers = _readers.keys()
 
 # module-private dict specifying available image writers
@@ -131,12 +132,14 @@ class ReconImage (object):
 
         # offset should be the (x,y,z) offset in xyz-space
         xform = self.orientation_xform.tomatrix()
-        (self.x0, self.y0, self.z0) = \
-                  offset or \
-                  -N.dot(xform, N.array([self.isize*self.idim/2.,
-                                         self.jsize*self.jdim/2.,
-                                         self.ksize*self.kdim/2.]))
-        
+        if offset is not None:
+            (self.x0, self.y0, self.z0) = offset
+        else:
+            (self.x0, self.y0, self.z0) = \
+                      -N.dot(xform, N.array([self.isize*self.idim/2.,
+                                             self.jsize*self.jdim/2.,
+                                             self.ksize*self.kdim/2.]))
+            
 
         self.scaling = scaling or 1.0
 
@@ -292,12 +295,33 @@ def get_reader(format):
           (format, ", ".join(available_readers)))
     return import_from(*readerspec)
 #-----------------------------------------------------------------------------
-def readImage(filename, format, datatype=None, **kwargs):
+def readImage(filename, format=None, datatype=None, **kwargs):
     "Load an image in the specified format from the given filename."
+    format_guess = {
+        ".hdr": "nifti",
+        ".img": "nifti",
+        ".nii": "nifti",
+        ".dat": "siemens",
+        ".fid": "fid",
+        ".fdf": "fdf"
+    }
     if datatype and datatype not in recon_output2dtype.keys():
         raise ValueError("Unsupported data type: %s"%datatype)
     kwargs['target_dtype'] = recon_output2dtype.get(datatype, None)
-    return get_reader(format)(clean_name(filename), **kwargs)
+    filestem,ext = clean_name(filename)
+    if format is None:
+        try:
+            format = format_guess[ext]
+        except KeyError:
+            raise Exception("No format guessed for this extension: %s"%ext)
+    # do a special test for nifti/analyze images, which can share a
+    # common extension
+    if format=="nifti":
+        try:
+            return get_reader(format)(filestem, **kwargs)
+        except:
+            return get_reader("analyze")(filestem, **kwargs)
+    return get_reader(format)(filestem, **kwargs)
 
 #-----------------------------------------------------------------------------
 def get_writer(format_type):
@@ -344,10 +368,10 @@ def _write(image, filestem, format_type, dtype=None, targetdim=None,
 
 #-----------------------------------------------------------------------------
 def clean_name(fname):
-    pruned_exts = ['nii', 'hdr', 'img']
-    if fname.rsplit('.')[-1] in pruned_exts:
-        return fname.rsplit('.',1)[0]
-    return fname.rstrip('.')
+    pruned_exts = ['.nii', '.hdr', '.img', '.dat', '.fid', '.fdf']
+    if path.splitext(fname.rstrip('/'))[-1] in pruned_exts:
+        return path.splitext(fname.rstrip('/'))
+    return fname.rstrip('.'), ''
 #-----------------------------------------------------------------------------
 def _concatenate(listoflists):
     "Flatten a list of lists by one degree."
