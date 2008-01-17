@@ -4,6 +4,7 @@ import gtk
 import gobject
 import os
 import pylab as P
+import numpy as N
 from matplotlib.lines import Line2D
 from matplotlib.image import AxesImage
 from matplotlib.patches import Rectangle
@@ -458,14 +459,14 @@ class sliceview (gtk.Window):
         if self.norm is None:
             # set the black point to 1st percentile value
             # set the white point to 99th percentile value
-            sorted = P.sort(self.transform(self.data[:]).flatten())
+            sorted = N.sort(self.transform(self.data[:]).flatten())
             npts = sorted.shape[0]
             self.blkpt, self.whtpt = sorted[int(.01*npts+0.5)], \
                                      sorted[int(.99*npts+0.5)]
 
         if self.overlay_data is not None:
             if self.overlay_norm is None:
-                sorted = P.sort(self.transform(self.overlay_data[:]).flatten())
+                sorted = N.sort(self.transform(self.overlay_data[:]).flatten())
                 npts = sorted.shape[0]
                 self.blkpt_o, self.whtpt_o = sorted[int(.1*npts+0.5)], \
                                              sorted[int(.99*npts+0.5)]
@@ -843,7 +844,7 @@ class ContourToolWin (gtk.Window):
     #-------------------------------------------------------------------------
     def draw_bar(self, cset):
         # try to fix cset levels to 4 significant digits
-        cset.levels = P.floor(0.5 + cset.levels*1000)/1000.
+        cset.levels = N.floor(0.5 + cset.levels*1000)/1000.
         self.cbar_ax.clear()
         self.fig.colorbar(cset, self.cbar_ax)
         self.figcanvas.draw()        
@@ -1130,7 +1131,7 @@ class RowPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = P.arange(len(data))
+        indices = N.arange(len(data))
         if not hasattr(self, "data"): ax.plot(indices, data)
         else: ax.lines[0].set_data(indices, data)
         ax.set_xlim(-.5, len(data)-.5)
@@ -1155,7 +1156,7 @@ class ColPlot (FigureCanvas):
     #-------------------------------------------------------------------------
     def setData(self, data):
         ax = self.figure.axes[0]
-        indices = P.arange(len(data))
+        indices = N.arange(len(data))
         if not hasattr(self, "data"): ax.plot(data, indices)
         else: ax.lines[0].set_data(data, indices)
         ax.set_ylim(-.5,len(data)-.5)
@@ -1392,14 +1393,14 @@ class ColorBar (FigureCanvas):
 
         if dMin == dMax:
             # matplotlib is going to cry about this case anyway
-            r_pts = P.zeros((128,))
-            tx = P.asarray([0])
+            r_pts = N.zeros((128,))
+            tx = N.asarray([0])
         else:
-            r_pts = P.linspace(dMin, dMax, 128)
-            tx = P.linspace(dMin, dMax, 7)
+            r_pts = N.linspace(dMin, dMax, 128)
+            tx = N.linspace(dMin, dMax, 7)
             # truncate to 4 digits
-            tx = P.floor(0.5 + 1000*tx)/1000.
-        data = P.outerproduct(P.ones(5),r_pts)
+            tx = N.floor(0.5 + 1000*tx)/1000.
+        data = N.outer(N.ones(5),r_pts)
         # need to clear axes because axis Intervals weren't updating
         ax.clear()
         ax.imshow(data, interpolation="nearest",

@@ -10,6 +10,7 @@ import numpy as N
 from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle
 from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord, tablib
 from recon.imageio import ReconImage
+from recon.analyze import canonical_orient
 
 #-----------------------------------------------------------------------------
 def getPulseSeq(datadir):
@@ -618,8 +619,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
                                         eulerRot(phi=phi))))
         
         self.orientation_xform = qmult(Qrot, qmult(Qobl,Qscanner))
-        # don't have orientation's name yet
-        self.orientation = ""
+        # find out if this orientation has a "name" in ANALYZE format
+        self.orientation = canonical_orient(self.orientation_xform.tomatrix())
             
     #-------------------------------------------------------------------------
     def _load_petable(self):

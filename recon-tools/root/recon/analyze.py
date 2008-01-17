@@ -345,7 +345,8 @@ class AnalyzeWriter (object):
 #-----------------------------------------------------------------------------
 def _construct_dataview(static_dtype, new_dtype, scaling):
     xform = lambda d: d
-    if static_dtype.char.isupper() and not new_dtype.char.isupper():
+    if static_dtype in N.sctypes['complex'] and \
+       new_dtype not in N.sctypes['complex']:
         xform = lambda d: abs(d)
     if scaling != 1.0:
         # assume that this will need to be rounded to Int, so add 0.5
