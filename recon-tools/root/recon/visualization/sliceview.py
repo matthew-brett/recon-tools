@@ -576,10 +576,7 @@ class sliceview (gtk.Window):
                           filter=image_filter)
         if not fname:
             return
-        try:
-            img = readImage(fname, "nifti", vrange=(0,0))
-        except:
-            img = readImage(fname, "analyze", vrange=(0,0))
+        img = readImage(fname, vrange=(0,0))
         self.overlay_data = img
         if self.data.shape[-3] != img.shape[-3]:
             print "slices don't match"

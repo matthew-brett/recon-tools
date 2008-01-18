@@ -15,7 +15,10 @@ class test_ana(NumpyTestCase):
         self.image = analyze.readImage(fname)
 
     def test_datatypes(self):
-        image = self.image._subimage(4232.*N.random.rand(*self.image.shape).astype(N.float32))
+        # make a random valued complex image to cast into various dtypes
+        image = self.image._subimage(
+            4232.*N.random.rand(*self.image.shape) +
+            1j*2852.*N.random.rand(*self.image.shape))
         dtypes_test(image, analyze, 'analyze')
 
     def test_orientation(self):

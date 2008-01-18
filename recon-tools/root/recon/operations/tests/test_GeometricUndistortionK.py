@@ -14,8 +14,8 @@ class test_GU(NumpyTestCase):
         self.ref_kernel = N.fromstring(open(kernfile).read(),
                                        N.complex128)
         self.ref_kernel.shape = (20,64,64,64)
-        fmapfile = os.path.join(pwd, "test_fmap")
-        fmapIm = readImage(fmapfile, "nifti")
+        fmapfile = os.path.join(pwd, "test_fmap.nii")
+        fmapIm = readImage(fmapfile)
         self.fmap,self.chi = (fmapIm[0].astype(N.float64),
                               fmapIm[1].astype(N.float64))
 

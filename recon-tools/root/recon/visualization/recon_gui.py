@@ -180,7 +180,7 @@ class recon_gui (gtk.Window):
                           filter=image_filter)
         if not fname:
             return
-        self.image = imageio.readImage(fname, "fid", vrange=(0,1))
+        self.image = imageio.readImage(fname, vrange=(0,1))
         self.first_image = cheap_copy(self.image)
         self.last_image = None
         basedir = fname.strip(fname.split('/')[-1])

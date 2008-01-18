@@ -3,7 +3,7 @@ from numpy.linalg import lapack_lite
 import numpy as N
 
 from recon.operations import Operation, Parameter, verify_scanner_image
-from recon.imageio import readImage
+from recon.nifti import readImage
 from recon.util import fft, ifft, checkerline
 
 class GeometricUndistortionK (Operation):
@@ -26,7 +26,7 @@ class GeometricUndistortionK (Operation):
         if not verify_scanner_image(self, image):
             return
 
-        fmapIm = readImage(self.fmap_file, "nifti")
+        fmapIm = readImage(self.fmap_file)
         (nslice, npe, nfe) = image.shape[-3:]
         # make sure that the length of the q1 columns of the fmap
         # are AT LEAST equal to that of the image

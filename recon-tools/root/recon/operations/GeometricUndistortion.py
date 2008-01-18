@@ -1,7 +1,7 @@
 import numpy as N
 
 from recon.operations import Operation, Parameter, verify_scanner_image
-from recon.imageio import readImage
+from recon.nifti import readImage
 from recon.util import resample_phase_axis
 
 ##############################################################################
@@ -26,7 +26,7 @@ class GeometricUndistortion (Operation):
             self.log("Can't apply inhomogeneity correction"\
                      " to non-epi sequences, quitting")
             return
-	fMap = readImage(self.fmap_file, format="nifti")
+	fMap = readImage(self.fmap_file)
         # grab the fieldmap, ignore the mask
         fMap = fMap.subImage(0)
 	if fMap.shape[-3:] != image.shape[-3:]:

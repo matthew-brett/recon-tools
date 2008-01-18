@@ -526,9 +526,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
     """
     #-------------------------------------------------------------------------
     def __init__(self, filestem, vrange=None, target_dtype=N.complex64):
-        datadir = filestem + ".fid"
-        ProcParImageMixin.__init__(self, datadir, vrange=vrange)
+        datadir = filestem+".fid"
         self.path = datadir
+        ProcParImageMixin.__init__(self, datadir, vrange=vrange)
         self.initializeData()
         self.loadData(datadir)
         self.realizeOrientation()
@@ -537,8 +537,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
             # this is a badly behaved FidImage.. might be a BRS
             return
         ScannerImage.__init__(self)
-        ref_path = self.path.replace("data.fid", "ref_2.fid")
-        if ref_path is not self.path and path.exists(ref_path):
+        ref_path = filestem.replace("_data", "_ref_2")
+        if ref_path is not filestem and path.exists(ref_path+".fid"):
             ref_fid = FidImage(ref_path)
             self.ref_data = N.array([self.ref_data[0], ref_fid.ref_data[0]])
         

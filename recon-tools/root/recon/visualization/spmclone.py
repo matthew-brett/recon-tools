@@ -417,14 +417,8 @@ class spmclone (gtk.Window):
                           filter=image_filter)
         if not fname:
             return
-        try:
-            img = readImage(fname, "nifti")
-        except:
-            img = readImage(fname, "analyze")
-        if len(img.shape) > 3:
-            self.overlay_img = SlicerImage(img.subImage(0))
-        else:
-            self.overlay_img = SlicerImage(img)
+        img = readImage(fname, vrange=(0,0))
+        self.overlay_img = SlicerImage(img)
             
         img_dims = N.take(N.array(self.image.shape) * self.image.dr,
                           self.image.slicing())

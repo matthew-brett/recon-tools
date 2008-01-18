@@ -132,6 +132,7 @@ class test_utils(NumpyTestCase):
         # these coefficients aren't nearly close!
         # instead try comparing the stdev of the diff to the stdev of the noise
         stdev_d = (nzy_poly - solv_poly).std()
+        # is it less than 1.5 times the stdev of the noise?
         assert stdev_d <= 0.8*1.5
 
     def test_quaternion(self, level=1):

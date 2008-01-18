@@ -10,16 +10,11 @@ from recon.operations.ViewOrtho import ViewOrtho
 class ViewImageTool (ConsoleTool):
     "View the specified image in the sliceviewer."
 
-    usage= "usage: %prog [options] image\n ", __doc__
+    usage= "usage: %prog image\n ", __doc__
 
     #-------------------------------------------------------------------------
 
-    options = (
-        Option("-f", "--file-format", dest="file_format", action="store",
-               type="choice", default='analyze',
-               choices=('analyze', 'nifti'), help="""input file type (can be
-               analyze or nifti"""),
-        )
+    options = ()
 
     def __init__(self, *args, **kwargs):
         OptionParser.__init__(self, *args, **kwargs)
@@ -30,8 +25,7 @@ class ViewImageTool (ConsoleTool):
         if not args:
             self.print_help()
             sys.exit(0)
-        filetype = opts.file_format
-        image = readImage(args[0], filetype)
+        image = readImage(args[0])
         if plotter is "slice":
             ViewImage(title=args[0]).run(image)
         else:

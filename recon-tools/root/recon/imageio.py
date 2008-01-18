@@ -305,6 +305,8 @@ def readImage(filename, format=None, datatype=None, **kwargs):
         ".fid": "fid",
         ".fdf": "fdf"
     }
+    if not path.exists(filename):
+        raise IOError("This path is invalid: %s"%filename)
     if datatype and datatype not in recon_output2dtype.keys():
         raise ValueError("Unsupported data type: %s"%datatype)
     kwargs['target_dtype'] = recon_output2dtype.get(datatype, None)
