@@ -67,6 +67,7 @@ class ScannerImage (ReconImage):
         ('n_slice', 'number of slices (or pts in the z-direction)'),
         ('n_pe', 'number of phase encodes'),
         ('n_fe', 'number of frequency encodes'),
+        ('data', 'the data array'),
     ))
 
     def __init__(self):
@@ -134,6 +135,20 @@ class ScannerImage (ReconImage):
                                      "missing parameter %s"%key)
             
 
+##############################################################################
+class CachedReadOnlyProperty (property):
+    """
+    This kind of object is a Python property, but with cached results
+    and no getter. It can be used as a function decorator.
+    """
+    _id = 0
+    def __init__(self, getter):
+        key = CachedReadOnlyProperty._id
+        def cached_getter(self):
+            if not hasattr(self, "_propvals"): self._propvals = {}
+            return self._propvals.setdefault(key, getter(self))
+        CachedReadOnlyProperty._id += 1
+        property.__init__(self, fget=cached_getter, doc=getter.__doc__)
     
 ##############################################################################
 class _HeaderBase (object):
@@ -147,17 +162,15 @@ class _HeaderBase (object):
     """
 
     #-------------------------------------------------------------------------
-    def __init__( self, file_handle ):
+    def __init__( self, hdr_string ):
         
         # read and validate header
-        header_size = struct.calcsize(self.HEADER_FMT)
-        header = file_handle.read( header_size )
-        assert len(header) == header_size, \
+        assert len(hdr_string) == self.header_size, \
             "Bad header size: expected %d but got %d" % \
-            (header_size, len(header))
+            (self.header_size, len(hdr_string))
 
         # translate header bytes according to format string
-        header_fields = struct.unpack( self.HEADER_FMT, header )
+        header_fields = struct.unpack( self.HEADER_FMT, hdr_string )
         assert len(header_fields) == len(self.HEADER_FIELD_NAMES), \
             "Wrong number of header fields for format '%s':\n" \
             "  expected %d but got %d" % (self.HEADER_FMT,
@@ -167,6 +180,10 @@ class _HeaderBase (object):
         # add header fields to self
         header_dict = dict( zip( self.HEADER_FIELD_NAMES, header_fields) )
         self.__dict__.update( header_dict )
+
+    @CachedReadOnlyProperty
+    def header_size(self):
+        return struct.calcsize(self.HEADER_FMT)
 
 ##############################################################################
 class _BitMaskedWord (object):
@@ -190,3 +207,4 @@ class _BitMaskedWord (object):
                  isinstance( getattr( self.__class__, name ), property )]
         return "(%s)" % (", ".join( ["%s=%s"%(name,getattr( self, name )) \
                                      for name in props ] ))
+

@@ -33,13 +33,12 @@
 
 #include "Munther_2D_unwrap.h"
 
-// OS X has malloc.h in /usr/include/malloc/malloc.h
-// so compile with -DDARWIN if on Mac MJT
-#ifdef DARWIN
-#include <malloc/malloc.h>
-#else
-#include <malloc.h>
-#endif // ifdef DARWIN
+// malloc.h is obsolete, stdlib.h is used now (MJT)
+//#ifdef DARWIN
+//#include <malloc/malloc.h>
+//#else
+//#include <malloc.h>
+//#endif // ifdef DARWIN
 
 #include <stdlib.h>
 #include <stdio.h> 
@@ -64,51 +63,64 @@ int No_of_edges = 0;
 
 yes_no find_pivot(EDGE *left, EDGE *right, float *pivot_ptr)
 {
-	EDGE a, b, c, *p;
-
-	a = *left;
-	b = *(left + (right - left) /2 );
-	c = *right;
-	o3(a,b,c);
-
-	if (a.reliab < b.reliab)
+        /* these need to all be pointers so that when (a,b,c) are aranged
+	   in order, the edge list is also updated (MJT)
+	*/
+        EDGE *a, *b, *c, *p;
+	/* added base case check (MJT) */
+	if(left >= right) {
+	  return no;
+	}
+	a = left;
+	b = left + (right - left)/2 ;
+	c = right;
+	o3((*a),(*b),(*c));
+	if (a->reliab < b->reliab)
 	{
-		*pivot_ptr = b.reliab;
+		*pivot_ptr = b->reliab;
 		return yes;
 	}
 
-	if (b.reliab < c.reliab)
+	if (b->reliab < c->reliab)
 	{
-		*pivot_ptr = c.reliab;
+		*pivot_ptr = c->reliab;
 		return yes;
 	}
-
-	for (p = left + 1; p <= right; ++p)
+	/* already know that left == mid == right, so start
+	   searching in between left and right for a pivot (MJT) */
+	for (p = left+1; p < right; p++)
 	{
 		if (p->reliab != left->reliab)
 		{
-			*pivot_ptr = (p->reliab < left->reliab) ? left->reliab : p->reliab;
-			return yes;
+		  /* order the pointers first, then return the greater (MJT) */
+		  o2((*left), (*p));
+		  *pivot_ptr = p->reliab;
+		  return yes;
 		}
-		return no;
 	}
-
         return no; // DJS
 }
 
 EDGE *partition(EDGE *left, EDGE *right, float pivot)
 {
-	while (left <= right)
+  /* It is guaranteed that left->reliab < pivot <= right->reliab,
+     so left++ will never pass right..
+
+     however right-- might pass left if left==pivot, but will not pass
+     left's first location, since the reliab there is strictly less than pivot
+     (MJT)
+  */
+        while (left <= right)
 	{
 		while (left->reliab < pivot)
-			++left;
+		  ++left;
 		while (right->reliab >= pivot)
-			--right;
+		  --right;
 		if (left < right)
 		{
-			swap (*left, *right);
-			++left;
-			--right;
+		  swap ((*left), (*right));
+		  ++left;
+		  --right;
 		}
 	}
 	return left;
@@ -118,13 +130,12 @@ void quicker_sort(EDGE *left, EDGE *right)
 {
 	EDGE *p;
 	float pivot;
-
 	if (find_pivot(left, right, &pivot) == yes)
-	{
-		p = partition(left, right, pivot);
-		quicker_sort(left, p - 1);
-		quicker_sort(p, right);
-	}
+	  {
+	    p = partition(left, right, pivot);
+	    quicker_sort(left, p - 1);
+	    quicker_sort(p, right);
+	  }
 }
 
 //--------------end quicker_sort algorithm -----------------------------------
@@ -147,7 +158,7 @@ void  initialisePIXELs(float *WrappedImage, BYTE *input_mask, BYTE *extended_mas
       pixel_pointer->increment = 0;
       pixel_pointer->number_of_pixels_in_group = 1;		
       pixel_pointer->value = *wrapped_image_pointer;
-      pixel_pointer->reliability = 9999999 + rand();
+      pixel_pointer->reliability = (float) (9999999 + rand());
       pixel_pointer->input_mask = *input_mask_pointer;
       pixel_pointer->extended_mask = *extended_mask_pointer;
       pixel_pointer->head = pixel_pointer;
@@ -384,8 +395,8 @@ void calculate_reliability(float *wrappedImage, PIXELM *pixel, int image_width, 
 	if (x_connectivity_2D == 1)
 	{
 		//calculating the raliability for the left border of the image
-		PIXELM *pixel_pointer = pixel + image_width;
-		float *WIP = wrappedImage + image_width; 
+		pixel_pointer = pixel + image_width;
+		WIP = wrappedImage + image_width; 
 	
 		for (i = 1; i < image_height - 1; ++i)
 		{
@@ -412,7 +423,7 @@ void calculate_reliability(float *wrappedImage, PIXELM *pixel, int image_width, 
 				H = wrap(*(WIP - 1) - *WIP) - wrap(*WIP - *(WIP - image_width_minus_one));
 				V = wrap(*(WIP - image_width) - *WIP) - wrap(*WIP - *(WIP + image_width));
 				D1 = wrap(*(WIP - image_width_plus_one) - *WIP) - wrap(*WIP - *(WIP + 1));
-				D2 = wrap(*(WIP - 2 * image_width - 1) - *WIP) - wrap(*WIP - *(WIP + image_width_minus_one));
+				D2 = wrap(*(WIP - (2 * image_width - 1)) - *WIP) - wrap(*WIP - *(WIP + image_width_minus_one));
 				pixel_pointer->reliability = H*H + V*V + D1*D1 + D2*D2;
 			}
 			pixel_pointer += image_width;
@@ -423,8 +434,8 @@ void calculate_reliability(float *wrappedImage, PIXELM *pixel, int image_width, 
 	if (y_connectivity_2D == 1)
 	{
 		//calculating the raliability for the top border of the image
-		PIXELM *pixel_pointer = pixel + 1;
-		float *WIP = wrappedImage + 1; 
+		pixel_pointer = pixel + 1;
+		WIP = wrappedImage + 1; 
 	
 		for (i = 1; i < image_width - 1; ++i)
 		{
@@ -785,11 +796,9 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   calculate_reliability(WrappedImage, pixel, n_fe, n_pe);
   horizentalEDGEs(pixel, edge, n_fe, n_pe); 
   verticalEDGEs(pixel, edge, n_fe, n_pe);
-
   //Sort the EDGEs depending on their reiability: PIXELs with higher 
   //relibility (small value) first.
   quicker_sort(edge, edge + No_of_edges - 1);
-
   //Gather PIXELs into groups
   gatherPIXELs(edge, n_fe, n_pe);
   unwrapImage(pixel, n_fe, n_pe);
@@ -798,7 +807,6 @@ int phase_unwrap_2D(float* WrappedImage, float* UnwrappedImage,
   //Copy the image from PIXELM structure to the unwrapped phase array passed 
   //to this function.
   returnImage(pixel, UnwrappedImage, n_fe, n_pe);
-
   //Free memory for internal arrays.
   free(edge);
   free(pixel);

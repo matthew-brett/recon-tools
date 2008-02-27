@@ -7,7 +7,8 @@ except ImportError:
 import numpy as N
 
 def unwrap2D(matrix, mask=None):
-    """The method for this module unwraps a 2D grid of wrapped phases
+    """
+    The method for this module unwraps a 2D grid of wrapped phases
     using the quality-map unwrapper.
     @param matrix, if ndim > 2, explode; if ndim < 2, a 1xN matrix
     is used. Numerical range should be [-pi,pi]
@@ -33,7 +34,8 @@ def unwrap2D(matrix, mask=None):
     return ret
 
 def unwrap3D(matrix):
-    """The method for this module unwraps a 3D array of wrapped phases
+    """
+    The method for this module unwraps a 3D array of wrapped phases
     using the lp-norm method.
     @param matrix, if ndim > 3, explode; if ndim < 2, a 1xN matrix
     is used. Numerical range should be [-pi,pi]

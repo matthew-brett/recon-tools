@@ -49,7 +49,7 @@ def get_dims(data):
         shape = shape[1:]
     ndim = len(shape)
     if ndim < 2 or ndim > 4:
-        raise ValueError("data shape %s must be 2, 3, or 4 dimensional"%shape)
+        raise ValueError("data shape must be 2, 3, or 4 dimensional:",shape)
     return (ndim,) + (0,)*(4-ndim) + shape
 
 ##############################################################################
@@ -258,6 +258,20 @@ class ReconImage (object):
             self.data.resize(tuple(newsize_tuple))
         self.setData(self[:])
 
+    #-------------------------------------------------------------------------
+    def runOperations(self, opchain, logger=None):
+        """
+        This method runs the image object through a pipeline of operations,
+        which are ordered inside the opchain list. ReconImage's method is
+        a basic operations driver, and could be expanded in subclasses.
+        """
+        for operation in opchain:
+            operation.log("Running")
+            if operation.run(self) == -1:
+                raise RuntimeError("critical operation failure")
+            if logger is not None:
+                logger.logop(operation)
+    
     #-------------------------------------------------------------------------
     def writeImage(self, filestem, format_type="analyze",
                    datatype="magnitude", **kwargs):

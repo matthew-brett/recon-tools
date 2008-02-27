@@ -323,6 +323,10 @@ class Recon (ConsoleTool):
                       for opclass,args in options.operations[1:]]
 
         # Run the operations.
-        self.runOperations(operations, image, runlogger)
+        #self.runOperations(operations, image, runlogger)
+        try:
+            image.runOperations(operations, logger=runlogger)
+        except:
+            sys.exit(1)
 
         runlogger.setExecutable()

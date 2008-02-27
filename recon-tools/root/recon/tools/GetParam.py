@@ -3,7 +3,7 @@ import sys
 import os.path
 
 from recon.tools import ConsoleTool
-from recon.scanners.varian import ProcPar
+from recon.scanners.varian import ParsedProcPar
 
 ##############################################################################
 class GetParam (ConsoleTool):
@@ -27,7 +27,7 @@ class GetParam (ConsoleTool):
         filename = args[0]
         if not os.path.exists( filename ): fail( "File not found: %s"%filename )
         try:
-            procpar = ProcPar( filename )
+            procpar = ParsedProcPar( filename )
         except: fail( "Error parsing procpar file." )
 
         if len( args ) == 1: params = procpar.keys()

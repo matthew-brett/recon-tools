@@ -8,7 +8,8 @@ from tokenize import generate_tokens
 
 import numpy as N
 from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle
-from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord, tablib
+from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord, \
+     tablib, CachedReadOnlyProperty
 from recon.imageio import ReconImage
 from recon.analyze import canonical_orient
 
@@ -38,24 +39,16 @@ def complex_fromstring(data, numtype):
 	    N.fromstring(data,numtype).astype(N.float32).tostring(),
             N.complex64)
 
+def cast_to_complex(cplx_float, cplx_integer, bias=None):
+    if bias is not None:
+        cplx_float.real[:] = cplx_integer['real'] - bias.real
+        cplx_float.imag[:] = cplx_integer['imag'] - bias.imag
+    else:
+        cplx_float.real[:] = cplx_integer['real']
+        cplx_float.imag[:] = cplx_integer['imag']
+
 ##############################################################################
 ########################   PROCPAR PARSING CLASSES   #########################
-##############################################################################
-class CachedReadOnlyProperty (property):
-    """
-    This kind of object is a Python property, but with cached results
-    and no getter. It can be used as a function decorator.
-    """
-    _id = 0
-    def __init__(self, getter):
-        key = CachedReadOnlyProperty._id
-        def cached_getter(self):
-            if not hasattr(self, "_propvals"): self._propvals = {}
-            return self._propvals.setdefault(key, getter(self))
-        CachedReadOnlyProperty._id += 1
-        property.__init__(self, fget=cached_getter, doc=getter.__doc__)
-
-
 ##############################################################################
 class ProcParImageMixin (object):
     """
@@ -648,43 +641,25 @@ class FidImage (ScannerImage, ProcParImageMixin):
     #### A note for using FidFiles in all volume readers ####
     #
     # FidFiles and DataBlocks:
-    # The ONLY two things that should be understood about
-    # the low-level fid file handling are how a FidFile
-    # object addresses blocks, and how DataBlock objects
-    # yield data. Every fid file has a FID Header followed
-    # by a number (fidfile.nblocks) of data blocks. Each of
-    # these data blocks is then made out of a Block Header
-    # followed by a number (fidfile.ntraces) of traces.
-    # Every trace has a certain number of points, and will
-    # correspond to one phase encode line. How the volume
-    # is split up among the blocks in the fid file
-    # distinguishes the format of the file (see fidformat
-    # switching logic in loadData(self, datadir))
-    #
-    # How a FidFile addresses blocks:
-    #     block = fidfile.getBlock(block_number)
-    # This statement yields a DataBlock object which represents
-    # the (block_number+1)th block in the fid file
-    #
-    # How a DataBlock yields data:
-    #     data = block.getData()
-    # This statement returns all the data in the given block.
-    # The particular volume reader method knows where to
-    # put the block data into the volume it is constructing.
-    #-------------------------------------------------------------------------
-    
+    # Varian raw data comes in a "fid" file, with a (hdr, data) style block
+    # layout. Each fid file has nblocks number of blocks, and each block has
+    # ntraces number of traces (read-outs). FidFile objects are smartly
+    # memory mapped "fid" files. You can index into a FidFile like an array,
+    # and it will yield a (hdr, data) pair. These are the known block layouts
+    # of the fids:
     #-------------------------------------------------------------------------
     def _read_compressed_volume(self, fidfile, vol):
         """
         Reads one volume from a compressed FID file.
         @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
-        block = fidfile.getBlock(vol)
-        bias = complex(block.lvl, block.tlt)
-        volume = complex_fromstring(block.getData(), self.raw_dtype)
-        volume = (volume - bias).astype(N.complex64)
-        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
-
+        (hdr, data) = fidfile[vol]
+        bias = N.array([hdr.lvl + 1.j*hdr.tlt], N.complex64)
+        volume = N.empty((self.n_slice*self.n_pe*self.n_fe_true), N.complex64)
+        cast_to_complex(volume[:], data, bias=bias)
+        volume.shape = (self.n_slice, self.n_pe, self.n_fe_true)
+        return volume
+    
     #-------------------------------------------------------------------------
     def _read_uncompressed_volume(self, fidfile, vol):
         """
@@ -692,12 +667,14 @@ class FidImage (ScannerImage, ProcParImageMixin):
         @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """        
         volume = N.empty((self.n_slice, self.n_pe*self.n_fe_true), N.complex64)
+        # oddly enough, it is much faster to get one block at a time!!
         for sl_num, sl in enumerate(volume):
-            block = fidfile.getBlock(self.n_slice*vol + sl_num)
-            bias = complex(block.lvl, block.tlt)
-            sl[:] = complex_fromstring(block.getData(), self.raw_dtype)
-            sl[:] = (sl - bias)
-        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
+            (hdr, data) = fidfile[self.n_slice*vol + sl_num]
+            bias = N.array([hdr.lvl + 1.j*hdr.tlt], N.complex64)
+            print bias
+            cast_to_complex(sl, data, bias=bias)
+        volume.shape = (self.n_slice, self.n_pe, self.n_fe_true)
+        return volume
 
     #-------------------------------------------------------------------------
     ### This format is quite poorly understood!
@@ -713,11 +690,9 @@ class FidImage (ScannerImage, ProcParImageMixin):
         for seg in range(self.nseg):
             for sl in range(self.n_slice):
                 for pe in range(pe_true_per_seg):
-                    block = fidfile.getBlock(
-                      self.n_slice*(self.n_vol_true*(seg*pe_true_per_seg + pe)\
-                      + vol) + sl)
-                    volume[sl, seg, self.nav_per_seg+pe, :] = \
-                      complex_fromstring(block.getData(), self.raw_dtype) 
+                    (hdr, data) = fidfile[self.n_slice*(self.n_vol_true*(seg*pe_true_per_seg + pe) + vol) + sl]
+                    volume[sl,seg,self.nav_per_seg+pe].real[:] = data['real']
+                    volume[sl,seg,self.nav_per_seg+pe].imag[:] = imag['real']
         return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
 
     #-------------------------------------------------------------------------
@@ -726,18 +701,23 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Reads one volume from an asems_nccnn FID file.
         @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
-        volume = N.empty((self.n_slice, self.n_pe, self.n_fe_true), N.complex64)
-        for pe in range(self.n_pe):
-            block = fidfile.getBlock(pe*self.n_vol_true + vol)
-            bias = complex(block.lvl, block.tlt)
-            for sl, trace in enumerate(block):
-                trace = complex_fromstring(trace, self.raw_dtype)
-                if self.pulse_sequence == "gems" and self.n_transients>1:
-                    volume[sl,pe] = trace
-                else:
-                    volume[sl,pe] = (trace - bias).astype(N.complex64)
+        volume = N.empty((self.n_pe, self.n_slice*self.n_fe_true), N.complex64)
+        # There's a block for each phase encode, each block has n_slice
+        # read-outs. For the 1st volume of a 2 volume data set, the block
+        # slicing is [0, 2, 4, ..., 2*(n_pe-1)]
+        vol_sl = slice(vol, self.n_vol_true*self.n_pe, self.n_vol_true)
+        (hdr, data) = fidfile[vol_sl]
+        bias = N.array( [[h.lvl, h.tlt] for h in hdr], N.float32).transpose()
+        bias.shape = (2,self.n_pe,1)
+        if self.pulse_sequence == "gems" and self.n_transients>1:
+            volume.real[:] = data['real']
+            volume.imag[:] = data['imag']
+        else:
+            volume.real[:] = data['real'] - bias[0]
+            volume.imag[:] = data['imag'] - bias[1]
 
-        return volume
+        volume.shape = (self.n_pe, self.n_slice, self.n_fe_true)
+        return volume.transpose((1,0,2))
 
     #-------------------------------------------------------------------------
     def _read_asems_nscsn_volume(self, fidfile, vol):
@@ -745,25 +725,27 @@ class FidImage (ScannerImage, ProcParImageMixin):
         Reads one volume from an asems_nccnn FID file.
         @return: block of data with shape (n_slice*n_pe, n_fe_true)
         """
-        pe_true_per_seg = self.pe_per_seg - self.nav_per_seg
-        volume = N.empty(
-            (self.n_slice, self.nseg, pe_true_per_seg, self.n_fe_true), N.complex64)
-
-        for pe in range(pe_true_per_seg):
-            for seg in range(self.nseg):
-                for sl in range(self.n_slice):
-                    idx = self.n_slice*(self.n_vol_true*(pe*self.nseg + seg) + \
-                                       vol) + sl
-                    block = fidfile.getBlock(idx)
-                    bias = complex(block.lvl, block.tlt)
-                    trace = complex_fromstring(block.getData(), self.raw_dtype)
-                    if self.pulse_sequence=="mp_flash3d" and \
-                           self.flash_converted:
-                        volume[sl,seg,pe] = trace
-                    else:
-                        volume[sl,seg,pe] = (trace - bias).astype(N.complex64)
-        return N.reshape(volume, (self.n_slice, self.n_pe, self.n_fe_true))
-
+        volume = N.empty( (self.n_slice*self.n_pe, self.n_fe_true), N.complex64)
+        # There are n_vol*n_slice*n_pe blocks, each with one single trace
+        # For 3 volumes shaped (4,6,n_fe), indexing for vol=0, for example is:
+        # [0,1,2,3,12,13,14,15,24,25,26,27,36,37,38,39,...]
+        # this will be computed by a list [0,1,...,n_slice]*n_pe + offset_array
+        offset = N.repeat(N.arange(self.n_pe), self.n_slice) * \
+                 (self.n_vol_true*self.n_slice) + vol*self.n_slice
+        s_idx = N.array( range(self.n_slice) * self.n_pe )
+        vol_sl = s_idx + offset
+        (hdr, data) = fidfile[vol_sl]
+        bias = N.array( [[h.lvl, h.tlt] for h in hdr], N.float32).transpose()
+        bias.shape = (2,self.n_slice*self.n_pe,1)
+        if self.pulse_sequence=='mp_flash3d' and self.flash_converted:
+            volume.real[:] = data.real[:]
+            volume.imag[:] = data.imag[:]
+        else:
+            volume.real[:] = data.real[:] - bias[0]
+            volume.imag[:] = data.imag[:] - bias[1]
+        volume.shape = (self.n_slice, self.n_pe, self.n_fe_true)
+        return volume
+    
     #-------------------------------------------------------------------------
     def _get_fidformat(self, fidfile):
         """
@@ -894,6 +876,8 @@ class FidImage (ScannerImage, ProcParImageMixin):
             else:
                 data[vidx] = volume
 
+        #del fidfile
+
 
 ##############################################################################
 ###########################   FILE LEVEL CLASSES   ###########################
@@ -916,8 +900,36 @@ class _SharedHeaderStatus (_BitMaskedWord):
         doc="0=real, 1=complex" )
     S_HYPERCOMPLEX = property( lambda self: self._word&0x20 !=0,
         doc="1=hypercomplex" )
-    #def __init__(self, word):
-    #    self._word = word
+
+##############################################################################
+class HypercomplexBlockHeader (_HeaderBase):
+    "This class represents the extra header that might be present at a block."
+    HEADER_FMT = ">hhhhlffff"
+    HEADER_FIELD_NAMES = (
+        "s_spare1",     # spare short word
+        "status",       # status word for block header
+        "s_spare2",     # spare short word
+        "s_spare3",     # spare short word
+        "l_spare1",     # spare long word
+        "lpval1",       # 2D-f2 left phase
+        "rpval1",       # 2D-f2 right phase
+        "f_spare1",     # spare float word
+        "f_spare2"      # spare float word
+    )
+
+    #-------------------------------------------------------------------------
+    class _Status (_SharedHeaderStatus):
+        "knows how to digest the hypercomplex block header status word"
+        U_HYPERCOMPLEX = property( lambda self: self._word&0x2 !=0,
+            doc="1=hypercomplex block structure" )
+
+    #-------------------------------------------------------------------------
+    def __init__( self, hdr ):
+        if issubclass(type(hdr), file):
+            _HeaderBase.__init__(self, hdr.read(self.header_size))
+        else:
+            _HeaderBase.__init__(self, hdr)
+        self.status = self._Status( self.status )
 
 ##############################################################################
 class BlockHeader (_HeaderBase):
@@ -964,71 +976,25 @@ class BlockHeader (_HeaderBase):
         NI2_PHMODE = property( lambda self: self._word&0x1000 !=0)
         NI2_AVMODE = property( lambda self: self._word&0x2000 !=0)
         NI2_PWRMODE = property( lambda self: self._word&0x4000 !=0)
-        #def __init__(self, word):
-        #    self._word = word
 
     #-------------------------------------------------------------------------
-    def __init__( self, file_handle ):
-        super( BlockHeader, self ).__init__( file_handle )
+    def __init__( self, hdr, nheaders ):
+        if issubclass(type(hdr), file):
+            _HeaderBase.__init__(self, hdr.read(self.header_size))
+            if nheaders == 2:
+                self.hyperheader = HypercomplexBlockHeader( hdr )
+        else:
+            _HeaderBase.__init__(self, hdr[:self.header_size])
+            if nheaders == 2:
+                self.hyperheader = HypercomplexBlockHeader(hdr[self.header_size:])
+        
         self.status = self._Status( self.status )
         self.mode = self._Mode( self.mode )
 
 
-##############################################################################
-class HypercomplexBlockHeader (_HeaderBase):
-    "This class represents the extra header that might be present at a block."
-    HEADER_FMT = ">hhhhlffff"
-    HEADER_FIELD_NAMES = (
-        "s_spare1",     # spare short word
-        "status",       # status word for block header
-        "s_spare2",     # spare short word
-        "s_spare3",     # spare short word
-        "l_spare1",     # spare long word
-        "lpval1",       # 2D-f2 left phase
-        "rpval1",       # 2D-f2 right phase
-        "f_spare1",     # spare float word
-        "f_spare2"      # spare float word
-    )
-
-    #-------------------------------------------------------------------------
-    class _Status (_SharedHeaderStatus):
-        "knows how to digest the hypercomplex block header status word"
-        U_HYPERCOMPLEX = property( lambda self: self._word&0x2 !=0,
-            doc="1=hypercomplex block structure" )
-
-    #-------------------------------------------------------------------------
-    def __init__( self, file_handle ):
-        super( BlockHeader, self ).__init__( file_handle )
-        self.status = self._Status( self.status )
-
 
 ##############################################################################
-class DataBlock (BlockHeader):
-    "This class extends the basic BlockHeader by yielding block data."
-    #-------------------------------------------------------------------------
-    def __init__( self, fidfile ):
-        super( DataBlock, self ).__init__( fidfile )
-        self._fidfile = fidfile
-        self._data = None
-        self.header_size = fidfile.block_header_size
-        if fidfile.nbheaders == 2:
-            self.hyperheader = HypercomplexBlockHeader( fidfile )
-
-    #-------------------------------------------------------------------------
-    def __iter__( self ):
-        "yield next trace"
-        for trace_num in xrange(self._fidfile.ntraces):
-            yield self._fidfile.read(self._fidfile.tbytes)
-
-    #-------------------------------------------------------------------------
-    def getData(self):
-        # this was originally cached, but now I don't want that
-        # data hanging around
-        return self._fidfile.read(self._fidfile.bbytes - self.header_size)
-
-
-##############################################################################
-class FidFile (file, _HeaderBase ):
+class FidFile (_HeaderBase):
     """
     This class extends the basic HeaderBase by yielding DataBlocks. It is
     also a "file" object, so that it can seek into itself to find the
@@ -1045,7 +1011,7 @@ class FidFile (file, _HeaderBase ):
         "bbytes",       # number of bytes per block
         "vers_id",      # software version, file_id status bits
         "status",       # status of whole file
-        "nbheaders"     # number of block header per block
+        "nheaders"     # number of block header per block
     )
 
     #-------------------------------------------------------------------------
@@ -1069,32 +1035,58 @@ class FidFile (file, _HeaderBase ):
     #-------------------------------------------------------------------------
     def __init__( self, name ):
         "always open read-only"
-        file.__init__( self,  name )
-        _HeaderBase.__init__(self, self)
-        
-        # convert status byte into a FileHeaderStatus object (it knows how
-        # interpret each status bit)
+        #file.__init__( self,  name )
+        f = open(name)
+        _HeaderBase.__init__(self, f.read(self.header_size))
+        f.close()
+        # convert status byte into a FileHeaderStatus object
         self.status = self.FileHeaderStatus( self.status )
-        self.header_size = struct.calcsize(self.HEADER_FMT)
-        self.block_data_size = self.ntraces*self.tbytes
-        self.block_header_size = self.bbytes - self.block_data_size
 
+        
+        block_data_size = self.ntraces*self.tbytes
+        # number of complex elements
+        num_elem = block_data_size/(self.ebytes*2)
+        dt = self.ebytes == 2 and N.int16 or N.int32
+        if self.ebytes == 2:
+            elem_dtype = N.dtype(('>u4',
+                                  {'real':('>i2',0), 'imag':('>i2',2)}))
+        else:
+            elem_dtype = N.dtype(('>S8',
+                                  {'real':('>i4',0), 'imag':('>i4',4)}))
+        
+        block_header_size = self.bbytes - block_data_size
+        #hdr_dtype = N.dtype('S%d'%block_header_size)
+        hdr_dtype = N.dtype('>V%d'%block_header_size)
+        blk_dtype = N.dtype((elem_dtype, num_elem))
+        #blk_dtype = N.dtype((elem_dtype, (self.ntraces,num_elem/self.ntraces)))
+        dat_dtype = N.dtype({'names':['hdr','data'],
+                             'formats':[hdr_dtype,blk_dtype]})
+
+        self.mmap = N.memmap(name, dtype=dat_dtype, offset=self.header_size,
+                             shape=(self.nblocks,), mode='r')
+
+        
+      
     #-------------------------------------------------------------------------
     def __iter__(self):
-        "yield next block"
-        self.seekBlock(0)
-        for block_num in xrange( self.nblocks ): yield DataBlock( self )
+        "yields blocks in FidFile"
+        for bnum in xrange(self.nblocks):
+            yield self.mmap[b]
 
-    #-------------------------------------------------------------------------
-    def seekBlock(self, bnum):
-        "Seek to the beginning of block bnum (index starts a zero)."
-        self.seek(self.header_size + bnum*self.bbytes)
+    def __getitem__(self, slicer):
+        "gets (hdr, data) pairs according to slice spec"
+        d = self.mmap[slicer]
+        hdata = d['hdr']
+        if type(hdata) is not N.void:
+            hdrs = []
+            for h in hdata:
+                hdrs.append(BlockHeader(str(h), self.nheaders))
+        else:
+            hdrs = BlockHeader(str(hdata), self.nheaders)
+        return (hdrs, d['data'])
 
-    #-------------------------------------------------------------------------
-    def getBlock(self, bnum):
-        "Return a single block (index starts a zero)."
-        self.seekBlock(bnum)
-        return DataBlock(self)
+    def __setitem__(self, slicer, item):
+        raise IOError("this is a read-only memmap")
 
 ##############################################################################
 ###########################   FDF IMAGE CLASSES   ############################
