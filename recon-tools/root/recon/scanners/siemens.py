@@ -1,5 +1,7 @@
-from recon.scanners import _HeaderBase, _BitMaskedWord, ScannerImage, ReconImage
-import os, struct, sys
+from recon.scanners import _HeaderBase, _BitMaskedWord, ScannerImage, \
+     ReconImage, CachedReadOnlyProperty
+from recon.util import fft2d, ifft2d
+import os, struct, sys, re
 import numpy as N
 
 def sinc_kernel(Tr, T0, Tf, M1, N1):
@@ -20,46 +22,45 @@ def sinc_kernel(Tr, T0, Tf, M1, N1):
     s_idx = N.outer(N.ones(M1), (t-T0)/dt) - N.arange(M1)[:,None]
     return N.sinc(s_idx).astype(N.complex64)
 
-def load_agems(dat, agems, kshape, snc_xform):
+def load_agems(dat, agems, kshape, N1):
     # kspshape is something like (12,2,nsl,npe,M1) .. but actually
     # there are two echos, not two volumes 
     # But, we still want to stack the data up in order of channels
+    dat_dtype = dat.mmap.dtype
+    dtype = dat_dtype['data'].base
+    (nchan, nvol, nsl, nline, M1) = kshape
+    cshape = (N.product(kshape[1:-1]),M1)
+    chan = N.empty(cshape, dtype)
+    for c in range(nchan):
+        chan[:] = dat[c::nchan]['data']
+        # now I've got one channel of data ordered like:
+        # (n_pe, n_vol, n_slice)
+        chan.shape = (nline, nvol, nsl, M1)
+        if (N1 == M1):
+            agems[c] = chan.transpose((1, 2, 0, 3))
+        else:
+            chan = ifft2d(chan.transpose((1, 2, 0, 3)))
+            agems[c] = fft2d(chan[...,M1/2-N1/2:M1/2+N1/2])
+        chan.shape = cshape
+    del chan
+    
+
+def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None):
     dat_dtype = dat.mmap.dtype
     dtype = dat_dtype['data'].base
     nchan = kshape[0]
     nvol = kshape[1]
     nsl = kshape[2]
     nline = kshape[3]
-    M1 = snc_xform is None and kshape[-1] or snc_xform.shape[0]
     N1 = snc_xform is None and kshape[-1] or snc_xform.shape[1]
-    cshape = (N.product(kshape[1:-1]), N1)
-    chan = N.empty(cshape, dtype)
-    for c in range(nchan):
-        if snc_xform is not None:
-            chan[:] = N.dot(dat[c::nchan]['data'], snc_xform)
-        else:
-            chan[:] = dat[c::nchan]['data']
-        # now I've got one channel of data ordered like:
-        # (n_pe, n_vol, n_slice)
-        chan.shape = (nline, nvol, nsl, N1)
-        agems[c] = chan.transpose((1, 2, 0, 3))
-        chan.shape = cshape
-    del chan
+    M1 = snc_xform is None and kshape[-1] or snc_xform.shape[0]
+    if vrange is None:
+        vrange = (0, nvol-1)
+    blks_per_vol = dat.nblocks/nvol
+    start_block = vrange[0]*blks_per_vol
+    end_block = (vrange[1]+1)*blks_per_vol
+    new_nvol = vrange[1] - vrange[0] + 1
     
-
-def load_epi(dat, epi, ref, kshape, snc_xform):
-    dat_dtype = dat.mmap.dtype
-    dtype = dat_dtype['data'].base
-    nchan = kshape[0]
-    nline = kshape[-2]
-    N1 = snc_xform is None and kshape[-1] or snc_xform.shape[1]
-    M1 = snc_xform is None and kshape[-1] or snc_xform.shape[0]
-    dshape = [d for d in kshape]
-    rshape = [d for d in kshape]
-    # assuming EPI has 3 ref lines!!
-    dshape[-2:] = [kshape[-2]-3, int(N1)]
-    rshape[-2:] = [3, int(N1)]
-
     # get one slice of data, find out what's ref and what's reversed, etc
     blks = dat[N.arange(nline)*nchan]['hdr']
     epi_lines = []
@@ -73,22 +74,22 @@ def load_epi(dat, epi, ref, kshape, snc_xform):
             ref_lines.append(n)
         else:
             epi_lines.append(n)
-    cshape = (dat.nblocks/nchan, N1)
+    cshape = ((end_block-start_block)/nchan, N1)
     chan = N.empty(cshape, dtype)
-##     epi = MemmapArray(tuple(dshape), dtype)
-##     ref = MemmapArray(tuple(rshape), dtype)
-##     epi = N.empty(tuple(dshape), dtype)
-##     ref = N.empty(tuple(rshape), dtype)
     for c in range(nchan):
         print "grabbing chan", c
+        # slicing from 1st block of vrange[0] volume plus channel-offset,
+        # every nchan blocks until we've gotten all specified volumes
+        slicer = slice(start_block + c, end_block, nchan)
+        
         if snc_xform is not None:
-            chan[:] = N.dot(dat[c::nchan]['data'], snc_xform)
+            chan[:] = N.dot(dat[slicer]['data'], snc_xform)
             #chan[:] = N.dot(dat[cshape[0]*c:cshape[0]*(c+1)]['data'], snc_xform)
         else:
-            chan[:] = dat[c::nchan]['data']
+            chan[:] = dat[slicer]['data']
             #chan[:] = dat[cshape[0]*c : cshape[0]*(c+1)]['data']
             print chan.sum()
-        chan.shape = kshape[1:-1] + (N1,)
+        chan.shape = (new_nvol, nsl, nline, N1)
         chan[:,:,rev_lines,:] = chan[:,:,rev_lines,::-1]
         epi[c] = chan[:,:,epi_lines,:]
         ref[c] = chan[:,:,ref_lines,:]
@@ -102,71 +103,129 @@ class SiemensImage(ScannerImage):
     nr = 0
     nd = 0
 
-    def __init__(self, filestem, vrange=None, target_dtype=None,
-                 ksp_shape=None, N1=64, scan='epi', **kwargs):
+##     def __init__(self, filestem, vrange=None, target_dtype=None,
+##                  ksp_shape=None, N1=64, scan='epi', **kwargs):
 
-        if ksp_shape is None:
-            raise AttributeError('ksp_shape must be defined')
-        self._deal_with_kwargs(kwargs)
-        self.n_chan, self.n_vol, self.n_slice, self.n_pe = ksp_shape[:-1]
-        self.n_fe = N1
-        self.pe0 = -self.n_pe/2
-        self.tr = 1
-        self.sampstyle='linear'
-        self.nseg = 1
+##         if ksp_shape is None:
+##             raise AttributeError('ksp_shape must be defined')
+##         self._deal_with_kwargs(kwargs)
+##         self.n_chan, self.n_vol, self.n_slice, self.n_pe = ksp_shape[:-1]
+##         self.n_fe = N1
+##         self.pe0 = -self.n_pe/2
+##         self.tr = 1
+##         self.sampstyle='linear'
+##         self.nseg = 1
+##         self.path = filestem+'.dat'
+        
+##         # get data (and possibly ref)
+##         dat = MemmapDatFile(filestem+'.dat', ksp_shape)
+##         skern = None if (N1 == ksp_shape[-1]) else \
+##                 sinc_kernel(self.Tr, self.T0, self.Tf, ksp_shape[-1], N1)
+        
+##         if scan == 'epi':
+##             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
+##             SiemensImage.nd += 1
+##             self.rscratch = os.path.abspath('rscratch%d'%SiemensImage.nr)
+##             SiemensImage.nr += 1
+##             os.system('touch %s'%self.dscratch)
+##             os.system('touch %s'%self.rscratch)
+##             dshape = [n for n in ksp_shape]
+##             dshape[-2:] = [dshape[-2] - 3, int(N1)]
+##             rshape = [n for n in ksp_shape]
+##             rshape[-2:] = [3, int(N1)]
+##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
+##                                   dtype=N.complex64, mode='r+')
+##             self.cref_data = N.memmap(self.rscratch, shape=tuple(rshape),
+##                                       dtype=N.complex64, mode='r+')
+##             load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern)
+##             self.data = self.cdata[0]
+##             self.ref_data = self.cref_data[0]
+##         elif scan == 'agems':
+##             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
+##             SiemensImage.nd += 1
+##             os.system('touch %s'%self.dscratch)
+##             dshape = [n for n in ksp_shape]
+##             dshape[-1] = int(N1)
+##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
+##                                   dtype=N.complex64, mode='r+')
+##             load_agems(dat, self.cdata, ksp_shape, skern)
+            
+##         del dat.mmap
+##         del dat
+
+##         self.acq_order = N.array( range(1, self.n_slice, 2) + range(0, self.n_slice, 2) )
+
+##         self.use_membuffer()
+##         #self.load_chan(0)
+##         self.combined = False
+
+##         ScannerImage.__init__(self)
+
+    def __init__(self, filestem, vrange=None, target_dtype=None, **kwargs):
         self.path = filestem+'.dat'
-        
-        # get data (and possibly ref)
-        dat = MemmapDatFile(filestem+'.dat', ksp_shape)
-        skern = None if (N1 == ksp_shape[-1]) else \
-                sinc_kernel(self.Tr, self.T0, self.Tf, ksp_shape[-1], N1)
-        
-        if scan == 'epi':
+        self.__dict__.update(parse_siemens_hdr(self.path))
+        if kwargs.has_key('N1'):
+            self.N1 = kwargs['N1']
+        self.n_fe = self.N1
+
+        # fake a couple things still
+        if not hasattr(self, 'n_refs'):
+            self.n_refs = 0
+        else:
+            self.n_refs += 1
+        if self.isagems:
+            self.n_vol *= self.n_echo
+            self.T_pe = 0
+
+        ksp_shape = (self.n_chan, self.n_vol, self.n_slice,
+                     self.n_pe+self.n_refs, self.M1)
+
+        dat = MemmapDatFile(self.path, ksp_shape)
+        if self.isepi:
+            if vrange is not None:
+                self.n_vol = vrange[1] - vrange[0] + 1
+            
+            skern = None if (self.N1 == self.M1) else \
+                    sinc_kernel(self.T_ramp, self.T0, self.T_flat,
+                                self.M1, self.N1)
             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
             SiemensImage.nd += 1
             self.rscratch = os.path.abspath('rscratch%d'%SiemensImage.nr)
             SiemensImage.nr += 1
             os.system('touch %s'%self.dscratch)
             os.system('touch %s'%self.rscratch)
-            dshape = [n for n in ksp_shape]
-            dshape[-2:] = [dshape[-2] - 3, int(N1)]
-            rshape = [n for n in ksp_shape]
-            rshape[-2:] = [3, int(N1)]
-            self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
+            dshape = (self.n_chan, self.n_vol, self.n_slice,
+                      self.n_pe, self.n_fe)
+            rshape = (self.n_chan, self.n_vol, self.n_slice,
+                      self.n_refs, self.n_fe)
+            self.cdata = N.memmap(self.dscratch, shape=dshape,
                                   dtype=N.complex64, mode='r+')
-            self.cref_data = N.memmap(self.rscratch, shape=tuple(rshape),
+            self.cref_data = N.memmap(self.rscratch, shape=rshape,
                                       dtype=N.complex64, mode='r+')
-            load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern)
-            self.data = self.cdata[0]
-            self.ref_data = self.cref_data[0]
-        elif scan == 'agems':
+            load_epi(dat, self.cdata, self.cref_data, ksp_shape,
+                     skern, vrange=vrange)
+        elif self.isagems:
             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
             SiemensImage.nd += 1
             os.system('touch %s'%self.dscratch)
-            dshape = [n for n in ksp_shape]
-            dshape[-1] = int(N1)
+            dshape = [d for d in ksp_shape]
+            dshape[-1] = self.N1
             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
                                   dtype=N.complex64, mode='r+')
-            load_agems(dat, self.cdata, ksp_shape, skern)
-            
+            load_agems(dat, self.cdata, ksp_shape, self.N1)
+
         del dat.mmap
         del dat
+        
+        if self.acq_order.shape[0] != self.n_slice:
+            self.acq_order = N.array( range(1, self.n_slice, 2) +
+                                      range(0, self.n_slice, 2) )
 
-        a = N.array( range(1, self.n_slice, 2) + range(0, self.n_slice, 2) )
-        b = N.array( range(1, self.n_slice, 2) + range(0, self.n_slice, 2) )
-        b.sort()
-        self.acq_order = N.array([(p==b).nonzero()[0][0] for p in a])
-
-        # this hack avoids MPL bugs for now!!
-        self.data = N.empty(self.cdata.shape[1:], self.cdata.dtype)
-        if hasattr(self, 'cref_data'):
-            self.ref_data = N.empty(self.cref_data.shape[1:],
-                                    self.cref_data.dtype)
-        self.load_chan(0)
+        self.use_membuffer()
         self.combined = False
 
         ScannerImage.__init__(self)
-        
+    
     def _deal_with_kwargs(self, kwargs):
         atts = ScannerImage.necessary_params
         for att in atts:
@@ -175,13 +234,62 @@ class SiemensImage(ScannerImage):
         for k,v in kwargs.items():
             setattr(self, k, v)
 
+    @CachedReadOnlyProperty
+    def pe0(self):
+        return -self.n_pe/2
+    @CachedReadOnlyProperty
+    def sampstyle(self):
+        return 'linear'
+    @CachedReadOnlyProperty
+    def echo_time(self):
+        return self.te[0]
+    @CachedReadOnlyProperty
+    def asym_times(self):
+        if self.isagems:
+            return N.array(self.te)
+        else:
+            return []
+    @CachedReadOnlyProperty
+    def theta(self):
+        return 0.
+    @CachedReadOnlyProperty
+    def psi(self):
+        return 0.
+    @CachedReadOnlyProperty
+    def phi(self):
+        return 0.
+    @CachedReadOnlyProperty
+    def petable(self):
+        return N.arange(self.n_pe)
+    @CachedReadOnlyProperty
+    def dFE(self):
+        return self.fov_x/self.n_fe
+    @CachedReadOnlyProperty
+    def dPE(self):
+        return self.fov_y/self.n_pe
+    @CachedReadOnlyProperty
+    def delT(self):
+        if self.isepi:
+            return self.ro_period/float(self.M1-1)
+        else:
+            return 0
+    
+    def use_membuffer(self, chan=0):
+        # this hack avoids MPL bugs for now!!
+        self.data = N.empty(self.cdata.shape[1:], self.cdata.dtype)
+        self.data[:] = self.cdata[chan]
+        if hasattr(self, 'cref_data'):
+            self.ref_data = N.empty(self.cref_data.shape[1:],
+                                    self.cref_data.dtype)
+            self.ref_data[:] = self.cref_data[chan]
+
     def load_chan(self, cnum):
         self.cdata.flush()
         #self.setData(self.cdata[cnum])
-        self.data[:] = self.cdata[cnum]
+        self.data = self.cdata[cnum]
         if hasattr(self, 'cref_data'):
             self.cref_data.flush()
-            self.ref_data[:] = self.cref_data[cnum]
+            self.ref_data = self.cref_data[cnum]
 
     def runOperations(self, opchain, logger=None):
         """
@@ -191,25 +299,166 @@ class SiemensImage(ScannerImage):
             self.load_chan(c)
             ReconImage.runOperations(self, opchain, logger=logger)
             #super(SiemensImage, self).runOperations(opchain)
-        self.load_chan(0)
+        #self.load_chan(0)
+        self.use_membuffer()
         
             
     def run_op(self, op_obj):
         for c in range(self.n_chan):
             self.load_chan(c)
             op_obj.run(self)
-        self.load_chan(0)
+        #self.load_chan(0)
+        self.use_membuffer()
 
     def combine_channels(self):
-        d = N.zeros(self.cdata.shape[-4:], self.data.dtype.char.lower())
+        if type(self.data) is not N.memmap:
+            d = self.data
+        else:
+            d = N.zeros(self.cdata.shape[-4:], self.data.dtype.char.lower())
         for chan in self.cdata:
             d += N.power(chan.real, 2.0) + N.power(chan.imag, 2.0)
         self.setData(N.sqrt(d))
         self.combined = True
 
+    def __del__(self):
+        del self.cdata
+        os.unlink(self.dscratch)
+        if hasattr(self, 'cref_data'):
+            del self.cref_data
+            os.unlink(self.rscratch)
+
 ##############################################################################
 ###########################   FILE LEVEL CLASSES   ###########################
 ##############################################################################
+
+def parse_siemens_hdr(fname):
+    fp = open(fname, 'r')
+    hdr_len = struct.unpack("<i", fp.read(4))[0]
+    hdr_str = fp.read(hdr_len)
+    fp.close()
+
+    hdr_dict = {}
+    long_re = re.compile('[-0-9]+')
+    float_re = re.compile('[-0-9]+.[-0-9]+')
+    
+
+    def find_long(substr, offset):
+        match = long_re.search(substr, offset)
+        s = match.group().split('-')
+        if len(s) > 1:
+            return -1 * int(s[1])
+        else:
+            return int(s[0])
+    
+    def find_dec(substr, offset):
+        match = float_re.search(substr, offset)
+        s = match.group().split('-')
+        if len(s) > 1:
+            return -1.0 * float(s[1])
+        else:
+            return float(s[0])
+        
+    search_strs = {
+        '<ParamString."SequenceString">':
+        {'<ParamLong."BaseResolution">': ('N1', find_long),
+         '<ParamLong."PhaseEncodingLines">': ('n_pe', find_long),
+         '<ParamLong."NSlc">': ('n_slice', find_long),
+         '<ParamLong."NEco">': ('n_echo', find_long),
+         '<ParamLong."NSeg">': ('nseg', find_long),
+         '<ParamDouble."ReadFoV">': ('fov_x', find_dec),
+         '<ParamDouble."PhaseFoV">': ('fov_y', find_dec),
+         '<ParamDouble."TR">': ('tr', find_dec),
+         },
+        
+        '<ParamFunctor."ROFilterFunctor">':
+        {'<ParamLong."NColMeas">': ('M1', find_long),
+         '<ParamLong."NChaMeas">': ('n_chan', find_long),
+         },
+
+        '### ASCCONV BEGIN ###':
+        {'sAdjData.sAdjVolume.sPosition.dSag': ('dSag', find_dec),
+         'sAdjData.sAdjVolume.sPosition.dCor': ('dCor', find_dec),
+         'sAdjData.sAdjVolume.sPosition.dTra': ('dTra', find_dec),
+         'sAdjData.sAdjVolume.sNormal.dSag': ('sagNorm', find_dec),
+         'sAdjData.sAdjVolume.sNormal.dCor': ('corNorm', find_dec),
+         'sAdjData.sAdjVolume.sNormal.dTra': ('traNorm', find_dec),
+         'sAdjData.sAdjVolume.dInPlaneRot': ('pln_rot', find_dec),
+         }
+    }
+    epi_search_strs = {
+        '<ParamFunctor."adjroftregrid">':
+        {'<ParamLong."RampupTime">': ('T_ramp', find_long),
+         '<ParamLong."FlattopTime">': ('T_flat', find_long),
+         '<ParamLong."DelaySamplesTime">': ('T0', find_long),
+         '<ParamDouble."ADCDuration">': ('ro_period', find_dec),
+         },
+        
+        '<ParamFunctor."EPIPhaseCorrPE">':
+        {'<ParamLong."EchoSpacing_us">': ('T_pe', find_long),
+         '<ParamLong."NSeg">': ('n_refs', find_long),
+         }
+    }
+        
+        
+    
+    f = re.compile('<ParamString."SequenceString">')
+    m = f.search(hdr_str)
+    fseq = re.compile('\w+')
+    mseq = fseq.search(hdr_str, m.end())
+    hdr_dict['pslabel'] = mseq.group()
+    isepi = mseq.group() == 'epfid2d1_64'
+    isagems = mseq.group() == 'fm2d2r'
+    hdr_dict['isepi'] = isepi
+    hdr_dict['isagems'] = isagems
+    if isepi:
+        search_strs.update(epi_search_strs)
+    last_pos = 0
+    for item, substrs in search_strs.items():
+        f = re.compile(item)
+        m = f.search(hdr_str)
+        for hdr_att, parse_info in substrs.items():
+            att_name, parse_func = parse_info
+            fsub = re.compile(hdr_att)
+            msub = fsub.search(hdr_str, m.end())
+            hdr_dict[att_name] = msub is not None and \
+                                 parse_func(hdr_str, offset=msub.end()) or 0
+
+    # still need to get n_vol, TE, and slice acq order
+            
+    m = re.compile('<ParamLong."NRepMeas">').search(hdr_str)
+    hdr_dict['n_vol'] = find_long(hdr_str, m.end())
+
+    m = re.compile('<ParamArray."TE">').search(hdr_str)
+    te = []
+    mte = long_re.search(hdr_str, m.end())
+    te.append(float(mte.group()))
+    # if it's agems, do it twice
+    if isagems:
+        mte = long_re.search(hdr_str, mte.end())
+        te.append(float(mte.group()))
+    hdr_dict['te'] = te
+
+    m = re.compile('<ParamArray."SpacingBetweenSlices">').search(hdr_str)
+    hdr_dict['dSL'] = find_dec(hdr_str, m.end())
+
+    m = re.compile('<ParamArray."AnatomicalSliceNo">').search(hdr_str)
+    acq_order = []
+    # this matches { } and { 2 } etc
+    sl_re = re.compile(r"\{+[- 0-9]+\}+")
+    for mi in sl_re.finditer(hdr_str, m.end()):
+        #strip away ' ', '{', '}'
+        s = mi.group().strip('{} ')
+        if not s:
+            acq_order.append(0)
+            continue
+        s = s.split('-')
+        if len(s) > 1:
+            break
+        else:
+            acq_order.append(int(s[0]))
+    hdr_dict['acq_order'] = N.array(acq_order)
+
+    return hdr_dict
 
 class MDH (_HeaderBase):
     """
