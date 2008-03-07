@@ -85,7 +85,6 @@ class ScannerImage (ReconImage):
                             orient_name=self.orientation)
                             
 
-    # may change this this ksp_trajectory and handle different cases
     def epi_trajectory(self, pe0=None):
         """
         This method is helpful for computing T[n2] in the artifact
@@ -93,40 +92,18 @@ class ScannerImage (ReconImage):
         Returns:
         a) the ksp trajectory (-1 or +1) of each row (alpha)
         b) the index of each row in acq. order in its segment (beta)
-        c) the index of each row, based on the number of rows in a segment (n2)
+        c) the index of each row, based on the number of rows in a segment,
+           which is [-M2/2, M2/2)
+        d) the ksp trajectory (-1 or +1) of each reference line
         """
-        M = self.shape[-2]
-        if not pe0:
-            pe0 = self.pe0
-        # the n2 vector is always this
-        n2 = N.arange(M) + pe0        
-        if self.sampstyle == "centric":
-            if self.nseg > 2:
-                raise NotImplementedError("centric sampling not implemented for nseg > 2")
-            a = util.checkerline(M)
-            a[:M/2] *= -1
-            # offset the pe ordering by pe0, which may or may not be -M/2
-            b = N.arange(M) + pe0
-            b[:-pe0] = abs(b[:-pe0] + 1)
-        else:
-            a = N.empty(M, N.int32)
-            for n in range(self.nseg):
-                a[n:M:2*self.nseg] = 1
-                a[n+self.nseg:M:2*self.nseg] = -1
-                b = N.floor((N.arange(float(M))+pe0)/float(self.nseg)).astype(N.int32)
-        return (a, b, n2) 
-
+        raise NotImplementedError
+    
     def seg_slicing(self, n):
-        if n >= self.nseg:
-            return self.seg_slicing(n-1)
-        pe_per_seg = self.n_pe/self.nseg
-        seg_group = range( n*pe_per_seg, (n+1)*pe_per_seg )
-        # find the current row indices of this seg group
-        seg_rows = N.array([(n==self.petable).nonzero()[0][0]
-                            for n in seg_group])
-        # this is listed in acq order, and might be backwards (eg centric mode)
-        seg_rows.sort()
-        return seg_rows
+        """
+        This method returns a list of indices corresponding to segment n,
+        to be used in separating segments from recombined kspace
+        """
+        raise NotImplementedError
 
     def check_attributes(self):
         for key in ScannerImage.necessary_params.keys():

@@ -55,7 +55,7 @@ class UnbalPhaseCorrection_dev (Operation):
         # (in the case of multishot interleave)
         iscentric = image.sampstyle is "centric"
         self.xleave = iscentric and 1 or image.nseg
-        self.alpha, self.beta, _ = image.epi_trajectory()
+        self.alpha, self.beta, _, self.ref_alpha = image.epi_trajectory()
         # get slice positions (in order) so we can throw out the ones
         # too close to the backplane of the headcoil
         #self.good_slices = tag_backplane_slices(image)
@@ -68,7 +68,7 @@ class UnbalPhaseCorrection_dev (Operation):
             theta = self.run_linear(image)
 
         if not self.fullcorr:
-            phase = N.exp(1.j*theta)
+            phase = N.exp(-1.j*theta)
             from recon.tools import Recon
             if Recon._FAST_ARRAY:
                 image[:] = apply_phase_correction(image[:], phase)
@@ -101,19 +101,20 @@ class UnbalPhaseCorrection_dev (Operation):
         n_slice, n_ref_rows, n_fe = self.refShape
 
         N1 = image.shape[-1]
-        Tr = hasattr(image, 'T_ramp') and float(image.T_ramp) or 1
-        T0 = hasattr(image, 'T0') and float(image.T0) or 1
-        Tf = hasattr(image, 'T_flat') and float(image.T_flat) or \
-             image.delT * (N1-1)
-        As = (Tr + Tf - (T0**2)/Tr)
-
-        nr = int( (N1-1)*(Tr**2 - T0**2)/(2*Tr*As) )
-        nf = int( (N1-1)*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr*As) )
-        print nr, nf
-        image.ref_data[...,:nr] = 0.
-        image.ref_data[...,nf+1:] = 0.
-        if (nr > 1) and (nf < N1-1):
-            rsmooth(image.ref_data, nr, nf)
+        if self.fullcorr:
+            Tr = hasattr(image, 'T_ramp') and float(image.T_ramp) or 1
+            T0 = hasattr(image, 'T0') and float(image.T0) or 1
+            Tf = hasattr(image, 'T_flat') and float(image.T_flat) or \
+                 image.delT * (N1-1)
+            As = (Tr + Tf - (T0**2)/Tr)
+            
+            nr = int( (N1-1)*(Tr**2 - T0**2)/(2*Tr*As) )
+            nf = int( (N1-1)*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr*As) )
+            print nr, nf
+            image.ref_data[...,:nr] = 0.
+            image.ref_data[...,nf+1:] = 0.
+            if (nr > 1) and (nf < N1-1):
+                rsmooth(image.ref_data, nr, nf)
         
         n_conj_rows = n_ref_rows-self.xleave
         # form the S[u]S*[u+1] array:
@@ -131,8 +132,8 @@ class UnbalPhaseCorrection_dev (Operation):
         # partition the phase data based on acquisition order:
         # pos_order, neg_order define which rows in a slice are grouped
         # (remember not to count the lines contaminated by artifact!)
-        pos_order = (self.alpha[:n_conj_rows] > 0).nonzero()[0]
-        neg_order = (self.alpha[:n_conj_rows] < 0).nonzero()[0]
+        pos_order = (self.ref_alpha[:n_conj_rows] > 0).nonzero()[0]
+        neg_order = (self.ref_alpha[:n_conj_rows] < 0).nonzero()[0]
 
         # in Varian scans, the phase of the 0th product seems to be
         # contaminated.. so throw it out if there is at least one more
@@ -371,13 +372,13 @@ def solve_phase_6d(phs, ptmask):
 ##         r_ind_od = N.nonzero(ptmask[s,1])[0]
 ##         if r_ind_ev.any() and r_ind_od.any():
 ## ##             if self.shear_correct:
-## ##                 rowpos = 2*q1_line*V[A1] - q1_line*V[A2] +\
-## ##                          2*s*V[A3] - s*V[A4] + 2*V[A5] - V[A6]
-## ##                 rowneg = -2*q1_line*V[A1] - q1_line*V[A2] + \
-## ##                          -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]
+##             rowpos = 2*q1_line*V[A1] - q1_line*V[A2] +\
+##                      2*s*V[A3] - s*V[A4] + 2*V[A5] - V[A6]
+##             rowneg = -2*q1_line*V[A1] - q1_line*V[A2] + \
+##                      -2*s*V[A3] - s*V[A4] - 2*V[A5] - V[A6]
 ## ##             else:
-##             rowpos = 2*q1_line*V[A1] + 2*s*V[A3] + 2*V[A5]
-##             rowneg = -(2*q1_line*V[A1] + 2*s*V[A3] + 2*V[A5])
+## ##             rowpos = 2*q1_line*V[A1] + 2*s*V[A3] + 2*V[A5]
+## ##             rowneg = -(2*q1_line*V[A1] + 2*s*V[A3] + 2*V[A5])
 ##             pl.plot(rowpos, 'b.')
 ##             pl.plot(rowneg, 'r.')
 ##             pl.plot(phs[s,0], 'b--')
@@ -592,9 +593,12 @@ def phsfunc(image, a1, a3, a0):
     Q3, Q2, Q1 = image.shape[-3:]
     N2, N1 = image.shape[-2:]
 
-    T0 = image.T0
-    Tr = image.Tr
-    Tf = image.Tf
+    Tr = hasattr(image, 'T_ramp') and float(image.T_ramp) or 1.
+    T0 = hasattr(image, 'T0') and float(image.T0) or 1.
+    Tf = hasattr(image, 'T_flat') and float(image.T_flat) or \
+         image.delT * float(N1-1)
+    As = (Tr + Tf - (T0**2)/Tr)
+
     delT = (Tr + Tf - (T0**2)/Tr)/(N1 - 1.0)
 
     # this is (-1)^(n2)
@@ -605,7 +609,7 @@ def phsfunc(image, a1, a3, a0):
     
     # soln_plane is shaped (Q3, Q1)
     Qplane = N.indices((Q3, Q1), dtype=N.float64)
-    soln_plane = a3*Qplane[0] + a1*(Qplane[1]-Q1/2) + a0
+    soln_plane = -a3*Qplane[0] - a1*(Qplane[1]-Q1/2) - a0
     
     nr = int(N.floor( (Tr/2. - T0**2/(2.*Tr))/delT ))
     nf = int(N.floor( (Tr/2. + Tf - T0**2/(2.*Tr))/delT ))

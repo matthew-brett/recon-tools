@@ -45,7 +45,7 @@ def load_agems(dat, agems, kshape, N1):
     del chan
     
 
-def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None):
+def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None, scl=1.):
     dat_dtype = dat.mmap.dtype
     dtype = dat_dtype['data'].base
     nchan = kshape[0]
@@ -83,12 +83,11 @@ def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None):
         slicer = slice(start_block + c, end_block, nchan)
         
         if snc_xform is not None:
-            chan[:] = N.dot(dat[slicer]['data'], snc_xform)
+            chan[:] = scl*N.dot(dat[slicer]['data'], snc_xform)
             #chan[:] = N.dot(dat[cshape[0]*c:cshape[0]*(c+1)]['data'], snc_xform)
         else:
-            chan[:] = dat[slicer]['data']
+            chan[:] = scl*dat[slicer]['data']
             #chan[:] = dat[cshape[0]*c : cshape[0]*(c+1)]['data']
-            print chan.sum()
         chan.shape = (new_nvol, nsl, nline, N1)
         chan[:,:,rev_lines,:] = chan[:,:,rev_lines,::-1]
         epi[c] = chan[:,:,epi_lines,:]
@@ -203,7 +202,7 @@ class SiemensImage(ScannerImage):
             self.cref_data = N.memmap(self.rscratch, shape=rshape,
                                       dtype=N.complex64, mode='r+')
             load_epi(dat, self.cdata, self.cref_data, ksp_shape,
-                     skern, vrange=vrange)
+                     skern, vrange=vrange, scl=64*128.)
         elif self.isagems:
             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
             SiemensImage.nd += 1
@@ -242,11 +241,11 @@ class SiemensImage(ScannerImage):
         return 'linear'
     @CachedReadOnlyProperty
     def echo_time(self):
-        return self.te[0]
+        return self.te[0]/1e6
     @CachedReadOnlyProperty
     def asym_times(self):
         if self.isagems:
-            return N.array(self.te)
+            return N.array(self.te)/1e6
         else:
             return []
     @CachedReadOnlyProperty
@@ -278,6 +277,7 @@ class SiemensImage(ScannerImage):
         # this hack avoids MPL bugs for now!!
         self.data = N.empty(self.cdata.shape[1:], self.cdata.dtype)
         self.data[:] = self.cdata[chan]
+        self.setData(self.data)
         if hasattr(self, 'cref_data'):
             self.ref_data = N.empty(self.cref_data.shape[1:],
                                     self.cref_data.dtype)
@@ -285,8 +285,8 @@ class SiemensImage(ScannerImage):
 
     def load_chan(self, cnum):
         self.cdata.flush()
-        #self.setData(self.cdata[cnum])
-        self.data = self.cdata[cnum]
+        self.setData(self.cdata[cnum])
+        #self.data = self.cdata[cnum]
         if hasattr(self, 'cref_data'):
             self.cref_data.flush()
             self.ref_data = self.cref_data[cnum]
@@ -311,14 +311,45 @@ class SiemensImage(ScannerImage):
         self.use_membuffer()
 
     def combine_channels(self):
+        dtype = self.data.dtype
         if type(self.data) is not N.memmap:
-            d = self.data
-        else:
-            d = N.zeros(self.cdata.shape[-4:], self.data.dtype.char.lower())
+            del self.data
+        d = N.zeros(self.cdata.shape[-4:], dtype.char.lower())
         for chan in self.cdata:
             d += N.power(chan.real, 2.0) + N.power(chan.imag, 2.0)
         self.setData(N.sqrt(d))
         self.combined = True
+
+    def epi_trajectory(self, pe0=None):
+        """
+        This method is helpful for computing T[n2] in the artifact
+        correction algorithms.
+        Returns:
+        a) the ksp trajectory (-1 or +1) of each row (alpha)
+        b) the index of each row in acq. order in its segment (beta)
+        c) the index of each row, based on the number of rows in a segment,
+           which is [-M2/2, M2/2)
+        d) the ksp trajectory (-1 or +1) of each reference line
+        """
+        M = self.shape[-2]
+        if not pe0:
+            pe0 = self.pe0
+        n2 = N.arange(M) + pe0
+        a = N.empty(M, N.int32)
+        for n in range(self.nseg):
+            a[n:M:2*self.nseg] = 1
+            a[n+self.nseg:M:2*self.nseg] = -1
+        b = ((N.arange(float(M))+pe0)/float(self.nseg)).astype(N.int32)
+        aref = N.power(-1, N.arange(self.n_refs)+1)
+        return (a, b, n2, aref)
+
+
+    def seg_slicing(eslf, n):
+        """
+        This method returns a list of indices corresponding to segment n,
+        to be used in separating segments from recombined kspace
+        """
+        pass
 
     def __del__(self):
         del self.cdata
@@ -406,7 +437,7 @@ def parse_siemens_hdr(fname):
     fseq = re.compile('\w+')
     mseq = fseq.search(hdr_str, m.end())
     hdr_dict['pslabel'] = mseq.group()
-    isepi = mseq.group() == 'epfid2d1_64'
+    isepi = (mseq.group().find('epfid') >= 0)
     isagems = mseq.group() == 'fm2d2r'
     hdr_dict['isepi'] = isepi
     hdr_dict['isagems'] = isagems
