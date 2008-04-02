@@ -722,7 +722,6 @@ class FidImage (ScannerImage, ProcParImageMixin):
         for sl_num, sl in enumerate(volume):
             (hdr, data) = fidfile[self.n_slice*vol + sl_num]
             bias = N.array([hdr.lvl + 1.j*hdr.tlt], N.complex64)
-            print bias
             cast_to_complex(sl, data, bias=bias)
         volume.shape = (self.n_slice, self.n_pe, self.n_fe_true)
         return volume
