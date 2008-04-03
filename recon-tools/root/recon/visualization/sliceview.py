@@ -10,6 +10,8 @@ from matplotlib.image import AxesImage
 from matplotlib.patches import Rectangle
 from matplotlib.backends.backend_gtkagg import \
   FigureCanvasGTKAgg as FigureCanvas
+from matplotlib.backends.backend_gtkagg import \
+     NavigationToolbar2GTKAgg as NavigationToolbar
 import matplotlib
 
 from recon.imageio import readImage, ReconImage
@@ -23,6 +25,10 @@ ui_info = \
     <menu action='FileMenu'>
       <menuitem action='Save Image'/>
       <menuitem action='Save Montage'/>
+      <menu action='MoviesMenu'>
+        <menuitem action='Slice movie'/>
+        <menuitem action='Time movie'/>
+      </menu>
       <separator/>
       <menuitem action='Quit'/>
     </menu>
@@ -229,6 +235,7 @@ class sliceview (gtk.Window):
         gtk.Window.__init__(self)
         try:
             self.set_screen(parent.get_screen())
+            self.connect('destroy', lambda x: parent.plotter_died())
         except AttributeError:
             self.connect("destroy", lambda x: gtk.main_quit())
         self.set_data("ui-manager", merge)
@@ -273,7 +280,39 @@ class sliceview (gtk.Window):
     def updateCol(self):
         self.updateCrosshairs()
         self.colplot.setData(self.getCol())
-
+    #-------------------------------------------------------------------------
+    def popup(self, event):
+        win = gtk.Window()
+        win.connect("destroy", lambda x: x.destroy())
+        win.set_default_size(400,300)
+        vbox = gtk.VBox()
+        win.add(vbox)
+        fig = P.Figure()
+        ax = fig.add_subplot(111)
+        ax.hold(True)
+        if event.canvas == self.rowplot:
+            rdata = self.getRow()
+        else:
+            rdata = self.getCol()
+        ax.plot(rdata, label="data")
+        if self.overlay_data is not None:
+            if event.canvas == self.rowplot:
+                rdata2 = self.getOverlaySlice()[self.control_panel.getRowIndex(),:]
+            else:
+                rdata2 = self.getOverlaySlice()[:,self.control_panel.getColIndex()]
+            ax.plot(rdata2, label="overlay data")
+        #ax.plot(rdata2/rdata, label="ovr/data")
+        ax.legend(loc='upper left')
+        ax.set_xlim(0, rdata.shape[0])
+        #ax.set_ylim(*self.figure.axes[0].get_ylim())
+        canvas = FigureCanvas(fig)
+        vbox.pack_start(canvas)
+        toolbar = NavigationToolbar(canvas, win)
+        vbox.pack_start(toolbar, False, False)
+        win.show_all()
+        P.show()
+    #-------------------------------------------------------------------------
+    
     #-------------------------------------------------------------------------
     def updateSlice(self):
         cset = self.sliceplot.setData(self.getSlice(), norm=self.norm)
@@ -406,6 +445,12 @@ class sliceview (gtk.Window):
                 "motion_notify_event", self.sliceMouseMotionHandler)
             self.sliceplot.mpl_connect(
                 "resize_event", self.sliceResizeHandler)
+##             self.colplot.mpl_connect("button_press_event",
+##                                      self.colplot.popup)
+##             self.rowplot.mpl_connect("button_press_event",
+##                                      self.rowplot.popup)
+            self.colplot.mpl_connect("button_press_event", self.popup)
+            self.rowplot.mpl_connect("button_press_event", self.popup)
             self.slice_canvas_mode = mode
             mode = "enable"
         if mode == "enable" and self.slice_canvas_mode != "enable":
@@ -512,7 +557,7 @@ class sliceview (gtk.Window):
         fname = fname.rsplit(".")[-1] == "png" and fname or fname+".png"
         px, py = self.slice_proportions()
         scale = 128./max(px, py)
-        wpix, hpix = [round(x) for x in [scale*px, scale*py]]
+        wpix, hpix = round(scale*px), round(scale*py)
         indices = range(self.data.ndim)
         ridx,cidx = (self.control_panel.getRowDim().index,
                      self.control_panel.getColDim().index)
@@ -565,6 +610,70 @@ class sliceview (gtk.Window):
                 #t = ax.set_title('Slice %d'%s)
                 #t.set_size(12)
         fig.savefig(fname, dpi=figdpi)
+
+    #-------------------------------------------------------------------------
+    def save_movie(self, axis):
+        # axis will be either -4 (time) or -3 (slice)
+        mov_filter = gtk.FileFilter()
+        mov_filter.add_pattern("*.avi")
+        mov_filter.set_name("Movie files")
+        fname = ask_fname(self, "Save movie as...", filter=mov_filter)
+        if fname is None:
+            return
+        fname = fname.rsplit(".")[-1] == "avi" and fname or fname+".avi"
+        tmp_name = os.path.join(os.path.split(fname)[0], '_tmpimg')
+        # set up the plot
+        px, py = self.slice_proportions()
+        scale = 512./max(px, py)
+        wpix, hpix = round(scale*px), round(scale*py)
+        cmap = self.sliceplot.getImage().cmap
+        interp = self.sliceplot.getImage().get_interpolation()
+        figdpi = 100.
+        figsize = (wpix/figdpi, hpix/figdpi)
+        fig = P.Figure(figsize=figsize, dpi=figdpi)
+        fig.set_canvas(FigureCanvas(fig))
+        ax = fig.add_subplot(111)
+        ax.imshow(self.getSlice(), cmap=cmap, interpolation=interp,
+                  origin='lower', norm=self.norm)
+        ax.yaxis.set_visible(False)
+        ax.xaxis.set_visible(False)
+        img = ax.images[0]
+        indices = range(self.data.ndim)
+        ridx,cidx = (self.control_panel.getRowDim().index,
+                     self.control_panel.getColDim().index)
+        
+        indices.remove(ridx)
+        indices.remove(cidx)
+        sl_idx = indices[-1]
+
+        current_slice = list(self.control_panel.getIndexSlices())
+        # if axis indicates time, cycle through index0 of current_slice
+        # if axis indicates slice, cycle through sl_idx of current_slice
+        if axis == -4:
+            cycle_idx = 0
+        else:
+            cycle_idx = sl_idx
+
+        files = []
+        for n in xrange(self.data.shape[cycle_idx]):
+            current_slice[cycle_idx] = n
+            img.set_data(self.transform(self.data[current_slice]))
+            img.write_png(tmp_name+'%3d.png'%n)
+            files.append(tmp_name+'%3d.png'%n)
+
+        path_str = 'mf://'+tmp_name+'*.png'
+        os.system("mencoder %s -mf w=512:h=512:type=png:fps=10 -ovc lavc -lavcopts vcodec=mpeg4:mbd=2:trell -oac copy -o %s"%(path_str, fname))
+        for f in files:
+            os.remove(f)
+
+        
+    def save_slice_movie(self, action):
+        self.save_movie(-3)
+
+    def save_time_movie(self, action):
+        self.save_movie(-4)
+
+        
 
     #-------------------------------------------------------------------------
     def initoverlay(self, action):
@@ -717,6 +826,7 @@ class sliceview (gtk.Window):
     def _create_action_group(self, default_scale):
         entries = (
             ( "FileMenu", None, "_File" ),
+            ( "MoviesMenu", None, "Save movies" ),
             ( "ToolsMenu", None, "_Tools" ),
             ( "SizeMenu", None, "_Image Size" ),
             ( "ColorMapping", None, "_Color Mapping"),
@@ -730,6 +840,12 @@ class sliceview (gtk.Window):
               "_Save Montage", "<control><shift>S",
               "Saves all slices as a montage",
               self.save_png_montage ),
+            ( "Slice movie", None, "Slice movie", None,
+              "Saves a movie scanning through slices",
+              self.save_slice_movie),
+            ( "Time movie", None, "Time movie", None,
+              "Saves a movie scanning through time points",
+              self.save_time_movie ),
             ( "Quit", gtk.STOCK_QUIT,
               "_Quit", "<control>Q",
               "Quits",
@@ -794,6 +910,8 @@ class sliceview (gtk.Window):
         action_group.add_radio_actions(orient_toggles, -1, self.orient_handler)
         if not self.img_obj:
             action_group.get_action("Run Recon GUI").set_sensitive(False)
+        if self.data.ndim < 4:
+            action_group.get_action("Time movie").set_sensitive(False)
         return action_group
 
 ##############################################################################
@@ -1135,6 +1253,26 @@ class RowPlot (FigureCanvas):
         self.data = data
         self.draw()
 
+    #------------------------------------------------------------------------- 
+    def popup(self, event):
+        win = gtk.Window()
+        win.connect("destroy", lambda x: x.destroy())
+        win.set_default_size(400,300)
+        vbox = gtk.VBox()
+        win.add(vbox)
+        fig = P.Figure()
+        ax = fig.add_subplot(111)
+        ax.plot(self.data)
+        ax.set_xlim(0, self.data.shape[0])
+        ax.set_ylim(*self.figure.axes[0].get_ylim())
+        canvas = FigureCanvas(fig)
+        vbox.pack_start(canvas)
+        toolbar = NavigationToolbar(canvas, win)
+        vbox.pack_start(toolbar, False, False)
+        win.show_all()
+        P.show()
+        #gtk.main()
+
 
 ##############################################################################
 class ColPlot (FigureCanvas):
@@ -1160,7 +1298,28 @@ class ColPlot (FigureCanvas):
         self.data = data
         self.draw()
 
-
+    #-------------------------------------------------------------------------
+    def popup(self, event):
+        win = gtk.Window()
+        win.connect("destroy", lambda x: x.destroy())
+        win.set_default_size(400,300)
+        vbox = gtk.VBox()
+        win.add(vbox)
+        fig = P.Figure()
+        ax = fig.add_subplot(111)
+        ax.plot(self.data)
+        ax.set_xlim(0, self.data.shape[0])
+        # in this plot the true y-axis runs backwards along the x-axis
+        y_lim = self.figure.axes[0].get_xlim()
+        ax.set_ylim(y_lim[::-1])
+        canvas = FigureCanvas(fig)
+        vbox.pack_start(canvas)
+        toolbar = NavigationToolbar(canvas, win)
+        vbox.pack_start(toolbar, False, False)
+        win.show_all()
+        P.show()
+        #gtk.main()
+        
 ##############################################################################
 class SlicePlot (FigureCanvas):
     "A Canvas class containing a 2D matplotlib plot"    
@@ -1324,15 +1483,9 @@ class OverLay (object):
         self.norm = norm or self.norm
         self.interpolation = interpolation or self.interpolation
         ax = self.sliceplot.getAxes()
-        extent = self.sliceplot.getImage().get_extent()
         if self.sliceplot.getImage(num=1) is None:
-            ax.imshow(data, extent=extent, origin="lower")
+            ax.imshow(data, origin="lower")
 
-##         elif norm != self.norm:
-##             self.sliceplot.setImage(AxesImage(ax, interpolation=interpolation,
-##                                               cmap=cmap,alpha=alpha,norm=norm,
-##                                               extent=extent, origin="lower"),
-##                                     num=1)
         # retrieve overlay image ref
         img = self.sliceplot.getImage(num=1)
         img.set_data(data)

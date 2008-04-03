@@ -12,6 +12,7 @@ tool_map = odict((
   ("viewimage", "ViewImageTool")))
 tool_names = tool_map.keys()
 
+default_logfile = "recon.log"
 #-----------------------------------------------------------------------------
 def getToolByName(toolname):
     if not tool_map.has_key(toolname):
@@ -23,6 +24,25 @@ def getToolByName(toolname):
     except ImportError:
         raise RuntimeError("Tool class %s.%s not found."%(modulename,classname))
 
+
+def parseVolRangeOption(vol_range, parser):
+    """
+    Separates out the command-line option volume range into distinct numbers
+    @param vol_range: volume range as x:y
+    @return: vol_start = x, vol_end = y
+    """
+    parts = vol_range.split(":")
+    if len(parts) < 2: parser.error(
+        "The specification of vol-range must contain a colon separating "\
+        "the start index from the end index.")
+    try: vol_start = int(parts[0] or 0)
+    except ValueError: parser.error(
+        "Bad vol-range start index '%s'.  Must be an integer."%parts[0])
+    try: vol_end = int(parts[1] or -1)
+    except ValueError: parser.error(
+        "Bad vol-range end index '%s'. Must be an integer."%parts[1])
+    return (vol_start, vol_end) != (0,-1) and (vol_start, vol_end) or ()
+    
 
 ##############################################################################
 class MultiKeyDict (odict):

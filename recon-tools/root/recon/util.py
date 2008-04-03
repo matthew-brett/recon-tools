@@ -1,4 +1,5 @@
 import struct
+import tempfile
 from numpy.fft import fft as _fft, ifft as _ifft, \
      fftn as _fftn, ifftn as _ifftn
 ## from scipy.fftpack import fft as _fft, ifft as _ifft, \
@@ -918,6 +919,37 @@ def eulerRot(theta=0, psi=0, phi=0):
     # make sure no rounding error proprogates from here
     N.putmask(M, abs(M)<1e-5, 0)
     return M
+
+#-----------------------------------------------------------------------------
+# MemmapArray class with automatic file deletion (supposedly!)
+
+class MemmapArray(N.memmap):
+
+    def __new__(subtype, shape, dtype):
+        f = tempfile.NamedTemporaryFile(prefix='rtools')
+        data = N.memmap.__new__(subtype, f.name,
+                                dtype=dtype, shape=shape, mode='r+')
+
+        data = data.view(subtype)
+        data.f = f
+        return data
+
+    def __array_finalize__(self, obj):
+        N.memmap.__array_finalize__(self, obj)
+        if hasattr(obj, 'f'):
+            self.f = getattr(obj, 'f')
+        if hasattr(obj, '_mmap'):
+            self._mmap = obj._mmap
+
+    def __del__(self):
+        if type(self.base) is N.memmap:
+            try:
+                self.base.__del__()
+                self.f.close()
+                print 'closed tempfile', self.f.file.closed
+            except ValueError:
+                print "almost unlinked file in use"
+
 
 #-----------------------------------------------------------------------------
 if __name__ == "__main__":

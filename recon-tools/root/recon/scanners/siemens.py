@@ -1,6 +1,6 @@
 from recon.scanners import _HeaderBase, _BitMaskedWord, ScannerImage, \
      ReconImage, CachedReadOnlyProperty
-from recon.util import fft2d, ifft2d, checkerline
+from recon.util import fft2d, ifft2d, checkerline, MemmapArray
 import os, struct, sys, re
 import numpy as N
 
@@ -76,7 +76,7 @@ def load_epi(dat, epi, ref, kshape, snc_xform,
     nline = kshape[3]
     N1 = snc_xform is None and kshape[-1] or snc_xform.shape[1]
     M1 = snc_xform is None and kshape[-1] or snc_xform.shape[0]
-    if vrange is None:
+    if not vrange:
         vrange = (0, nvol-1)
     blks_per_vol = dat.nblocks/nvol
     start_block = vrange[0]*blks_per_vol
@@ -230,7 +230,7 @@ class SiemensImage(ScannerImage):
 
         dat = MemmapDatFile(self.path, ksp_shape)
         if self.isepi:
-            if vrange is not None:
+            if vrange:
                 self.n_vol = vrange[1] - vrange[0] + 1
             
 ##             refoffset = N.linspace(0, 2.75*2*N.pi*30.637, self.n_slice,
@@ -251,10 +251,12 @@ class SiemensImage(ScannerImage):
                       self.n_pe, self.n_fe)
             rshape = (self.n_chan, self.n_vol, self.n_slice,
                       self.n_refs, self.n_fe)
-            self.cdata = N.memmap(self.dscratch, shape=dshape,
-                                  dtype=N.complex64, mode='r+')
-            self.cref_data = N.memmap(self.rscratch, shape=rshape,
-                                      dtype=N.complex64, mode='r+')
+            self.cdata = MemmapArray(dshape, N.complex64)
+            self.cref_data = MemmapArray(rshape, N.complex64)
+##             self.cdata = N.memmap(self.dscratch, shape=dshape,
+##                                   dtype=N.complex64, mode='r+')
+##             self.cref_data = N.memmap(self.rscratch, shape=rshape,
+##                                       dtype=N.complex64, mode='r+')
             load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern,
                      self.delT/1e6, (self.T_flat+2*self.T_ramp)/1e6, None,
                      vrange=vrange, scl=64*128.)
@@ -266,8 +268,9 @@ class SiemensImage(ScannerImage):
             os.system('touch %s'%self.dscratch)
             dshape = [d for d in ksp_shape]
             dshape[-1] = self.N1
-            self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
-                                  dtype=N.complex64, mode='r+')
+            self.cdata = MemmapArray(tuple(dshape), N.complex64)
+##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
+##                                   dtype=N.complex64, mode='r+')
             load_agems(dat, self.cdata, ksp_shape, self.N1)
 
         del dat.mmap
@@ -337,6 +340,7 @@ class SiemensImage(ScannerImage):
             self.ref_data = N.empty(self.cref_data.shape[1:],
                                     self.cref_data.dtype)
             self.ref_data[:] = self.cref_data[chan]
+        self.combined = False
 
     def load_chan(self, cnum):
         self.cdata.flush()
@@ -345,6 +349,7 @@ class SiemensImage(ScannerImage):
         if hasattr(self, 'cref_data'):
             self.cref_data.flush()
             self.ref_data = self.cref_data[cnum]
+        self.combined = False
 
     def runOperations(self, opchain, logger=None):
         """
@@ -759,38 +764,3 @@ class MemmapDatFile:
 
     def __setitem__(self, slicer, item):
         raise IOError('this is a read-only memmap')
-
-import os
-class MemmapArray(N.memmap):
-
-    ntmps = 0
-    
-    def __new__(subtype, shape, dtype):
-        fname = 'scratch%d'%MemmapArray.ntmps
-        if not os.path.exists(fname):
-            os.system('touch %s'%fname)
-        MemmapArray.ntmps += 1
-##         data = N.memmap.__new__(subtype, fname,
-##                                 dtype=dtype, shape=shape, mode='r+')
-        data = N.memmap(fname, dtype=dtype, shape=shape, mode='r+')
-        data = data.view(subtype)
-        data.f = os.path.abspath(fname)
-        return data
-
-    def __array_finalize__(self, obj):
-        N.memmap.__array_finalize__(self, obj)
-##         if hasattr(obj, 'f'):
-##             self.f = getattr(obj, 'f')
-##         if hasattr(obj, '_mmap'):
-##             self._mmap = obj._mmap
-
-##     def __del__(self):
-##         if type(self.base) is N.memmap:
-##             try:
-##                 self.base.__del__()
-##                 os.unlink(self.f)
-##             except ValueError:
-##                 print "almost unlinked file in use"
-##         else:
-##             print "almost unlinked file in use"
-                

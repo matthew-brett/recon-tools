@@ -25,7 +25,11 @@ def ask_fname(parent, prompt, action="save", filter=None):
                  gtk.STOCK_OK,gtk.RESPONSE_OK)
         )
     if filter:
-        dialog.add_filter(filter)
+        if type(filter) is type([]):
+            for f in filter:
+                dialog.add_filter(f)
+        else:
+            dialog.add_filter(filter)
     response = dialog.run()
     if response == gtk.RESPONSE_CANCEL:
         dialog.destroy()

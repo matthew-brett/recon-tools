@@ -22,15 +22,10 @@ class SlicerImage (ReconImage):
         self.r0 = N.array([self.z0, self.y0, self.x0])
         self.dr = N.array([self.ksize, self.jsize, self.isize])
         # orientation xform maps vx-space:xyz-space (Right,Anterior,Superior)
-        # numpy arrays are in C-ordering, so I'm going to reverse the
-        # rows and columns of the xform
-        # Also, these xforms are right-handed, but ANALYZE parameter data
-        # are left handed, so I'm going to reverse the sign of the row
-        # mapping to x
-        # (makes as if the images are right handed??)
+        # numpy arrays are in C-ordering (zyx), so I'm going to reverse the
+        # rows and columns of the xform to be in zyx order
         self.xform = self.orientation_xform.tomatrix()
         self.xform = reverse(reverse(self.xform,axis=-1),axis=-2)
-        #self.xform[-1] = abs(self.xform[-1])
         # These variables describe which dimension a given standard slicing
         # (axial, saggital, coronal) slices in the data array
         self.ax, self.cor, self.sag = abs(N.dot(self.xform, N.arange(3)).astype(N.int32)).tolist()            

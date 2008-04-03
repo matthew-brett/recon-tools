@@ -5,7 +5,8 @@ import recon.conf
 import recon
 from recon.imageio import available_writers as output_format_choices, \
      output_datatypes as output_datatype_choices
-from recon.tools import OrderedConfigParser, ConsoleTool
+from recon.tools import OrderedConfigParser, ConsoleTool, default_logfile, \
+     parseVolRangeOption
 from recon.operations import OperationManager, RunLogger
 from recon.scanners.varian import getPulseSeq
 
@@ -192,26 +193,6 @@ class Recon (ConsoleTool):
                   "WriteImage."
 
     #-------------------------------------------------------------------------
-    def parseVolRange(self, vol_range):
-        """
-        Separates out the command-line option volume range into distinct numbers
-        @param vol_range: volume range as x:y
-        @return: vol_start = x, vol_end = y
-        """
-        parts = vol_range.split(":")
-        if len(parts) < 2: self.error(
-          "The specification of vol-range must contain a colon separating "\
-          "the start index from the end index.")
-        try: vol_start = int(parts[0] or 0)
-        except ValueError: self.error(
-          "Bad vol-range start index '%s'.  Must be an integer."%parts[0])
-        try: vol_end = int(parts[1] or -1)
-        except ValueError: self.error(
-          "Bad vol-range end index '%s'. Must be an integer."%parts[1])
-        return (vol_start, vol_end) != (0,-1) and (vol_start, vol_end) \
-                                              or ()
-
-    #-------------------------------------------------------------------------
     def getOptions(self):
         """
         Bundle command-line arguments and options into a single options
@@ -224,7 +205,7 @@ class Recon (ConsoleTool):
         """
     
         options, args = self.parse_args()
-        options.vrange = self.parseVolRange(options.vol_range)
+        options.vrange = parseVolRangeOption(options.vol_range, self)
 
         # Two usages are special cases:
         # oplist example will be handled after an oplist is found..
