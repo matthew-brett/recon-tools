@@ -1,8 +1,9 @@
 import numpy as N, pylab as P
 from recon import imageio, util
-from recon.fftmod import fft1, ifft1
+from recon.fftmod import fft1, ifft1, ifft2
 from recon.scanners import siemens
-from recon.operations.InverseFFT import InverseFFT
+#from recon.operations.InverseFFT import InverseFFT
+from recon.operations import Operation
 from recon.operations.ForwardFFT import ForwardFFT
 from recon.operations.ReorderSlices import ReorderSlices
 from recon.operations.ViewImage import ViewImage
@@ -92,10 +93,11 @@ def phs_surf(image, pct):
     rdata[...,nf+1:] = 0.
     if (nr > 1) and (nf < Q1-1):
         rdata = g1.rsmooth(rdata, nr, nf)
-    inv_ref = ifft1(rdata)
+    pfac = N.exp(-2.j*N.pi*N.arange(Q1)*(Q1/2 - 0.5)/Q1)
+    inv_ref = pfac*ifft1(pfac*rdata, shift=False)
     # this is S[u+1]S*[u] (but ref raster is backwards from epi, so change sign)
-    #inv_ref = inv_ref[:,1:,:] * N.conjugate(inv_ref[:,:-1,:])
-    inv_ref = inv_ref[:,:-1,:] * N.conjugate(inv_ref[:,1:,:])
+    inv_ref = inv_ref[:,1:,:] * N.conjugate(inv_ref[:,:-1,:])
+    #inv_ref = inv_ref[:,:-1,:] * N.conjugate(inv_ref[:,1:,:])
 
     irmask = build_3Dmask(N.abs(inv_ref), 0.1)
     fract_pts = irmask.sum()/float(Q3*(N2-1)*Q1)
@@ -109,8 +111,8 @@ def phs_surf(image, pct):
 
 def svd_solve(phs, mask):
     # phs is shaped (Q3, 2, Q1) where
-    # row 0 corresponds to (-1)^(u+1) = -1 (u=0)
-    # row 1 corresponds to (-1)^(u+1) = +1 (u=1)
+    # row 0 corresponds to (-1)^(u) = +1 (u=0)
+    # row 1 corresponds to (-1)^(u) = -1 (u=1)
     # phs.flatten() is Q3 repeats of (+1/-1)*( phs-line-to-fit )
     Q3,_,Q1 = phs.shape
     phs.shape = (Q3*2*Q1)
@@ -121,7 +123,7 @@ def svd_solve(phs, mask):
     # this is all ones for the a0 term
     q0_idx = N.ones(Q3*2*Q1)
     # this changes sign for every other group of Q1 pts
-    usign = N.repeat(-util.checkerline(Q3*2), Q1)
+    usign = N.repeat(util.checkerline(Q3*2), Q1)
     A[:,0] = 2.0 * usign * q1_idx.flatten()
     A[:,1] = 2.0 * usign * q0_idx
 
@@ -137,9 +139,10 @@ def svd_solve(phs, mask):
 def solve_coefs(image, pct=30.):
     return svd_solve(*phs_surf(image, pct))
 
-def perturbation_phs(image, a1, a0):
+def perturbation_phs(image, a1, a0, newQ1=None):
     
     Q3, Q2, Q1 = image.shape[-3:]
+    Q1p = newQ1 or Q1
     N2, N1 = image.shape[-2:]
 
     T0 = float(image.T0)
@@ -155,11 +158,14 @@ def perturbation_phs(image, a1, a0):
     n2sign = N.array([1.0, -1.0])
     
     # fn is shaped (2, N1)
-    fn = N.outer(0.5*(1-n2sign)*(N1-1), N.ones(N1)) + \
-         N.outer(n2sign, N.arange(N1))
+    evn = N.array([1, 0])
+    odd = N.array([0, 1])
+    fn = (evn[:,None] * N.arange(N1)) + \
+         (odd[:,None] * N.arange(N1-1, -1, -1))
     
-    # soln_plane is shaped (Q3, Q1)
-    soln_line = a1*N.arange(Q1) + a0    
+    #soln_line = a1*N.arange(Q1) + a0
+    soln_line = a1*N.linspace(0, float(Q1), Q1p, endpoint=False) + a0
+    #soln_line = a1*N.linspace(float(-Q1), float(Q1), Q1p, endpoint=False) + a0
 
     delF = 2*N.pi * 1./(Tf + 2*Tr - 2*T0)
     sigma = a1/delF
@@ -170,16 +176,15 @@ def perturbation_phs(image, a1, a0):
     treg3 = fn > nf
 
     tn = N.empty(fn.shape, fn.dtype)
+##     tn[treg1] = N.power(T0**2 + 2*fn[treg1]*Tr*As/(N1-1), 0.5)
+##     tn[treg2] = fn[treg2]*As/(N1-1) + Tr/2 + T0**2/(2*Tr)
+##     tn[treg3] = (2*Tr+Tf) - N.power(2*Tr*(As + T0**2/(2*Tr) - \
+##                                           fn[treg3]*As/(N1-1)), 0.5)
+
     tn[treg1] = N.power(T0**2 + 2*fn[treg1]*Tr*As/N1, 0.5)
-    tn[treg2] = fn[treg2]*As/(N1-1) + Tr/2 + T0**2/(2*Tr)
+    tn[treg2] = fn[treg2]*As/N1 + Tr/2 + T0**2/(2*Tr)
     tn[treg3] = (2*Tr+Tf) - N.power(2*Tr*(As + T0**2/(2*Tr) - \
                                           fn[treg3]*As/N1), 0.5)
-
-##     tn[treg1] = N.power(T0**2 + 2*fn[treg1]*Tr*As/N1, 0.5)
-##     tn[treg2] = fn[treg2]*As/N1 + Tr/2 + T0**2/(2*Tr)
-##     tn[treg3] = (2*Tr+Tf) - N.power(2*Tr*(As + T0**2/(2*Tr) - \
-##                                           fn[treg3]*As/N1), 0.5)
-
 
     reg1 = tn <= Tr
     reg2 = (tn > Tr) & (tn <= Tr+sigma)
@@ -191,7 +196,7 @@ def perturbation_phs(image, a1, a0):
     # so it will be soln_line (None, None, Q1) *
     # some function shaped (2, N1, None)
     Ttot = 2*Tr + Tf
-    phs = N.empty((2,N1,Q1), N.float64)
+    phs = N.empty((2,N1,Q1p), N.float64)
     fr1 = -n2sign[:,None] * (tn - a1/(2*delF))/Tr
     fr2 = -n2sign[:,None] * (1 - (delF/(a1*Tr))*N.power(a1/delF - tn + Tr, 2.0))
     fr3 = -n2sign[:,None] * N.ones(tn.shape, tn.dtype)
@@ -212,17 +217,44 @@ def perturbation_kernel(phs):
     _,N1,Q1 = phs.shape
     #n1_ax = N.linspace(-N1/2., N1/2., N1, endpoint=False)
     n1_ax = N.linspace(0., N1, N1, endpoint=False)
-    chk = util.checkerboard(N1,N1)
+    chk = util.checkerboard(N1,Q1)
     n1_by_q1 = -2.j*N.pi*n1_ax[:,None]*n1_ax[None,:]/N1
 
     #util.shift(phs, -Q1/2)
     zarg = 1.j*phs + n1_by_q1[None,:,:]
 
-    return ifft1(N.exp(zarg), shift=False)*chk
+    extra_phs_n1 = N.exp(2.j*N.pi*n1_ax*(N1/2 - 0.5)/N1)
+    extra_phs_n1p = N.exp(-2.j*N.pi*n1_ax*(N1/2 - 0.5)/N1)
+
+    ep = extra_phs_n1[:,None] * extra_phs_n1p[None,:]
+    
+    return ifft1(N.exp(zarg), shift=False) *ep
+
+def perturbation_kernel_any(phs):
+    _,N1,Q1 = phs.shape
+    n1_ax = N.linspace(0., N1, N1, endpoint=False)
+    q1_ax = N.linspace(0., Q1, Q1, endpoint=False)
+    n1_by_q1 = -2.j*N.pi*n1_ax[:,None]*q1_ax[None,:]/Q1
+    
+    # will form an (N2, N1, N1P, Q1) array and sum over Q1
+    n1p_by_q1 = 2.j*N.pi*n1_ax[:,None]*q1_ax[None,:]/Q1
+
+    zarg = 1.j*phs[:,:,None,:] + \
+           n1_by_q1[None,:,None,:] + \
+           n1p_by_q1[None,None,:,:]
+
+##     extra_phs_n1 = N.exp(2.j*N.pi*n1_ax*(Q1/2 - 0.5)/Q1)
+##     extra_phs_n1p = N.exp(-2.j*N.pi*n1_ax*(Q1/2 - 0.5)/Q1)
+##     extra_phs_n1 = N.exp(2.j*N.pi*n1_ax*(N1/2 - 0.5)/N1)
+##     extra_phs_n1p = N.exp(-2.j*N.pi*n1_ax*(N1/2 - 0.5)/N1)    
+##     ep = extra_phs_n1[:,None] * extra_phs_n1p[None,:]
+    ep = util.checkerboard(N1, N1)
+    return N.exp(zarg).sum(axis=-1) * ep / Q1
+    
 
 def undistort_img(image, a1, a0):
-    phs = perturbation_phs(image, a1, a0)
-    f = perturbation_kernel(phs)
+    phs = perturbation_phs(image, a1, a0, newQ1=128)
+    f = perturbation_kernel_any(phs)
     sn = N.empty(image.shape, image[:].dtype)
 
     dslice = [slice(None)] * image.ndim
@@ -243,6 +275,21 @@ def undistort_img(image, a1, a0):
     g1.copy_timing(image, unghosted)
     return unghosted
 
+def planar_phs_subtract(image, a1, a0):
+    Q3,Q2,Q1 = image.shape[-3:]
+    q1_ax = N.linspace(0, float(Q1), Q1, endpoint=False)
+    soln_line = a0 + a1*q1_ax
+    n2sign = util.checkerline(Q2)
+    soln_pln = soln_line[None,:] * n2sign[:,None]
+    phs = N.exp(-1.j*soln_pln)
+    pfac_inv = N.exp(-2.j*N.pi*q1_ax*(Q1/2 - 0.5)/Q1)
+    pfac_for = N.exp(2.j*N.pi*q1_ax*(Q1/2 - 0.5)/Q1)
+    scorr = pfac_for*fft1( ifft1(pfac_inv*image[:], shift=False)*phs ,
+                           shift=False )
+    deghost = image._subimage(scorr)
+    g1.copy_timing(image, deghost)
+    return deghost
+
 def full_phs_corr(image, pct=30., allchan=True):
     if hasattr(image, 'n_chan') and allchan:
         corr_list = []
@@ -262,3 +309,31 @@ def full_phs_corr(image, pct=30., allchan=True):
         print a1, a0
         return unghosted
 
+def unbal_phs_corr(image, pct=30., allchan=True):
+    if hasattr(image, 'n_chan') and allchan:
+        corr_list = []
+        for c in range(image.n_chan):
+            image.use_membuffer(c)
+            cf = solve_coefs(image, pct=pct)
+            corr_list.append(planar_phs_subtract(image, *cf))
+            InverseFFT().run(corr_list[-1])
+            print cf
+        unghosted = image._subimage(g1.sumsqr(corr_list))
+        return unghosted
+    else:
+        a1,a0 = solve_coefs(image, pct=pct)
+        unghosted = planar_phs_subtract(image, a1, a0)
+        InverseFFT().run(unghosted)
+        print a1, a0
+        return unghosted
+            
+
+class InverseFFT(Operation):
+
+    def run(self, image):
+        N2,N1 = image.shape[-2:]
+        phsn2 = N.exp(-2.j*N.pi*N.arange(N2)*(N2/2 - 0.5)/N2)
+        phsn1 = N.exp(-2.j*N.pi*N.arange(N1)*(N1/2 - 0.5)/N1)
+        pfac = phsn2[:,None]*phsn1[None,:]
+        for vol in image:
+            vol[:] = ifft2(pfac*vol[:], shift=False)
