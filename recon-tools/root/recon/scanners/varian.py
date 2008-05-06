@@ -7,7 +7,8 @@ from itertools import imap, ifilter
 from tokenize import generate_tokens
 
 import numpy as N
-from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle
+from recon.util import qmult, eulerRot, Quaternion, reverse, normalize_angle, \
+     checkerline
 from recon.scanners import ScannerImage, _HeaderBase, _BitMaskedWord, \
      tablib, CachedReadOnlyProperty
 from recon.imageio import ReconImage
@@ -589,7 +590,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         if self.sampstyle == "centric":
             if self.nseg > 2:
                 raise NotImplementedError("centric sampling not implemented for nseg > 2")
-            a = util.checkerline(M)
+            a = checkerline(M)
             a[:M/2] *= -1
             # offset the pe ordering by pe0, which may or may not be -M/2
             b = N.arange(M) + pe0
@@ -626,7 +627,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         # Varian data is layed out with this improper rotation from
         # neurological oriented space:
         # from scanner to image-> map -y -> +y
-        # (the object lies [+X, +Y, +Z] = [P, R, S] inside the scanner,
+        # (the object then lies [+X, +Y, +Z] = [P, R, S] inside the scanner,
         #  so account for this rotation last)
         Qs_mat = N.asarray([[ 1., 0., 0.],
                             [ 0.,-1., 0.],
@@ -656,7 +657,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         # 3) phi degrees around Z
         # The steps to rotate the reconstructed data are:
         # 1) flip Y to put into a right-handed system
-        # 2) rotate in the reverse order as the Varian rotation
+        # 2) rotate in the reverse order as the Varian Euler rotation
         # 3) make a final pi/2 rotation around Z to make [R A S] = [X Y Z]
         Qobl = Quaternion(M=N.dot(eulerRot(psi=theta),
                                   N.dot(eulerRot(theta=psi),

@@ -252,6 +252,7 @@ class sliceview (gtk.Window):
         self.add(table)
         self.show_all()
         P.show()
+        #gtk.main()
 
     #-------------------------------------------------------------------------
     def getRow(self):

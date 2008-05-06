@@ -1,6 +1,6 @@
 # needs to be re-written
 
-from numpy import flipud, fliplr
+import numpy as N
 from recon.operations import Operation, Parameter
 from recon.util import Quaternion
 from recon.analyze import canonical_orient
@@ -25,17 +25,21 @@ class FlipSlices (Operation):
         for vol in image:
             for sl in vol:
                 if self.flipud and self.fliplr:
-                    newslice = flipud(fliplr(sl[:]))
+                    newslice = N.flipud(N.fliplr(sl[:]))
                 elif self.flipud:
-                    newslice = flipud(sl[:])
+                    newslice = N.flipud(sl[:])
                 elif self.fliplr:
-                    newslice = fliplr(sl[:])
+                    newslice = N.fliplr(sl[:])
                 sl[:] = newslice.copy()
-                
-        mat = image.orientation_xform.tomatrix()
+        # book-keeping section
+        new_xform = image.orientation_xform.tomatrix()
         if self.flipud:
-            mat[:,1] = -mat[:,1]
+            new_xform[:,1] = -new_xform[:,1]
         if self.fliplr:
-            mat[:,0] = -mat[:,0]
-        image.orientation_xform = Quaternion(M=mat)
+            new_xform[:,0] = -new_xform[:,0]
+        mapping = N.dot(N.linalg.inv(new_xform),
+                        image.orientation_xform.tomatrix())
+        new_orig = N.dot(mapping, N.array([image.x0, image.y0, image.z0]))
+        (image.x0, image.y0, image.z0) = tuple(new_orig)
+        image.orientation_xform = Quaternion(M=new_xform)
         image.orientation = canonical_orient(image.orientation_xform.tomatrix())

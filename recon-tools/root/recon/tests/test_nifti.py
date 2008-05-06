@@ -76,7 +76,11 @@ class test_nifti(NumpyTestCase):
         rad_xform = N.array([[-1., 0., 0.],
                              [ 0., 1., 0.],
                              [ 0., 0., 1.],])
-        neur_xform = N.identity(3)
+
+        neur_xform = N.array([[ 1., 0., 0.],
+                              [ 0., 1., 0.],
+                              [ 0., 0., 1.],])
+
         sag_xform = N.array([[ 0., 0.,-1.],
                              [ 1., 0., 0.],
                              [ 0., 1., 0.],])

@@ -35,7 +35,7 @@ class ComputeFieldMap (Operation):
         if not hasattr(image, "asym_times") and not hasattr(image, "te"):
             self.log("No asym_time, can't compute field map.")
             return
-        asym_times = image.asym_times or image.te
+        asym_times = image.asym_times
 
         # Make sure there are at least two volumes
         if image.tdim < 2:

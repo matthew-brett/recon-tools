@@ -20,16 +20,18 @@ def ref_linear_regression(Y, X=None, sigma=None, mask=None):
     S = (1./sigma[nzpts]).sum()
     Sx = (X/sigma).sum()
     Sy = (Y/sigma).sum()
-    Sxx = (N.power(X,2.0)/sigma).sum()
-    Sxy = (X*Y/sigma).sum()
-    delta = S*Sxx - N.power(Sx,2.0)
-    b = (Sxx*Sy - Sx*Sxy)/delta
-    m = (S*Sxy - Sx*Sy)/delta
-    res = abs(Y - (m*X + b)).sum()/Y.shape[0]
-    return (b, m, res)
+    ti = X[nzpts] - (Sx/S)
+    Stt = (N.power(ti, 2.0)/sigma[nzpts]).sum()
+    ti /= sigma[nzpts]
+    m = 1/Stt * (ti*Y[nzpts]).sum()
+    b = (Sy - Sx*m)/S
+
+    err = Y - (m*X + b)
+    chisq = N.power(err, 2.0).sum()
+    return (b, m, chisq)
     
 
-class test_linReg(NumpyTestCase):
+class test_lin_regression(NumpyTestCase):
     def setUp(self):
         gshape = (16,12,18)
 
@@ -54,14 +56,14 @@ class test_linReg(NumpyTestCase):
         gshape = self.noisy_grad.shape
         coef_shape = list(gshape)
         coef_shape.pop(axis)
-        b1d,m1d,res1d = (N.zeros(coef_shape),
+        b1d,m1d,chi1d = (N.zeros(coef_shape),
                          N.zeros(coef_shape),
                          N.zeros(coef_shape))
 
-        bnd,mnd,resnd = util.linReg(self.noisy_grad,mask=mask,sigma=sigma,
+        bnd,mnd,chind = util.lin_regression(self.noisy_grad,mask=mask,sigma=sigma,
                                     axis=axis)
         # these return with a None dim if axis is not -1
-        bnd,mnd,resnd = map(lambda x: N.squeeze(x), (bnd,mnd,resnd))
+        bnd,mnd,chind = map(lambda x: N.squeeze(x), (bnd,mnd,chind))
 
         for m in range(coef_shape[0]):
             for n in range(coef_shape[1]):
@@ -71,12 +73,12 @@ class test_linReg(NumpyTestCase):
                 msk = mask if mask is None else mask[sl]
                 (b1d[m,n],
                  m1d[m,n],
-                 res1d[m,n]) = ref_linear_regression(self.noisy_grad[sl],
+                 chi1d[m,n]) = ref_linear_regression(self.noisy_grad[sl],
                                                      sigma=sig,mask=msk)
                  
         assert_array_almost_equal(b1d, bnd, decimal=12)
         assert_array_almost_equal(m1d, mnd, decimal=12)
-        assert_array_almost_equal(res1d, resnd, decimal=12)
+        assert_array_almost_equal(chi1d, chind, decimal=12)
 
         
     def testLinReg(self, level=1):
@@ -97,9 +99,12 @@ class test_linReg(NumpyTestCase):
     
     def testReallyWorks(self, level=1):
         # the solution given masking should be close to the original gradient
-        (_,mx,_) = util.linReg(self.noisy_grad, mask=self.gmask, axis=-1)
-        (_,my,_) = util.linReg(self.noisy_grad, mask=self.gmask, axis=-2)
-        (_,mz,_) = util.linReg(self.noisy_grad, mask=self.gmask, axis=-3)
+        (_,mx,_) = util.lin_regression(self.noisy_grad,
+                                       mask=self.gmask, axis=-1)
+        (_,my,_) = util.lin_regression(self.noisy_grad,
+                                       mask=self.gmask, axis=-2)
+        (_,mz,_) = util.lin_regression(self.noisy_grad,
+                                       mask=self.gmask, axis=-3)
         assert abs(mx.mean() - self.abg[2]) < .099
         assert abs(my.mean() - self.abg[1]) < .099
         assert abs(mz.mean() - self.abg[0]) < .099

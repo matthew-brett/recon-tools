@@ -1,45 +1,9 @@
 from recon.scanners import _HeaderBase, _BitMaskedWord, ScannerImage, \
      ReconImage, CachedReadOnlyProperty
-from recon.util import fft2d, ifft2d, checkerline, MemmapArray
+from recon.util import fft2d, ifft2d, checkerline, MemmapArray, shift
 import os, struct, sys, re
 import numpy as N
 
-def sinc_kernel(Tr, T0, Tf, dt, M1, N1):
-    (Tr, T0, Tf) = map(float, (Tr, T0, Tf))
-    #As = Tf + Tr - (T0**2)/Tr
-    Bs = N1 / (Tf + Tr - (T0**2)/Tr)
-    nr = int( Bs*(Tr**2 - T0**2)/(2*Tr) )
-    nf = int( Bs*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr) )
-    r1 = N.arange(0, nr+1)
-    r2 = N.arange(nr+1, nf+1)
-    r3 = N.arange(nf+1, int(N1))
-##     r1 = N.arange(0, nr)
-##     r2 = N.arange(nr, nf)
-##     r3 = N.arange(nf, int(N1))
-    t = N.zeros(int(N1))
-    t[r1] = N.power( T0**2 + 2.0*r1*Tr/Bs, 0.5)
-    t[r2] = r2/Bs + Tr/2.0 + T0**2/(2.0*Tr)
-    t[r3] = (Tf + 2*Tr) - N.power(2.0*Tr*(Tf + Tr - T0**2/(2.0*Tr) - r3/Bs), 0.5)
-    print t
-    # should use the DWELL TIME from siemens header
-    s_idx = N.outer(N.ones(M1), (t-T0)/dt) - N.arange(M1)[:,None]
-    return N.sinc(s_idx).astype(N.complex64)
-
-
-## def sinc_kernel(Tr, T0, Tf, dt, M1, N1):
-##     (Tr, T0, Tf) = map(float, (Tr, T0, Tf))
-##     As = Tf + Tr - (T0**2)/Tr
-##     nr = int( N1*(Tr**2 - T0**2)/(2*Tr*As) )
-##     nf = int( N1*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr*As) )
-##     r1 = N.arange(0, nr+1)
-##     r2 = N.arange(nr+1, nf+1)
-##     r3 = N.arange(nf+1, int(N1))
-##     t = N.zeros(int(N1))
-##     t[r1] = N.power( T0**2 + 2.0*r1*Tr*As/N1, 0.5)
-##     t[r2] = r2*As/N1 + Tr/2.0 + T0**2/(2.0*Tr)
-##     t[r3] = (Tf + 2*Tr) - N.power(2.0*Tr*(As + T0**2/(2.0*Tr) - r3*As/N1), 0.5)
-##     s_idx = N.outer(N.ones(M1), (t-T0)/dt) - N.arange(M1)[:,None]
-##     return N.sinc(s_idx).astype(N.complex64)
 
 def load_agems(dat, agems, kshape, N1):
     # kspshape is something like (12,2,nsl,npe,M1) .. but actually
@@ -64,10 +28,7 @@ def load_agems(dat, agems, kshape, N1):
     del chan
     
 
-def load_epi(dat, epi, ref, kshape, snc_xform,
-             dwell_time, echo_spc, refoffset,
-             vrange=None, scl=1.):
-## def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None, scl=1.):
+def load_epi(dat, epi, ref, kshape, snc_xform, vrange=None, scl=1.):
     dat_dtype = dat.mmap.dtype
     dtype = dat_dtype['data'].base
     nchan = kshape[0]
@@ -96,125 +57,71 @@ def load_epi(dat, epi, ref, kshape, snc_xform,
             ref_lines.append(n)
         else:
             epi_lines.append(n)
-    cshape = ((end_block-start_block)/nchan, N1)
+    # an ndarray of offsets to the beginning of each slice in a channel
+    offsets = N.arange(nsl*new_nvol)*nline
+
+    # beef up the different indices so that they grab into
+    # each slice in the channel.. do this by repeating the offset
+    # amount by the number of pts in a segment, then adding the segment
+    # indices list repeated (nsl*new_nvol) times.
+    rev_idx = N.repeat(offsets, len(rev_lines)) + \
+              N.array(rev_lines*(nsl*new_nvol))
+    ref_idx = N.repeat(offsets, len(ref_lines)) + \
+              N.array(ref_lines*(nsl*new_nvol))
+    epi_idx = N.repeat(offsets, len(epi_lines)) + \
+              N.array(epi_lines*(nsl*new_nvol))
+    cshape = ((end_block-start_block)/nchan, M1)
     chan = N.empty(cshape, dtype)
-
-##     vol_idx = N.indices((nsl,nline-3,M1), dtype=N.float32)
-##     vol_phs_corr = N.empty((new_nvol,nsl,nline,M1), N.complex64)
-##     phs = refoffset[:,None,None] * \
-##           (vol_idx[1]*echo_spc + vol_idx[2]*dwell_time)
-##     print dwell_time, echo_spc, refoffset
-##     print phs.max()
-##     vol_phs_corr[:,:,3:,:] = N.exp(-1.j*refoffset[:,None,None] *\
-##                                    (vol_idx[1]*echo_spc + \
-##                                     vol_idx[2]*dwell_time))[None,:,:,:]
-##     # do not adjust ref lines for now
-##     vol_phs_corr[:,:,:3,:] = 1.
-##     vol_phs_corr.shape = (new_nvol*nsl*nline,M1)
-
-    #sl_idx = N.indices((nline-3,M1), dtype=N.float32)
-    sl_idx = N.indices((nline,M1), dtype=N.float32)
-    vol_phs_corr = N.empty((new_nvol,nsl,nline, M1), N.complex64)
-    ro_offset = mdh.readout_offcenter/1000. # offcenter in meters
+    epishape = epi.shape
+    refshape = ref.shape
+    epi.shape = (epishape[0],N.product(epishape[1:-1]), epishape[-1])
+    ref.shape = (refshape[0],N.product(refshape[1:-1]), refshape[-1])
+                 
+    ro_offset = mdh.readout_offcenter
     print ro_offset
-    gma = 2*N.pi*42575575. # larmor in rad/tesla
-    Gx = 0.013979846426031827 # grad strength in tesla/m
-    #Gx = 0.015643178038097248
-    #phs = (gma*Gx*ro_offset) * (sl_idx[0]*echo_spc + checkerline(64)[:,None]*sl_idx[1]*dwell_time)
-    phs = (gma*Gx*ro_offset) * (sl_idx[0]*echo_spc - checkerline(nline)[:,None]*sl_idx[1]*dwell_time)
-    vol_phs_corr[:] = N.exp(1.j*phs)[None,None,:,:]
-    #vol_phs_corr[:,:,3:,:] = N.exp(-1.j*phs)[None,None,:,:]
-    #vol_phs_corr[:,:,:3,:] = 1.
-    vol_phs_corr.shape = (new_nvol*nsl*nline,M1)
     for c in range(nchan):
         print "grabbing chan", c
         # slicing from 1st block of vrange[0] volume plus channel-offset,
         # every nchan blocks until we've gotten all specified volumes
         slicer = slice(start_block + c, end_block, nchan)
-        if snc_xform is not None:
-##             chan[:] = scl*N.dot(vol_phs_corr*dat[slicer]['data'], snc_xform)
-            chan[:] = scl*N.dot(dat[slicer]['data'], snc_xform)
-        else:
-##             chan[:] = scl*vol_phs_corr*dat[slicer]['data']
-            chan[:] = scl*dat[slicer]['data']
-        chan.shape = (new_nvol, nsl, nline, N1)
-        chan[:,:,rev_lines,:] = chan[:,:,rev_lines,::-1]
-        epi[c] = chan[:,:,epi_lines,:]
-        ref[c] = chan[:,:,ref_lines,:]
-        chan.shape = cshape
+##         if snc_xform is not None:
+##             chan[:] = scl*N.dot(dat[slicer]['data'], snc_xform)
+##         else:
+##             chan[:] = scl*dat[slicer]['data']
+
+        #chan[:] = scl*N.dot(dat[slicer]['data'], snc_xform)
+        chan[:] = scl*dat[slicer]['data']
+        revbuf = chan[rev_idx,::-1]
+        chan[rev_idx,:] = revbuf
+        #epi[c][:] = chan[epi_idx]
+        #ref[c][:] = chan[ref_idx]
+        
+        epi[c] = N.dot(chan[epi_idx], snc_xform)
+        ref[c] = N.dot(chan[ref_idx], snc_xform)
+
     del chan
+    del revbuf
+    epi.shape = epishape
+    ref.shape = refshape
     #return epi, ref
     #return None, None
+    return ro_offset
 
 
 class SiemensImage(ScannerImage):
-    nr = 0
-    nd = 0
-
-##     def __init__(self, filestem, vrange=None, target_dtype=None,
-##                  ksp_shape=None, N1=64, scan='epi', **kwargs):
-
-##         if ksp_shape is None:
-##             raise AttributeError('ksp_shape must be defined')
-##         self._deal_with_kwargs(kwargs)
-##         self.n_chan, self.n_vol, self.n_slice, self.n_pe = ksp_shape[:-1]
-##         self.n_fe = N1
-##         self.pe0 = -self.n_pe/2
-##         self.tr = 1
-##         self.sampstyle='linear'
-##         self.nseg = 1
-##         self.path = filestem+'.dat'
-        
-##         # get data (and possibly ref)
-##         dat = MemmapDatFile(filestem+'.dat', ksp_shape)
-##         skern = None if (N1 == ksp_shape[-1]) else \
-##                 sinc_kernel(self.Tr, self.T0, self.Tf, ksp_shape[-1], N1)
-        
-##         if scan == 'epi':
-##             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
-##             SiemensImage.nd += 1
-##             self.rscratch = os.path.abspath('rscratch%d'%SiemensImage.nr)
-##             SiemensImage.nr += 1
-##             os.system('touch %s'%self.dscratch)
-##             os.system('touch %s'%self.rscratch)
-##             dshape = [n for n in ksp_shape]
-##             dshape[-2:] = [dshape[-2] - 3, int(N1)]
-##             rshape = [n for n in ksp_shape]
-##             rshape[-2:] = [3, int(N1)]
-##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
-##                                   dtype=N.complex64, mode='r+')
-##             self.cref_data = N.memmap(self.rscratch, shape=tuple(rshape),
-##                                       dtype=N.complex64, mode='r+')
-##             load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern)
-##             self.data = self.cdata[0]
-##             self.ref_data = self.cref_data[0]
-##         elif scan == 'agems':
-##             self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
-##             SiemensImage.nd += 1
-##             os.system('touch %s'%self.dscratch)
-##             dshape = [n for n in ksp_shape]
-##             dshape[-1] = int(N1)
-##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
-##                                   dtype=N.complex64, mode='r+')
-##             load_agems(dat, self.cdata, ksp_shape, skern)
-            
-##         del dat.mmap
-##         del dat
-
-##         self.acq_order = N.array( range(1, self.n_slice, 2) + range(0, self.n_slice, 2) )
-
-##         self.use_membuffer()
-##         #self.load_chan(0)
-##         self.combined = False
-
-##         ScannerImage.__init__(self)
-
     def __init__(self, filestem, vrange=None, target_dtype=None, **kwargs):
         self.path = filestem+'.dat'
         self.__dict__.update(parse_siemens_hdr(self.path))
+
         if kwargs.has_key('N1'):
             self.N1 = kwargs['N1']
-        self.n_fe = self.N1
+        self.n_fe = 2*(self.N1/2)
+        self.Nc = self.N1/2+1
+        if kwargs.has_key('Ti'):
+            self.Ti = kwargs['Ti']
+        elif hasattr(self, 'T0'):
+            self.Ti = self.T0
+
 
         # fake a couple things still
         if not hasattr(self, 'n_refs'):
@@ -233,44 +140,27 @@ class SiemensImage(ScannerImage):
             if vrange:
                 self.n_vol = vrange[1] - vrange[0] + 1
             
-##             refoffset = N.linspace(0, 2.75*2*N.pi*30.637, self.n_slice,
-##                                    endpoint=False)
-##             refoffset = refoffset[self.acq_order]
-            skern = None if (self.N1 == self.M1) else \
-                    sinc_kernel(self.T_ramp, self.T0, self.T_flat, self.delT,
-                                self.M1, self.N1)
+##             skern = None if (self.N1 == self.M1) else \
+##                     sinc_kernel(self.T_ramp, self.T0, self.T_flat, self.delT,
+##                                 self.M1, self.N1)
 ##             skern = sinc_kernel(self.T_ramp, self.T0, self.T_flat, self.delT,
 ##                                 self.M1, self.N1)
-            self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
-            SiemensImage.nd += 1
-            self.rscratch = os.path.abspath('rscratch%d'%SiemensImage.nr)
-            SiemensImage.nr += 1
-            os.system('touch %s'%self.dscratch)
-            os.system('touch %s'%self.rscratch)
+##             skern = sinc_kernel(self.t_n1(), self.n_ramp, self.n_flat,
+##                                 self.delT, self.M1, self.N1)
+            skern = self.sinc_kernel()
             dshape = (self.n_chan, self.n_vol, self.n_slice,
                       self.n_pe, self.n_fe)
             rshape = (self.n_chan, self.n_vol, self.n_slice,
                       self.n_refs, self.n_fe)
             self.cdata = MemmapArray(dshape, N.complex64)
             self.cref_data = MemmapArray(rshape, N.complex64)
-##             self.cdata = N.memmap(self.dscratch, shape=dshape,
-##                                   dtype=N.complex64, mode='r+')
-##             self.cref_data = N.memmap(self.rscratch, shape=rshape,
-##                                       dtype=N.complex64, mode='r+')
-            load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern,
-                     self.delT/1e6, (self.T_flat+2*self.T_ramp)/1e6, None,
-                     vrange=vrange, scl=64*128.)
-##             load_epi(dat, self.cdata, self.cref_data, ksp_shape, skern,
-##                      vrange=vrange, scl=64*128.)
+            self.ro_offset = load_epi(dat, self.cdata, self.cref_data,
+                                      ksp_shape, skern,
+                                      vrange=vrange, scl=64*128.)
         elif self.isagems:
-            self.dscratch = os.path.abspath('dscratch%d'%SiemensImage.nd)
-            SiemensImage.nd += 1
-            os.system('touch %s'%self.dscratch)
             dshape = [d for d in ksp_shape]
             dshape[-1] = self.N1
             self.cdata = MemmapArray(tuple(dshape), N.complex64)
-##             self.cdata = N.memmap(self.dscratch, shape=tuple(dshape),
-##                                   dtype=N.complex64, mode='r+')
             load_agems(dat, self.cdata, ksp_shape, self.N1)
 
         del dat.mmap
@@ -322,7 +212,8 @@ class SiemensImage(ScannerImage):
         return N.arange(self.n_pe)
     @CachedReadOnlyProperty
     def dFE(self):
-        return self.fov_x/self.n_fe
+        return self.dPE
+        #return self.fov_x/self.n_fe
     @CachedReadOnlyProperty
     def dPE(self):
         return self.fov_y/self.n_pe
@@ -358,7 +249,6 @@ class SiemensImage(ScannerImage):
         for c in range(self.n_chan):
             self.load_chan(c)
             ReconImage.runOperations(self, opchain, logger=logger)
-            #super(SiemensImage, self).runOperations(opchain)
         #self.load_chan(0)
         self.use_membuffer()
         
@@ -375,8 +265,9 @@ class SiemensImage(ScannerImage):
         if type(self.data) is not N.memmap:
             del self.data
         d = N.zeros(self.cdata.shape[-4:], dtype.char.lower())
-        for chan in self.cdata:
-            d += N.power(chan.real, 2.0) + N.power(chan.imag, 2.0)
+        for n,chan in enumerate(self.cdata):
+            d += N.power(self.channel_gains[n]*chan.real, 2.0) + \
+                 N.power(self.channel_gains[n]*chan.imag, 2.0)
         self.setData(N.sqrt(d))
         self.combined = True
 
@@ -405,58 +296,33 @@ class SiemensImage(ScannerImage):
 
     @CachedReadOnlyProperty
     def n_ramp(self):
-        (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-        N1 = self.shape[-1]
-        As = Tf + Tr - (T0**2)/Tr
-        return int( N1*(Tr**2 - T0**2)/(2*Tr*As) )
+        (Tr, Ti, Tf) = map(float, (self.T_ramp, self.Ti, self.T_flat))
+##         T0 = float(self.T0)
+##         N1 = self.N1
+##         Bs = (N1-1)/(Tf + Tr - T0**2/Tr)
+##         return int( Bs*(Tr**2 - T0**2)/(2*Tr) )
+        As = (Tf + Tr - Ti**2/Tr)/2.
+        return int( (self.Nc-1)*(Tr**2 - Ti**2)/(2*Tr*As) )
+
 
     @CachedReadOnlyProperty
     def n_flat(self):
-        (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-        N1 = self.shape[-1]
-        As = Tf + Tr - (T0**2)/Tr
-        return int( N1*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr*As) )
-
-##     @CachedReadOnlyProperty
-##     def n_ramp(self):
-##         (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-##         N1 = self.shape[-1]
-##         #As = Tf + Tr - (T0**2)/Tr
-##         Bs = 1/(Tf + Tr - T0**2/Tr) * N1
-##         #Bs = 1/(2*Tr + Tf - 2*T0) * N1 # cycles / microsec        
-##         return int( Bs*(Tr**2 - T0**2)/(2*Tr) )
-
-##     @CachedReadOnlyProperty
-##     def n_flat(self):
-##         (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-##         N1 = self.shape[-1]
-##         #As = Tf + Tr - (T0**2)/Tr
-##         Bs = 1/(Tf + Tr - T0**2/Tr) * N1
-##         #Bs = 1/(2*Tr + Tf - 2*T0) * N1 # cycles / microsec        
+        (Tr, Ti, Tf) = map(float, (self.T_ramp, self.Ti, self.T_flat))
+##         N1 = self.N1
+##         T0 = float(self.T0)
+##         Bs = (N1-1)/(Tf + Tr - T0**2/Tr)
 ##         return int( Bs*(2*Tf*Tr + Tr**2 - T0**2)/(2*Tr) )
+        As = (Tf + Tr - Ti**2/Tr)/2.
+        return int( (self.Nc-1)*(2*Tr*Tf + Tr**2 - Ti**2)/(2*Tr*As) )
     
-##     def t_n1(self):
-##         (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-##         N1 = self.shape[-1]
-##         As = Tf + Tr - (T0**2)/Tr
-##         nr = self.n_ramp
-##         nf = self.n_flat
-##         print nr, nf
-##         r1 = N.arange(0, nr+1)
-##         r2 = N.arange(nr+1, nf+1)
-##         r3 = N.arange(nf+1, int(N1))
-##         t = N.zeros(int(N1))
-##         t[r1] = N.power( T0**2 + 2.0*r1*Tr*As/N1, 0.5)
-##         t[r2] = r2*As/N1 + Tr/2.0 + T0**2/(2.0*Tr)
-##         t[r3] = (Tf + 2*Tr) - N.power(2.0*Tr*(As + T0**2/(2.0*Tr) - r3*As/N1), 0.5)
-##         return t
-
     def t_n1(self):
-        (Tr, T0, Tf) = map(float, (self.T_ramp, self.T0, self.T_flat))
-        N1 = self.shape[-1]
-        #As = Tf + Tr - (T0**2)/Tr
-        Bs = 1/(Tf + Tr - T0**2/Tr) * N1
-        #Bs = 1/(2*Tr + Tf - 2*T0) * N1 # cycles / microsec
+        (Tr, Ti, Tf) = map(float, (self.T_ramp, self.Ti, self.T_flat))
+        #Ti = 40.
+        N1 = self.N1
+        Nc = self.Nc
+        #Bs = (N1)/(Tf + Tr - T0**2/Tr)
+        As = (Tf + Tr - Ti**2/Tr)/2.
+        #As = (Tf + Tr - Ti**2/Tr)
         nr = self.n_ramp
         nf = self.n_flat
         print nr, nf
@@ -464,10 +330,26 @@ class SiemensImage(ScannerImage):
         r2 = N.arange(nr+1, nf+1)
         r3 = N.arange(nf+1, int(N1))
         t = N.zeros(int(N1))
-        t[r1] = N.power( T0**2 + 2.0*r1*Tr/Bs, 0.5 )
-        t[r2] = r2/Bs + Tr/2.0 + T0**2/(2.0*Tr)
-        t[r3] = (Tf + 2*Tr) - N.power(2.0*Tr*(Tf + Tr - T0**2/(2*Tr) - r3/Bs), 0.5)
+        t[r1] = N.power( Ti**2 + 2.0*r1*Tr*As/(Nc-1), 0.5 )
+        t[r2] = r2*As/(Nc-1) + Tr/2.0 + Ti**2/(2.0*Tr)
+        t[r3] = (Tf + 2*Tr) - N.power(2.0*Tr*(Tf + Tr - Ti**2/(2*Tr) - \
+                                              r3*As/(Nc-1)), 0.5)
+
+##         t[r1] = N.power( Ti**2 + 2.0*r1*Tr*As/(N1-1), 0.5)
+##         t[r2] = r2*As/(N1-1) + Tr/2. + Ti**2/(2.*Tr)
+##         t[r3] = (Tf+2*Tr) - N.power(2.*Tr*(Tf+Tr-Ti**2/(2.*Tr) - r3*As/(N1-1)), 0.5)
+
         return t
+
+    def sinc_kernel(self):
+        # make a M1->N1 sinc-interpolation kernel, where each column
+        # interpolates the raw signal to t[n1]
+        delT = (2*self.T_ramp + self.T_flat - 2*self.T0)/float(self.M1)
+        t = (self.t_n1() - self.T0)/delT
+        print t
+        m1 = N.arange(self.M1)
+        s_idx = t[None,:] - m1[:,None]
+        return N.sinc(s_idx).astype(N.complex64)
     
     def seg_slicing(eslf, n):
         """
@@ -475,13 +357,6 @@ class SiemensImage(ScannerImage):
         to be used in separating segments from recombined kspace
         """
         pass
-
-    def __del__(self):
-        del self.cdata
-        os.unlink(self.dscratch)
-        if hasattr(self, 'cref_data'):
-            del self.cref_data
-            os.unlink(self.rscratch)
 
 ##############################################################################
 ###########################   FILE LEVEL CLASSES   ###########################
@@ -614,6 +489,17 @@ def parse_siemens_hdr(fname):
         else:
             acq_order.append(int(s[0]))
     hdr_dict['acq_order'] = N.array(acq_order)
+
+    coil_names = {}
+    coil_gains = N.zeros(2*hdr_dict['n_chan'])
+    m = re.compile('<ParamFunctor."ScalingFunctor">').search(hdr_str)
+    m = re.compile('<ParamDouble."dRawDataCorrectionFactorIm">').search(hdr_str,
+                                                                        m.end())
+    #float_re = re.compile('[-0-9]+.[-0-9]+')    
+    for n in range(2*hdr_dict['n_chan']):
+        m = float_re.search(hdr_str, m.end())
+        coil_gains[n] = float(m.group())
+    hdr_dict['channel_gains'] = coil_gains[::2]
 
     return hdr_dict
 

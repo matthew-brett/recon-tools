@@ -10,6 +10,14 @@ from recon.visualization import ask_fname
 from recon.visualization.spmclone import spmclone
 from recon.visualization.sliceview import sliceview
 
+# TODO
+# * make it easier to tweak params on already-included ops
+#  (eg, double-click op pops up param window, or can edit param text in list)
+#
+# * when removing ops, make next op down/up selected to eneable repeat deletion
+#
+# * implement logging??
+
 
 def get_toplevel_selected(tree):
     model, row = tree.get_selection().get_selected()
@@ -70,6 +78,9 @@ class recon_gui (gtk.Window):
         self.pathentry = gtk.Entry()
         self.pathentry.set_width_chars(20)
         left_panel.attach(self.pathentry, 1, 2, 0, 1)
+        if image:
+            fname = image.path
+            self.pathentry.set_text(fname.split('/')[-1])
 
         ###### reload Button ######
         reloadbutton = gtk.Button(stock=gtk.STOCK_REFRESH)
@@ -185,6 +196,7 @@ class recon_gui (gtk.Window):
         self.op_names.remove('FlipSlices')
         self.op_names.remove('ViewOrtho')
         self.op_names.remove('ViewImage')
+        self.op_names.remove('Template')
 
         model = gtk.ListStore(gobject.TYPE_STRING, gobject.TYPE_BOOLEAN)
         for op in self.op_names:
@@ -290,7 +302,11 @@ class recon_gui (gtk.Window):
         if op is None:
             return
         params = self.get_params()
-        row = self.ops_store.append(None)
+        # put this in to activate "insert-after-selected" mode
+        #model, selected_row = get_toplevel_selected(self.oplist_tree)
+        selected_row = None
+        row = self.ops_store.insert_after(None, selected_row) \
+              if selected_row else self.ops_store.append(None)
         self.ops_store.set(row, 0, op, 1, False)
         if params:
             for item, val in params.items():
@@ -303,30 +319,24 @@ class recon_gui (gtk.Window):
         if row is None:
             return
         model.remove(row)
-
+        
     def move_op_up(self, button):
+        self.move_op(-1)
+
+    def move_op_dn(self, button):
+        self.move_op(+1)
+
+    def move_op(self, direction):
         model, row = get_toplevel_selected(self.oplist_tree)
         if row is None:
             return
         path = list(model.get_path(row))
-        path[0] = path[0] - 1
+        path[0] = path[0] + direction
         try:
             swapper = model.get_iter(tuple(path))
             self.ops_store.swap(row, swapper)
         except:
-            return
-
-    def move_op_dn(self, button):
-        model, row = get_toplevel_selected(self.oplist_tree)
-        if row is None:
-            return
-        path = list(model.get_path(row))
-        path[0] = path[0] + 1
-        try:
-            swapper = model.get_iter(tuple(path))
-            self.ops_store.move_after(row, swapper)
-        except:
-            return
+            return        
 
     def save_oplist(self, button):
         fname = ask_fname(self, 'Write oplist to this file...', action='save')

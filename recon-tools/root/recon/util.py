@@ -254,10 +254,10 @@ def median_filter(image, N):
     return N.reshape(img, (tdim, kdim, jdim, idim))
 
 #-----------------------------------------------------------------------------
-def linReg(Y, X=None, sigma=None, mask=None, axis=-1): 
+def lin_regression(Y, X=None, sigma=None, mask=None, axis=-1): 
     """
-    Find best linear line through data, using Numerical Recipes formulas.
-    Solve for (b,m,res) = (crossing, slope, avg residual from fit)
+    Find best linear fit through data, using Numerical Recipes formulas.
+    Solve for (b,m,chisq) = (crossing, slope, L2-norm error)
     if sigma is None, proceed as if sigma = 1 for every y-point
     """
 
@@ -282,6 +282,7 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
     if mask is not None:
         # enforce the masking if there is a mask..
         # this will allow transparency in the summation formulas
+        # can't apply mask to sigma matrix, since dividing by it later
         mask = mask.reshape((nrows,npts))
         Y = Y*mask
         X = X*mask
@@ -291,36 +292,44 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
     
     b = N.zeros((nrows,))
     m = N.zeros((nrows,))
+    # a column indicating the number of unmasked points at each row
     nzpts = mask.sum(axis=-1) if mask is not None else Yshape[-1]*N.ones(nrows)
-    nzrows = nzpts.nonzero()[0]
-    # reduce the problem.. if it's a zero'd row, b,m will remain zero
+    # needs two points to solve, so count nzpts=1 as zero
+    nzrows = (nzpts>1).nonzero()[0]
+    # eliminate rows without data.. if it's a zero'd row, b,m will remain zero
     Xn = X[nzrows]; Yn = Y[nzrows]
-    if sigma is not None: sigma = sigma[nzrows]
-    # avoiding vector divisions if there is no sigma
-    Sx = (Xn/sigma).sum(axis=-1) if sigma is not None else Xn.sum(axis=-1)
-    Sy = (Yn/sigma).sum(axis=-1) if sigma is not None else Yn.sum(axis=-1)
-    Sxx = (N.power(Xn,2)/sigma).sum(axis=-1) \
-          if sigma is not None else N.power(Xn,2).sum(axis=-1)
-    Sxy = (Xn*Yn/sigma).sum(axis=-1) \
-          if sigma is not None else (Xn*Yn).sum(axis=-1)
-    # calculating S = sum(1/sigma**2) is sticky...
+    if sigma is not None: sigmanz = sigma[nzrows]
+
+    # Do the calculations and avoid needless division
+    # by 1.0 if there is no given measurement error
+    Sx = (Xn/sigmanz).sum(axis=-1) if sigma is not None else Xn.sum(axis=-1)
+    Sy = (Yn/sigmanz).sum(axis=-1) if sigma is not None else Yn.sum(axis=-1)    
+    # but then some calculations are messy given different info
     if sigma is not None:
         if mask is not None:
-            S = (mask[nzrows]*N.power(sigma, -1.0)).sum(axis=-1)
+            S = (mask[nzrows]*N.power(sigmanz, -1.0)).sum(axis=-1)
         else:
-            S = N.power(sigma, -1.0).sum(axis=-1)
+            S = N.power(sigmanz, -1.0).sum(axis=-1)
     else:
         S = nzpts[nzrows]
-
-    delta = S*Sxx - N.power(Sx,2)
-    b[nzrows] = N.asarray((Sxx*Sy - Sx*Sxy)/delta)
-    m[nzrows] = N.asarray((S*Sxy - Sx*Sy)/delta)
+    ti = Xn - (Sx/S)[:,None]
+    if mask is not None:
+        ti *= mask[nzrows]
+    if sigma is not None:
+        Stt = (N.power(ti, 2.0)/sigmanz).sum(axis=-1)
+        ti = ti/sigmanz
+    else:
+        Stt = N.power(ti, 2.0).sum(axis=-1)
+    m[nzrows] = N.power(Stt, -1.0) * (ti*Yn).sum(axis=-1)
+    b[nzrows] = (Sy - Sx*m)/S
     
-    res = abs(Y - (m[:,None]*X+b[:,None])).sum(axis=-1)/npts
+    err = Y - (m[:,None]*X+b[:,None])
+    chisq = N.power(err, 2).sum(axis=-1)
 
-    b = b.reshape(Yshape[:-1])
-    m = m.reshape(Yshape[:-1])
-    res = res.reshape(Yshape[:-1])
+    # clean up the data
+    b.shape = Yshape[:-1]
+    m.shape = Yshape[:-1]
+    chisq.shape = Yshape[:-1]
     Y = Y.reshape(Yshape)
     X = X.reshape(Yshape)
     if sigma is not None:
@@ -335,13 +344,13 @@ def linReg(Y, X=None, sigma=None, mask=None, axis=-1):
             sigma = N.swapaxes(sigma, axis, -1)
         if mask is not None:
             mask = N.swapaxes(mask, axis, -1)
-        # add a null dimension into b,m,res where the solved-for dimension was
+        # add a null dimension into b,m,chisq where the solved-for dimension was
         slicer = [slice(0,d) for d in b.shape]  + [None]
         b = b[slicer]
         m = m[slicer]
-        res = res[slicer]
-        (b,m,res) = map(lambda x: N.swapaxes(x, axis, -1), (b,m,res))
-    return (b, m, res)
+        chisq = chisq[slicer]
+        (b,m,chisq) = map(lambda x: N.swapaxes(x, axis, -1), (b,m,chisq))
+    return (b, m, chisq)
 
 #-----------------------------------------------------------------------------
 def polyfit(x, y, deg, sigma=None, rcond=None, full=False):
@@ -591,11 +600,11 @@ def maskbyfit(M, sigma, tol, tol_growth, mask):
         if not mask_start.any():
             return
         # only compute where meta-mask is unmasked
-        (b,m,res) = linReg(M_sub*mask_sub, X=xax_sub*mask_sub,
-                           sigma=sigma[um], mask=mask_sub)
+        (b,m,chisq) = lin_regression(M_sub*mask_sub, X=xax_sub*mask_sub,
+                                     sigma=sigma[um], mask=mask_sub)
         
         fitted = xax_sub * m[...,None] + b[...,None]
-        N.putmask(mask_sub, abs(M_sub-fitted) > tol*res[...,None], 0)
+        N.putmask(mask_sub, abs(M_sub-fitted) > tol*chisq[...,None], 0)
         mask[um] = mask_sub
         mask_end = mask.sum(axis=-1)
         N.putmask(meta_mask, (mask_end==mask_start), 0)

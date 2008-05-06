@@ -10,7 +10,7 @@ class ReconGUI (ConsoleTool):
 
     options = (
         Option("-r", "--vol-range", dest="vol_range", type="string",
-        default=":", action="store",
+        default="0:0", action="store",
         help="Which image volumes to reconstruct. Format is start:end, "\
         "where either start or end may be omitted, indicating to start "\
         "with the first or end with the last respectively. The index of "\

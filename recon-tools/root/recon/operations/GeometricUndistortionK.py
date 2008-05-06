@@ -25,24 +25,27 @@ class GeometricUndistortionK (Operation):
     def run(self, image):
         if not verify_scanner_image(self, image):
             return
-
-        fmapIm = readImage(self.fmap_file)
+        try:
+            fmapIm = readImage(self.fmap_file)
+        except:
+            self.log("fieldmap not found: "+self.fmap_file)
+            return -1
         (nslice, npe, nfe) = image.shape[-3:]
         # make sure that the length of the q1 columns of the fmap
         # are AT LEAST equal to that of the image
         regrid_fac = max(npe, fmapIm.shape[-2])
-        # fmap and chi-mask are swapped to be of shape (M1,M2)
+        # fmap and chi-mask are swapped to be of shape (Q1,Q2)
         fmap = N.swapaxes(regrid(fmapIm[0], regrid_fac, axis=-2).astype(N.float64), -1, -2)
         chi = N.swapaxes(regrid(fmapIm[1], regrid_fac, axis=-2), -1, -2)
-        M1,M2 = fmap.shape[-2:]
+        Q1,Q2 = fmap.shape[-2:]
         
         # compute T_n2 vector
         Tl = image.T_pe
         delT = image.delT
 
-        a, b, n2 = image.epi_trajectory()
+        a, b, n2, _ = image.epi_trajectory()
 
-        K = get_kernel(M2, Tl, b, n2, fmap, chi)
+        K = get_kernel(Q2, Tl, b, n2, fmap, chi)
 
         for s in range(nslice):
             # dchunk is shaped (nvol, npe, nfe)
@@ -64,21 +67,29 @@ class GeometricUndistortionK (Operation):
             dchunk = N.swapaxes(dchunk, 0, 2)
             image[:,s,:,:] = fft(dchunk)
 
-def get_kernel(M2, Tl, b, n2, fmap, chi):
+def get_kernel(Q2, Tl, b, n2, fmap, chi):
+    # fmap, chi are shaped (Q3,Q1,Q2)
+    # kernel is exp(f[q3,q1,n2,q2]) --IFFT-->> exp(f[q3,q1,n2,n2p])
     T_n2 = b*Tl
+    q2_ax = N.arange(-Q2/2., Q2/2.)
     zarg = fmap[:,:,None,:] * T_n2[None,None,:,None] - \
-           (2*N.pi*N.outer(n2, N.arange(M2)-M2/2)/M2)
+           (2*N.pi*n2[:,None]*q2_ax[None,:]/Q2)
     K = N.exp(1.j*zarg)
     del zarg    
     N.multiply(K, chi[:,:,None,:], K)
     K = ifft(K)
-    #a little hacky here..
+    # a little hacky here.. if k-space was sampled asymmetrically,
+    # then we only want to keep as many n2p points as there are n2 points
+    # the points should be last len(n2) points in the N2P dimension
+    # To find out if the image was sampled asymmetrically, check
+    # that n2 has as many points >=0 as it does < 0
+
     n_pe_really = 2*(n2>=0).sum()
     if n2.shape[0] < n_pe_really:
-        filled = N.zeros(n_pe_really)
-        filled[(b+n_pe_really/2).astype(N.int32)] = 1.0
-        keep = filled.nonzero()[0]
-        Ktrunc = K[:,:,:,keep].copy()
+        subslice = [slice(None)]*len(K.shape)
+        n2pts = len(n2)
+        subslice[-1] = slice(-n2pts, None, None)
+        Ktrunc = K[subslice].copy()
         del K
         return Ktrunc
     return K

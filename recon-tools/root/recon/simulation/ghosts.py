@@ -177,7 +177,11 @@ def cook_img(image, N1):
 def copy_timing(src, dest):
     dest.T_ramp = src.T_ramp
     dest.T0 = src.T0
+    dest.Ti = src.Ti
+    dest.Nc = src.Nc
     dest.T_flat = src.T_flat
+    dest.n_ramp = src.n_ramp
+    dest.n_flat = src.n_flat
 
 def distort_img(image, a1, a3, a0):
     # phs is (Q3, N2, N1, Q1)
@@ -484,10 +488,13 @@ def write_list(img_list, fname):
     nchan_img.writeImage(fname)
     
 
-def sumsqr(img_list):
+def sumsqr(img_list, channel_gains=None):
     d = N.zeros(img_list[0].shape, N.float64)
-    for img in img_list:
-        d += N.power(img[:].real, 2.0) + N.power(img[:].imag, 2.0)
+    if channel_gains is None:
+        channel_gains = N.ones(len(img_list))
+    for n,img in enumerate(img_list):
+        d += N.power(channel_gains[n]*img[:].real, 2.0) + \
+             N.power(channel_gains[n]*img[:].imag, 2.0)
     return N.sqrt(d)
 
 def write_sumsqr(img_list, fname):
@@ -718,8 +725,25 @@ file_lookup = {
       'epi': data_dir+'feb13/meas_MID58_ep2d_pace_dynt_moco_FID1975.dat'
       },
     'mar5_1':
-    { 'asems': None,
+    { 'agems': None,
       'epi': data_dir+'mar5/meas_MID17_ep2d_pace_dynt_moco_FID2745.dat'
+      },
+    'apr16_1':
+    { 'agems': data_dir+'MoreData_4_16_08/Raw/meas_MID92_gre_field_mapping_FID3407.dat',
+      'epi': data_dir+'MoreData_4_16_08/Raw/meas_MID94_DanEPI_64x64_FID3409.dat'
+      },
+    'apr16_2':
+    { 'agems': data_dir+'Data_4_16_08/Raw/meas_MID79_gre_field_mapping_FID3394.dat',
+      'epi': data_dir+'Data_4_16_08/Raw/meas_MID81_DanEPI_64x64_FID3396.dat'
+      },
+    'apr24_1':
+    { 'agems': data_dir+'Data_4_24_08/longramp/Raw/meas_MID92_gre_field_mapping_FID3726.dat',
+      'epi': data_dir+'Data_4_24_08/longramp/Raw/meas_MID95_DanEPI_64x64_FID3729.dat'
+      },
+    'apr28_1':
+    { 'agems': data_dir+'Data_4_28_08/Raw/meas_MID109_gre_field_mapping_FID4118.dat',
+      'epi': data_dir+'Data_4_28_08/Raw/meas_MID112_DanEPI_64x64_FID4121.dat'
       }
-    }
+
+}
     
