@@ -1,7 +1,6 @@
 import gtk
 import gobject
 import os
-#import pylab as P
 
 from recon.operations import OperationManager, Parameter, Operation
 from recon.imageio import readImage
@@ -11,15 +10,14 @@ from recon.visualization.spmclone import spmclone
 from recon.visualization.sliceview import sliceview
 
 # TODO
-# * make it easier to tweak params on already-included ops
-#  (eg, double-click op pops up param window, or can edit param text in list)
-#
-# * when removing ops, make next op down/up selected to eneable repeat deletion
-#
 # * implement logging??
 
 
 def get_toplevel_selected(tree):
+    """
+    Given a tree, returns the top level name of the selected row
+    and the list model in which it is embedded.
+    """
     model, row = tree.get_selection().get_selected()
     if row is not None:
         while model.iter_parent(row) is not None:
@@ -43,6 +41,7 @@ ui_info = \
 </ui>'''
 
 class recon_gui (gtk.Window):
+    "Provides a graphical environment to construct and test oplists."
 
     def __init__(self, image=None, logfile=None, parent=None):
         gtk.Window.__init__(self)
@@ -60,6 +59,7 @@ class recon_gui (gtk.Window):
         
         win_table = gtk.Table(rows=2, columns=3)
 
+        # Make three widget panels
         left_panel = gtk.Table(rows=7, columns=3)
         mid_panel = gtk.VBox()
         right_panel = gtk.HBox(homogeneous=False)
@@ -103,11 +103,16 @@ class recon_gui (gtk.Window):
         ###### oplist TreeView and ScrolledWindow ######
         sw_oplist = gtk.ScrolledWindow()
         sw_oplist.set_policy(gtk.POLICY_AUTOMATIC, gtk.POLICY_AUTOMATIC)
+        # the TreeStore is a list widget that holds the op entries
         self.ops_store = gtk.TreeStore(gobject.TYPE_STRING,
                                        gobject.TYPE_BOOLEAN)
+        # the TreeView widget is the top-level display object
         self.oplist_tree = gtk.TreeView(self.ops_store)
+        # This handles the text rendering, and reports if the text changes..
+        # since we're allowing parameters to be edited, connect a callback
         cell = gtk.CellRendererText()
-        col = gtk.TreeViewColumn('Operations', cell, text=0)
+        cell.connect("edited", self.param_edited, self.ops_store)
+        col = gtk.TreeViewColumn('Operations', cell, text=0, editable=True)
         self.oplist_tree.append_column(col)
         sw_oplist.add(self.oplist_tree)
         left_panel.attach(sw_oplist, 1, 2, 2, 7)
@@ -212,259 +217,6 @@ class recon_gui (gtk.Window):
         column = gtk.TreeViewColumn('Operations', renderer, text=0, editable=1)
         treeview.append_column(column)
 
-    def _initialize_undo_buffer(self):
-        if not self.image:
-            self.prev_img_data = None
-        else:
-            if hasattr(self.image, 'cdata'):
-                self.prev_img_data = MemmapArray(self.image.cdata.shape,
-                                                 self.image.cdata.dtype)
-                self.prev_img_data[:] = self.image.cdata.copy()
-            else:
-                self.prev_img_data = MemmapArray(self.image.data.shape,
-                                                 self.image.data.dtype)
-                self.prev_img_data[:] = self.image.data.copy()
-
-    def _update_undo_buffer(self):
-        if not self.image:
-            return
-        if hasattr(self.image, 'cdata'):
-            self.prev_img_data[:] = self.image.cdata.copy()
-        else:
-            self.prev_img_data[:] = self.image.data.copy()
-
-    def _restore_from_undo_buffer(self):
-        if hasattr(self.image, 'cdata'):
-            self.image.cdata[:] = self.prev_img_data[:]
-            self.image.use_membuffer(0)
-        else:
-            self.image.data[:] = self.prev_img_data[:]
-
-    def construct_opchain(self):
-        oplist = self.construct_oplist()
-        opchain = []
-        for opname, pdict in oplist:
-            opchain.append(self.op_man.getOperation(opname)(**pdict))
-        return opchain
-
-    def construct_oplist(self):
-        "returns a list of (opname, {params-dict}) pairs"
-        oplist = []
-        model = self.ops_store
-        oprow = model.get_iter_first()
-        while oprow is not None:
-            opname = model.get_value(oprow, 0)
-            pdict = {}
-            if model.iter_has_child(oprow):
-                for n in xrange(model.iter_n_children(oprow)):
-                    paramrow = model.iter_nth_child(oprow, n)
-                    pstr = model.get_value(paramrow, 0)
-                    pname, pval = pstr.split('=')
-                    pdict[pname.strip()] = pval.strip()
-            oplist.append((opname, pdict))
-            oprow = model.iter_next(oprow)
-        return oplist
-
-    def get_selected_opname(self):
-        model, row = get_toplevel_selected(self.op_tree)
-        return row is not None and model.get_value(row, 0) or None
-
-    def get_params(self):
-        namebox, valbox = self.pnames_vbox, self.pvals_vbox
-        params = {}
-        for name,val in zip(namebox.get_children(), valbox.get_children()):
-            params[name.get_text()] = val.get_text()
-        return params
-
-    def op_changed(self, treeselection, *args):
-        opname = self.get_selected_opname()
-        if opname is None:
-            return
-        self.update_params(opname)
-        self.show_all()
-        
-    def update_params(self, op_name):
-        op = self.op_man.getOperation(op_name)
-        namebox, valbox = self.pnames_vbox, self.pvals_vbox
-        for child1,child2 in zip(namebox.get_children(), valbox.get_children()):
-            namebox.remove(child1)
-            valbox.remove(child2)
-
-        for n, param in enumerate(op.params):
-            namebox.pack_start(gtk.Label(param.name))
-            entry = gtk.Entry()
-            entry.set_text(str(param.default))
-            entry.set_width_chars(12)
-            valbox.pack_start(entry)
-
-    def append_op_to_list(self, button):
-        op = self.get_selected_opname()
-        if op is None:
-            return
-        params = self.get_params()
-        # put this in to activate "insert-after-selected" mode
-        #model, selected_row = get_toplevel_selected(self.oplist_tree)
-        selected_row = None
-        row = self.ops_store.insert_after(None, selected_row) \
-              if selected_row else self.ops_store.append(None)
-        self.ops_store.set(row, 0, op, 1, False)
-        if params:
-            for item, val in params.items():
-                subrow = self.ops_store.append(row)
-                txt = '%s = %s'%(item, val)
-                self.ops_store.set(subrow, 0, txt, 1, False)
-
-    def remove_op_from_list(self, button):
-        model, row = get_toplevel_selected(self.oplist_tree)
-        if row is None:
-            return
-        model.remove(row)
-        
-    def move_op_up(self, button):
-        self.move_op(-1)
-
-    def move_op_dn(self, button):
-        self.move_op(+1)
-
-    def move_op(self, direction):
-        model, row = get_toplevel_selected(self.oplist_tree)
-        if row is None:
-            return
-        path = list(model.get_path(row))
-        path[0] = path[0] + direction
-        try:
-            swapper = model.get_iter(tuple(path))
-            self.ops_store.swap(row, swapper)
-        except:
-            return        
-
-    def save_oplist(self, button):
-        fname = ask_fname(self, 'Write oplist to this file...', action='save')
-        if not fname:
-            return
-        oplist = self.construct_oplist()
-        f = open(fname, 'w')
-        for opdef in oplist:
-            f.write('['+ opdef[0] + ']\n')
-            for key,val in opdef[1].items():
-                f.write('%s = %s\n'%(key, val))
-            f.write('\n')
-        f.close()
-
-
-    def save_image(self, button):
-        if not self.image:
-            return
-        image_filter = gtk.FileFilter()
-        image_filter.add_pattern('*.hdr')
-        image_filter.set_name('ANALYZE files')
-        fname = ask_fname(self, 'Write image to this file...', action='save',
-                          filter=image_filter)
-        if not fname:
-            return
-        if not self.image.combined:
-            self.image.combine_channels()
-        self.image.writeImage(fname, targetdim=self.image.ndim)
-
-
-    def run_oplist(self, button):
-        if not self.image:
-            return
-        self._update_undo_buffer()
-        opchain = self.construct_opchain()
-        self.image.runOperations(opchain)
-        self.update_plotter()
-
-    def revert_data(self, button):
-        if not self.image:
-            return
-        self._restore_from_undo_buffer()
-        self.update_plotter()
-
-    def load_any_image(self, action):
-        fid_filter = gtk.FileFilter()
-        fid_filter.add_pattern('fid')
-        fid_filter.set_name('FID Images')
-
-        dat_filter = gtk.FileFilter()
-        dat_filter.add_pattern('*.dat')
-        dat_filter.set_name('DAT Images')
-
-        ana_nii_filter = gtk.FileFilter()
-        ana_nii_filter.add_pattern('*.hdr')
-        ana_nii_filter.add_pattern('*.nii')
-        ana_nii_filter.set_name('ANALYZE/NIFTI Images')
-
-        fname = ask_fname(self, 'Choose file to load...', action='open',
-                          filter=[fid_filter, dat_filter, ana_nii_filter])
-
-        if not fname:
-            return
-        # cook any fid filename found
-        if fname[-8:] == '.fid/fid':
-            fname = os.path.split(fname)[0]
-        self.image = readImage(fname, vrange=(0,1))
-        self._initialize_undo_buffer()
-        self.pathentry.set_text(fname.split('/')[-1])
-        self.update_plotter()
-
-    def load_new_fid_image(self, action):
-        image_filter = gtk.FileFilter()
-        image_filter.add_pattern('*.fid')
-        image_filter.set_name('FID Images')
-        fname = ask_fname(self, 'Choose file to load...', action='folder',
-                          filter=image_filter)
-        if not fname:
-            return
-        self.image = readImage(fname, vrange=(0,1))
-        self._initialize_undo_buffer()
-        self.pathentry.set_text(fname.split('/')[-1])
-        self.update_plotter()
-        #self.first_image = cheap_copy(self.image)
-        #self.last_image = None
-        #basedir = fname.strip(fname.split('/')[-1])
-        #os.chdir(basedir)
-
-    def load_new_siemens_image(self, action):
-        image_filter = gtk.FileFilter()
-        image_filter.add_pattern('*.dat')
-        image_filter.set_name('DAT Images')
-        fname = ask_fname(self, 'Choose file to load...', action='open',
-                          filter=image_filter)
-        if not fname:
-            return
-        self.image = readImage(fname, vrange=(0,1))
-        self._initialize_undo_buffer()
-        self.pathentry.set_text(fname.split('/')[-1])
-        self.update_plotter()
-
-    def reload_image(self, button):
-        if not self.image:
-            return
-        path = self.image.path
-        self.image = readImage(path, vrange=(0,1))
-        self._initialize_undo_buffer()
-        self.update_plotter()
-
-
-    def plot_handler(self, action, current):
-        new_plotter = {1: sliceview,
-                       2: spmclone}.get(current.get_current_value())
-        if self.plotter:
-            self.plotter.destroy()
-        
-        if self.image and new_plotter:
-            self.plotter = new_plotter(self.image, parent=self)
-
-    def update_plotter(self):
-        if self.plotter:
-            self.plotter.externalUpdate(self.image)
-            
-
-    def plotter_died(self):
-        self.action_group.get_action('plotting off').activate()
-        self.plotter = None
-
     def _create_action_group(self):
         entries = (
             ( 'FileMenu', None, '_File' ),
@@ -503,3 +255,265 @@ class recon_gui (gtk.Window):
         
         
         return action_group
+
+    def _initialize_undo_buffer(self):
+        if not self.image:
+            self.prev_img_data = None
+        else:
+            if hasattr(self.image, 'cdata'):
+                self.prev_img_data = MemmapArray(self.image.cdata.shape,
+                                                 self.image.cdata.dtype)
+                self.prev_img_data[:] = self.image.cdata.copy()
+            else:
+                self.prev_img_data = MemmapArray(self.image.data.shape,
+                                                 self.image.data.dtype)
+                self.prev_img_data[:] = self.image.data.copy()
+
+    def _update_undo_buffer(self):
+        if not self.image:
+            return
+        if hasattr(self.image, 'cdata'):
+            self.prev_img_data[:] = self.image.cdata.copy()
+        else:
+            self.prev_img_data[:] = self.image.data.copy()
+
+    def _restore_from_undo_buffer(self):
+        if hasattr(self.image, 'cdata'):
+            self.image.cdata[:] = self.prev_img_data[:]
+            self.image.use_membuffer(0)
+        else:
+            self.image.data[:] = self.prev_img_data[:]
+
+    def construct_opchain(self):
+        """
+        Generates a Python list of operations based on the entries in the
+        oplist tree.
+        """
+        oplist = self.construct_oplist()
+        opchain = []
+        for opname, pdict in oplist:
+            opchain.append(self.op_man.getOperation(opname)(**pdict))
+        return opchain
+
+    def construct_oplist(self):
+        "Generates a Python list of (opname, {params-dict}) pairs"
+        oplist = []
+        model = self.ops_store
+        oprow = model.get_iter_first()
+        while oprow is not None:
+            opname = model.get_value(oprow, 0)
+            pdict = {}
+            if model.iter_has_child(oprow):
+                for n in xrange(model.iter_n_children(oprow)):
+                    paramrow = model.iter_nth_child(oprow, n)
+                    pstr = model.get_value(paramrow, 0)
+                    pname, pval = pstr.split('=')
+                    pdict[pname.strip()] = pval.strip()
+            oplist.append((opname, pdict))
+            oprow = model.iter_next(oprow)
+        return oplist
+
+    def get_selected_opname(self):
+        "Returns the selected operation in the list of all ops"
+        model, row = get_toplevel_selected(self.op_tree)
+        return row is not None and model.get_value(row, 0) or None
+
+    def get_params(self):
+        """
+        Returns a dictionary of parameter names and values from current
+        parameter panel
+        """
+        namebox, valbox = self.pnames_vbox, self.pvals_vbox
+        params = {}
+        for name,val in zip(namebox.get_children(), valbox.get_children()):
+            params[name.get_text()] = val.get_text()
+        return params
+
+    def update_params(self, op_name):
+        "Changes the parameter panel to reflect given operation"
+        op = self.op_man.getOperation(op_name)
+        namebox, valbox = self.pnames_vbox, self.pvals_vbox
+        for child1,child2 in zip(namebox.get_children(), valbox.get_children()):
+            namebox.remove(child1)
+            valbox.remove(child2)
+
+        for n, param in enumerate(op.params):
+            namebox.pack_start(gtk.Label(param.name))
+            entry = gtk.Entry()
+            entry.set_text(str(param.default))
+            entry.set_width_chars(12)
+            valbox.pack_start(entry)
+
+    def move_op(self, direction):
+        "Tries to swap a selected row with an entry n=direction rows away"
+        model, row = get_toplevel_selected(self.oplist_tree)
+        if row is None:
+            return
+        path = list(model.get_path(row))
+        path[0] = path[0] + direction
+        try:
+            swapper = model.get_iter(tuple(path))
+            self.ops_store.swap(row, swapper)
+        except:
+            return
+
+    def update_plotter(self):
+        if self.plotter:
+            self.plotter.externalUpdate(self.image)        
+
+    ####### CALLBACK METHODS #######
+
+    def op_changed(self, treeselection, *args):
+        "called when the op selection changes in the list of available ops"
+        opname = self.get_selected_opname()
+        if opname is None:
+            return
+        self.update_params(opname)
+        self.show_all()
+        
+    def append_op_to_list(self, button):
+        "called when add button is hit"
+        op = self.get_selected_opname()
+        if op is None:
+            return
+        params = self.get_params()
+        # put this in to activate "insert-after-selected" mode
+        #model, selected_row = get_toplevel_selected(self.oplist_tree)
+        selected_row = None
+        row = self.ops_store.insert_after(None, selected_row) \
+              if selected_row else self.ops_store.append(None)
+        self.ops_store.set(row, 0, op, 1, False)
+        if params:
+            for item, val in params.items():
+                subrow = self.ops_store.append(row)
+                txt = '%s = %s'%(item, val)
+                self.ops_store.set(subrow, 0, txt, 1, True)
+
+    def remove_op_from_list(self, button):
+        "called when remove button is hit"
+        model, row = get_toplevel_selected(self.oplist_tree)
+        if row is None:
+            return
+        path = list(model.get_path(row))[0]
+        model.remove(row)
+        # if there's a row at path, select it
+        # else if there's a row at path-1, select it
+        # else do nothing (no ops left)
+        while path >= 0:
+            try:
+                model.get_iter((path,))
+                self.oplist_tree.set_cursor((path,))
+                break
+            except:
+                path -= 1
+        
+    def move_op_up(self, button):
+        "called when up button is hit"
+        self.move_op(-1)
+
+    def move_op_dn(self, button):
+        "called when down button is hit"
+        self.move_op(+1)
+
+    def param_edited(self, cell, path_str, new_text, model):
+        "called when parameter's value is edited in current oplist"
+        row = model.get_iter_from_string(path_str)
+        model.set(row, 0, new_text, 1, True)
+
+    def save_oplist(self, button):
+        "called when save oplist button is hit"
+        fname = ask_fname(self, 'Write oplist to this file...', action='save')
+        if not fname:
+            return
+        oplist = self.construct_oplist()
+        f = open(fname, 'w')
+        for opdef in oplist:
+            f.write('['+ opdef[0] + ']\n')
+            for key,val in opdef[1].items():
+                f.write('%s = %s\n'%(key, val))
+            f.write('\n')
+        f.close()
+
+    def save_image(self, button):
+        "called when save image button is hit"
+        if not self.image:
+            return
+        image_filter = gtk.FileFilter()
+        image_filter.add_pattern('*.hdr')
+        image_filter.set_name('ANALYZE files')
+        fname = ask_fname(self, 'Write image to this file...', action='save',
+                          filter=image_filter)
+        if not fname:
+            return
+        if not self.image.combined:
+            self.image.combine_channels()
+        self.image.writeImage(fname, targetdim=self.image.ndim)
+
+
+    def run_oplist(self, button):
+        "called when run oplist (play) button is hit"
+        if not self.image:
+            return
+        self._update_undo_buffer()
+        opchain = self.construct_opchain()
+        self.image.runOperations(opchain)
+        self.update_plotter()
+
+    def revert_data(self, button):
+        "called when go-back (rewind) button is hit"
+        if not self.image:
+            return
+        self._restore_from_undo_buffer()
+        self.update_plotter()
+
+    def load_any_image(self, action):
+        "called when open button/menu item is hit"
+        fid_filter = gtk.FileFilter()
+        fid_filter.add_pattern('fid')
+        fid_filter.set_name('FID Images')
+
+        dat_filter = gtk.FileFilter()
+        dat_filter.add_pattern('*.dat')
+        dat_filter.set_name('DAT Images')
+
+        ana_nii_filter = gtk.FileFilter()
+        ana_nii_filter.add_pattern('*.hdr')
+        ana_nii_filter.add_pattern('*.nii')
+        ana_nii_filter.set_name('ANALYZE/NIFTI Images')
+
+        fname = ask_fname(self, 'Choose file to load...', action='open',
+                          filter=[fid_filter, dat_filter, ana_nii_filter])
+
+        if not fname:
+            return
+        # cook any fid filename found
+        if fname[-8:] == '.fid/fid':
+            fname = os.path.split(fname)[0]
+        self.image = readImage(fname, vrange=(0,1))
+        self._initialize_undo_buffer()
+        self.pathentry.set_text(fname.split('/')[-1])
+        self.update_plotter()
+
+    def reload_image(self, button):
+        "called when reload (refresh) button is hit"
+        if not self.image:
+            return
+        path = self.image.path
+        self.image = readImage(path, vrange=(0,1))
+        self._initialize_undo_buffer()
+        self.update_plotter()
+
+    def plot_handler(self, action, current):
+        "switches plotting modes"
+        new_plotter = {1: sliceview,
+                       2: spmclone}.get(current.get_current_value())
+        if self.plotter:
+            self.plotter.destroy()
+        
+        if self.image and new_plotter:
+            self.plotter = new_plotter(self.image, parent=self)
+            
+    def plotter_died(self):
+        "called when the external plotting window is closed"
+        self.action_group.get_action('plotting off').activate()
+        self.plotter = None
