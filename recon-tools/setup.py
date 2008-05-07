@@ -89,7 +89,8 @@ setup(
     'scripts/fdf2img',
     'scripts/viewimage',
     'scripts/viewortho',
-    'scripts/recon'],
+    'scripts/recon',
+    'scripts/recon_gui'],
 
   package_data = {'recon.conf':['*.ops'],
                   'recon.scanners': psfiles},

@@ -1,4 +1,21 @@
-recon-tools-0.5-r3  (beta)                                         07/20/2007
+recon-tools-0???
+- new ReconGUI tool allows users to prepare and test oplists in a graphical
+  environment
+- yes, some bug fixes regarding image orientation when using RotPlane and
+  FlipSlices
+- SliceView tool can now save movies of time-series or slices (requires
+  mencoder program, part of mplayer software)
+- new numpy style code tests
+- revisited TimeInterpolate operation to make it useful again
+- some memory leak fixes in unwrapping extension code
+- VERY EXPERIMENTAL/VOLATILE support for Siemens N-channel raw data
+
+------------------------------------------------------------------------------
+recon-tools-0.5-r4  (beta)                                         10/03/2007
+- bugfix in FixTimeSkew necessitated re-release of code
+
+------------------------------------------------------------------------------
+recon-tools-0.5-r3  (beta)                                         09/14/2007
 - many speedups, yielding ~ 30% reduction in processing time
 - UnbalPhaseCorrection has been re-factored to use more data in the model
   fitting. Most importantly, the parameters have changed: there is now a
