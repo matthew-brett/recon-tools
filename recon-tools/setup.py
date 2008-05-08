@@ -80,6 +80,7 @@ setup(
     'recon.fftmod',
     'recon.fftmod.tests',
     'recon.tools',
+    'recon.tools.tests',
     'recon.scanners',
     'recon.visualization',],
 

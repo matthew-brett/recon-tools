@@ -148,7 +148,7 @@ class UnbalPhaseCorrection (Operation):
         # sign-flipping (raster) terms and the DC offset terms with the same
         # equations.
 
-        n_slice, n_ref_rows, n_fe = self.refShape[-2]
+        n_slice, n_ref_rows, n_fe = self.refShape
         n_vol_rows = self.volShape[-2]
         n_conj_rows = n_ref_rows-2
         # this is S[u]S*[u+1].. now with n_ref_rows-1 rows

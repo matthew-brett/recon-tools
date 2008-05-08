@@ -12,7 +12,6 @@ from recon.visualization.sliceview import sliceview
 # TODO
 # * implement logging??
 
-
 def get_toplevel_selected(tree):
     """
     Given a tree, returns the top level name of the selected row
@@ -507,13 +506,15 @@ class recon_gui (gtk.Window):
         "switches plotting modes"
         new_plotter = {1: sliceview,
                        2: spmclone}.get(current.get_current_value())
+
         if self.plotter:
+            self.plotter.handler_block(self.plotter.destroy_handle)
             self.plotter.destroy()
-        
+            self.plotter = None
+
         if self.image and new_plotter:
             self.plotter = new_plotter(self.image, parent=self)
             
     def plotter_died(self):
         "called when the external plotting window is closed"
         self.action_group.get_action('plotting off').activate()
-        self.plotter = None

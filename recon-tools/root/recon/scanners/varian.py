@@ -201,7 +201,7 @@ class ProcParImageMixin (object):
         if hasattr(self._procpar, 'fract_ky'):
             return -self._procpar.fract_ky[0]
         else:
-            return -self.n_pe/2        
+            return -self.n_pe_true/2        
     #-------------------------------------------------------------------------
     @CachedReadOnlyProperty
     def orient(self):
@@ -612,7 +612,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
         """
         if n >= self.nseg:
             return self.seg_slicing(n-1)
-        pe_per_seg = self.n_pe/self.nseg
+        pe_per_seg = self.n_pe_true/self.nseg
         seg_group = range( n*pe_per_seg, (n+1)*pe_per_seg )
         # find the current row indices of this seg group
         seg_rows = N.array([(n==self.petable).nonzero()[0][0]
@@ -914,13 +914,15 @@ class FidImage (ScannerImage, ProcParImageMixin):
             # if nav_per_seg, navigator line is the 1st in a seg
             if nav_per_seg:
                 nav_lines = range(0, n_pe, n_pe/self.nseg)
-                vol_lines = range(0, n_pe)
+                vol_lines = range(0, n_pe_true)
                 for nav_pt in nav_lines: vol_lines.remove(nav_pt)
-                navdata[vidx] = N.take(volume, nav_lines, axis=-2)
-                volume = N.take(volume, vol_lines, axis=-2)
+                navdata[vidx] = volume[:,nav_lines,:]
+                voltmp = volume[:,vol_lines,:].copy()
+                volume = voltmp
 
             if time_reverse:
-                volume[:,1::2,:] = reverse(volume[:,1::2,:], axis=-1)
+                revtmp = volume[:,1::2,::-1].copy()
+                volume[:,1::2,:] = revtmp
             
             if needs_pe_reordering:
                 data[vidx] = N.take(volume, self.petable, axis=-2)

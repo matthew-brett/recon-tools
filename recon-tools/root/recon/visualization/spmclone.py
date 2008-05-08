@@ -152,7 +152,8 @@ class spmclone (gtk.Window):
         
         try:
             self.set_screen(parent.get_screen())
-            self.connect('destroy', lambda x: parent.plotter_died())
+            self.destroy_handle = self.connect('destroy',
+                                               lambda x: parent.plotter_died())
         except AttributeError:
             self.connect("destroy", lambda x: gtk.main_quit())
         self.set_data("ui-manager", merge)
