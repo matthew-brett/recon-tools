@@ -13,6 +13,9 @@ from recon.scanners.varian import getPulseSeq
 # here is a global flag to control fast/slow array logic
 _FAST_ARRAY = False
 
+class NoArgsException (Exception):
+    pass
+
 ##############################################################################
 class Recon (ConsoleTool):
     """
@@ -99,7 +102,8 @@ class Recon (ConsoleTool):
             pwd = os.path.abspath(".")
             name = os.path.split(pwd[:pwd.rfind(".fid")])[-1]
             return (pwd, name+".recon")
-        else: self.error("Expecting 2 arguments: datadir outfile")
+        else:
+            raise NoArgsException
 
     #-------------------------------------------------------------------------
     def _printOpHelp(self, opname):
@@ -225,7 +229,11 @@ class Recon (ConsoleTool):
         # (_, oplist) (3rd logic stage, try a couple things here)
         # (args,oplist) (last stage, not ambiguous)
         if not options.oplist and len(args) != 2:
-            args = self._argsFromPWD()
+            try:
+                args = self._argsFromPWD()
+            except:
+                self.print_help()
+                sys.exit(0)
         if not options.oplist:
             options.oplist = self._findOplist(args[0])
         options.operations = self.configureOperations(open(options.oplist,'r'))
@@ -237,7 +245,6 @@ class Recon (ConsoleTool):
         if not self._running('ReadImage', options.operations):
             # append ReadImage op to BEGINNING of list
             op_args = {'filename': os.path.abspath(args[0]),
-##                        'format': 'fid',
                        'vrange': options.vrange}
             opclass = self._opmanager.getOperation('ReadImage')
             options.operations.insert(0,(opclass, op_args))
@@ -251,14 +258,10 @@ class Recon (ConsoleTool):
             options.operations.append((opclass, op_args))
         # run some checks on the operations sequence
         self.confirmOps(options.operations)
-        # parse vol-range
-        #options.vol_start, options.vol_end = \
-        #  self.parseVolRange(options.vol_range)
 
         if options.fastArray:
             global _FAST_ARRAY
             _FAST_ARRAY = True
-        
         return options
 
     #-------------------------------------------------------------------------
@@ -303,11 +306,7 @@ class Recon (ConsoleTool):
         operations = [opclass(**args)
                       for opclass,args in options.operations[1:]]
 
-        # Run the operations.
-        #self.runOperations(operations, image, runlogger)
-        try:
-            image.runOperations(operations, logger=runlogger)
-        except:
-            sys.exit(1)
+        # Run the operations... don't catch exceptions, I want the traceback
+        image.runOperations(operations, logger=runlogger)
 
         runlogger.setExecutable()
