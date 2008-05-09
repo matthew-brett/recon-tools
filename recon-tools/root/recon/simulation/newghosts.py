@@ -556,7 +556,7 @@ def medfit(x,y):
     if npt < 2:
         print "impossible to solve"
         return (0.,0.,1e30)
-    (b1,mm,chisq) = util.lin_regressiony, X=x)
+    (b1,mm,chisq) = util.lin_regression(y, X=x)
     sigb = N.sqrt(chisq / (npt * N.power(x,2).sum() - x.sum()**2))
     m1 = mm
     print "stdev:", sigb

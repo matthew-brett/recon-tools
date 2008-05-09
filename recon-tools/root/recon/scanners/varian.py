@@ -523,13 +523,15 @@ class FidImage (ScannerImage, ProcParImageMixin):
         datadir = filestem+".fid"
         self.path = datadir
         ProcParImageMixin.__init__(self, datadir, vrange=vrange)
+        if self.n_vol < 1:
+            raise Exception("This FID does not have any image volumes")
         self.initializeData()
         self.loadData(datadir)
         self.realizeOrientation()
-        # scanner image will init ReconImage, which will set the data dims
         if not self.vrange:
             # this is a badly behaved FidImage.. might be a BRS
             return
+        # scanner image will init ReconImage, which will set the data dims
         ScannerImage.__init__(self)
         ref_path = filestem.replace("_data", "_ref_2")
         if ref_path is not filestem and path.exists(ref_path+".fid"):
@@ -838,8 +840,7 @@ class FidImage (ScannerImage, ProcParImageMixin):
             return "asems_nscsn"
 
         else:
-            raise "unrecognized fid format, (nblocks, ntraces) = (%d,%d)"%\
-                  (nblocks, ntraces)
+            raise Exception("unrecognized fid format, (nblocks, ntraces) = (%d,%d)"%(nblocks, ntraces))
 
     #-------------------------------------------------------------------------
     def loadData(self, datadir):
@@ -1114,7 +1115,6 @@ class FidFile (_HeaderBase):
         #blk_dtype = N.dtype((elem_dtype, (self.ntraces,num_elem/self.ntraces)))
         dat_dtype = N.dtype({'names':['hdr','data'],
                              'formats':[hdr_dtype,blk_dtype]})
-
         self.mmap = N.memmap(name, dtype=dat_dtype, offset=self.header_size,
                              shape=(self.nblocks,), mode='r')
 

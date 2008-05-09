@@ -31,6 +31,9 @@ ui_info = \
        <separator/>
        <menuitem action='Quit'/>
      </menu>
+     <menu action='Tools'>
+       <menuitem action='Default oplist'/>
+     </menu>
      <menu action='PlotterMenu'>
        <menuitem action='sliceview'/>
        <menuitem action='ortho plotter'/>
@@ -118,7 +121,7 @@ class recon_gui (gtk.Window):
         
         ###### add-op Button ######
         addbutton = gtk.Button(stock=gtk.STOCK_ADD)
-        addbutton.connect('clicked', self.append_op_to_list)
+        addbutton.connect('clicked', self.append_selected_op)
         left_panel.attach(addbutton, 2, 3, 2, 3)
 
         ###### remove-op Button ######
@@ -194,13 +197,19 @@ class recon_gui (gtk.Window):
             gtk.main()
 
     def _fill_ops_model(self):
-        # first kill some operations from the list
+        # first kill some operations from the list ...
+        
+        # these are superfluous
         self.op_names.remove('ReadImage')
-        self.op_names.remove('RotPlane')
-        self.op_names.remove('FlipSlices')
         self.op_names.remove('ViewOrtho')
         self.op_names.remove('ViewImage')
         self.op_names.remove('Template')
+        # any op that messes with the image dimension sizes should be avoided
+        self.op_names.remove('RotPlane')
+        self.op_names.remove('FlipSlices')
+        # this fails due to MPL holding onto the array in a weird way
+        self.op_names.remove('ZeroPad')
+        
 
         model = gtk.ListStore(gobject.TYPE_STRING, gobject.TYPE_BOOLEAN)
         for op in self.op_names:
@@ -224,6 +233,10 @@ class recon_gui (gtk.Window):
               self.load_any_image ),
             ( 'Quit', gtk.STOCK_QUIT, '_Quit', '<control>q',
               'Quits', lambda action: self.destroy() ),
+            ( 'Tools', None, '_Tools' ),
+            ( 'Default oplist', None, 'Default oplist',
+              None, 'Populates oplist with a suggested default',
+              self.use_default_ops ),
             ( 'PlotterMenu', None, '_Plotter Menu' ),
         )
 
@@ -358,7 +371,18 @@ class recon_gui (gtk.Window):
 
     def update_plotter(self):
         if self.plotter:
-            self.plotter.externalUpdate(self.image)        
+            self.plotter.externalUpdate(self.image)
+
+    def append_op_to_list(self, opname, params=None, after_row=None):
+        row = self.ops_store.insert_after(None, after_row) \
+              if after_row else self.ops_store.append(None)
+        self.ops_store.set(row, 0, opname, 1, False)
+        if params:
+            for item, val in params.items():
+                subrow = self.ops_store.append(row)
+                txt = '%s = %s'%(item, val)
+                self.ops_store.set(subrow, 0, txt, 1, True)
+        
 
     ####### CALLBACK METHODS #######
 
@@ -370,7 +394,7 @@ class recon_gui (gtk.Window):
         self.update_params(opname)
         self.show_all()
         
-    def append_op_to_list(self, button):
+    def append_selected_op(self, button):
         "called when add button is hit"
         op = self.get_selected_opname()
         if op is None:
@@ -379,14 +403,15 @@ class recon_gui (gtk.Window):
         # put this in to activate "insert-after-selected" mode
         #model, selected_row = get_toplevel_selected(self.oplist_tree)
         selected_row = None
-        row = self.ops_store.insert_after(None, selected_row) \
-              if selected_row else self.ops_store.append(None)
-        self.ops_store.set(row, 0, op, 1, False)
-        if params:
-            for item, val in params.items():
-                subrow = self.ops_store.append(row)
-                txt = '%s = %s'%(item, val)
-                self.ops_store.set(subrow, 0, txt, 1, True)
+        self.append_op_to_list(op, params=params, after_row=selected_row)
+##         row = self.ops_store.insert_after(None, selected_row) \
+##               if selected_row else self.ops_store.append(None)
+##         self.ops_store.set(row, 0, op, 1, False)
+##         if params:
+##             for item, val in params.items():
+##                 subrow = self.ops_store.append(row)
+##                 txt = '%s = %s'%(item, val)
+##                 self.ops_store.set(subrow, 0, txt, 1, True)
 
     def remove_op_from_list(self, button):
         "called when remove button is hit"
@@ -464,6 +489,9 @@ class recon_gui (gtk.Window):
             return
         self._restore_from_undo_buffer()
         self.update_plotter()
+
+    def use_default_ops(self, action):
+        print "this actually may not be a good idea"
 
     def load_any_image(self, action):
         "called when open button/menu item is hit"

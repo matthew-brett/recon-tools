@@ -9,6 +9,7 @@ tool_map = odict((
   ("getparam", "GetParam"),
   ("recon-doc", "ImagingDoc"),
   ("recon", "Recon"),
+  ("recon_gui", "ReconGUI"),
   ("viewimage", "ViewImageTool")))
 tool_names = tool_map.keys()
 

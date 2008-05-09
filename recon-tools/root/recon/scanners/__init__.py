@@ -123,7 +123,14 @@ class CachedReadOnlyProperty (property):
         key = CachedReadOnlyProperty._id
         def cached_getter(self):
             if not hasattr(self, "_propvals"): self._propvals = {}
-            return self._propvals.setdefault(key, getter(self))
+
+            if self._propvals.has_key(key):
+                a = self._propvals[key]
+                return a
+            else:
+                a = getter(self)
+                self._propvals[key] = a
+                return a
         CachedReadOnlyProperty._id += 1
         property.__init__(self, fget=cached_getter, doc=getter.__doc__)
     
