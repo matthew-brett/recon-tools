@@ -128,12 +128,14 @@ def deghost_full(epi, grad, coefs, chan, vol, r3, l):
 ##     print "kernel inversion: %1.2f, application: %1.2f"%tuple(t_pi.tolist())
 ##     print "forward op creation: %1.2f, application 1: %1.2f, application 2: %1.2f"%tuple(t_f.tolist())
 ##     print "total time: %2.2f"%(t_kern + t_pi.sum() + t_f.sum(),)
-##     return k_pln
+    return k_pln
 
 def eval_deghost_full(epi, grad, coefs, chan, vol, r3,
                       l, constraints, mask, cache):
     """Evaluate the ghost correction at a coef vector.
     """
+    if constraints is None:
+        constraints = lambda x: True
     if not constraints(coefs):
         #print 'out of bounds', coefs
         print 'f(',coefs,') =',1e11
