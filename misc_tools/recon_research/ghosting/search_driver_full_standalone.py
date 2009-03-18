@@ -186,16 +186,16 @@ def search_axes_full(epi, grad, seeds, axes, cons=None, l=1.0,
     # f(x) is usually bottoming out on the order of 1e-3.. so let's
     # make sure the optimization ftol is 1e-6
     # the values of x are from 1 to 1e-3 or 1e-4, so default xtol should be ok
-##     r = optimize.fmin(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
-##                                                     chan, vol, r3, l,
-##                                                     cons, mask, cache),
-##                       maxfun=165, full_output=1, disp=1,
-##                       ftol=1e-6, xtol=1e-4)
-    r = eutils.fmin_powell(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
-                                                         chan, vol, r3, l,
-                                                         cons, mask, cache),
-                           maxfun=750., full_output=1, disp=1)
-                           #ftol=1e-6, xtol=1e-5)
+    r = optimize.fmin(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
+                                                    chan, vol, r3, l,
+                                                    cons, mask, cache),
+                      maxiter=150, full_output=1, disp=1,
+                      ftol=1e-6, xtol=1e-4)
+##     r = eutils.fmin_powell(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
+##                                                          chan, vol, r3, l,
+##                                                          cons, mask, cache),
+##                            maxfun=750., full_output=1, disp=1)
+##                            #ftol=1e-6, xtol=1e-5)
                       
     
     print r

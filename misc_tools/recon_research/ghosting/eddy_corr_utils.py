@@ -277,8 +277,8 @@ def test_brack(p):
     while n<100:
         xi = np.random.standard_normal(size=p.shape[0])
         a,b = bracket_p(p, xi)
-        assert cons(p+a*xi, p[0])
-        assert cons(p+b*xi, p[0])
+        assert cons(p+a*xi, p[0]), 'lower bound failed'
+        assert cons(p+b*xi, p[0]), 'upper bound failed'
         n += 1
     print "success"
 

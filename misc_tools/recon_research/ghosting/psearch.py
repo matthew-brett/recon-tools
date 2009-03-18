@@ -1,13 +1,5 @@
 import numpy as np
-from scipy.optimize.optimize import wrap_function
 from IPython.kernel import client
-
-from ghosting.search_driver_full_standalone import eval_deghost_full
-
-def simple_eval_wrap(coefs, epi, grad, chan, vol, r3, l,
-                     constraints, mask, cache):
-    return eval_deghost_full(epi, grad, coefs, chan, vol, r3, l,
-                             constraints, mask, cache)
 
 def simplex_step(func, xr, xbar, fx0, xn, fxn, xp, fxp,
                  alpha, beta, gamma):
@@ -51,7 +43,6 @@ def psimplex(x0, mec, xtol=1e-4, ftol=1e-4, maxiter=None,
     # assume that mec knows about the args and the code to run func
     P = len(mec.get_ids())
     mec.execute('def f(x): return func(x, *args)')
-    #mec.execute('fcalls, f = wrap_function(func, args)')
     func = mec.pull_function('f', targets=[0])[0]
     mec.push_function(dict(simplex_step=simplex_step))
     x0 = np.asfarray(x0).flatten()
@@ -63,7 +54,8 @@ def psimplex(x0, mec, xtol=1e-4, ftol=1e-4, maxiter=None,
         maxiter = N * 200
     if maxfun is None:
         maxfun = N * 200
-    
+
+    all_fvals = []
     # make step sizes 1% of each components relative contribution to the
     # vector length
     vlen = (x0**2).sum()**0.5
@@ -86,23 +78,24 @@ def psimplex(x0, mec, xtol=1e-4, ftol=1e-4, maxiter=None,
     fval = fval[idx]
     simp = simp[idx]
 
+    all_fvals.append(fval[0])
         
     niter = 1
     fcalls = N+1
     while(niter < maxiter) and (fcalls < maxfun):
         if (np.abs(simp[1:]-simp[0]) < xtol).all() and \
-           (np.abs(fsim[1:]-fsim[0]) < ftol).all():
+           (np.abs(fval[1:]-fval[0]) < ftol).all():
             break
 
         xbar = simp[:-P].mean(axis=0)
         # xr is shaped (P, N)
         xr = xbar + alpha*(xbar - simp[-P:])
 
-        mec.push(dict(xr=xr, xbar=xbar, fx0=fval[0], xn=simp[N-P-1],
-                      fxn=fval[N-P-1]))
+        mec.push(dict(xr=xr, xbar=xbar, fx0=fval[0], xn=simp[N-P],
+                      fxn=fval[N-P]))
 
         for i in range(P):
-            mec.push(dict(xr=xr[i], xp=simp[N-P+i], fxp=fval[N-P+i]),
+            mec.push(dict(xr=xr[i], xp=simp[N-P+i+1], fxp=fval[N-P+i+1]),
                      targets=[i])
         print 'starting simplex step'
         mec.execute('n, x,fx = simplex_step(f, xr, xbar, fx0, xn, fxn, xp, fxp, alpha, beta, gamma)')
@@ -122,14 +115,15 @@ def psimplex(x0, mec, xtol=1e-4, ftol=1e-4, maxiter=None,
             mec.execute('fcalls += %d'%(N/P))
         else:
             for i in range(P):
-                simp[N-P+i] = x_steps[i]
-                fval[N-P+1] = fx[i]
+                simp[N-P+i+1] = x_steps[i]
+                fval[N-P+i+1] = fx[i]
         idx = np.argsort(fval)
         simp = simp[idx]
         fval = fval[idx]
         print 'f(',simp[0],') = ',fval[0]
         niter += 1
         fcalls = np.sum(mec.gather('fcalls'))
+        all_fvals.append(fval[0])
     x = simp[0]
     fval = fval[0]
     if niter >= maxiter:
@@ -137,8 +131,9 @@ def psimplex(x0, mec, xtol=1e-4, ftol=1e-4, maxiter=None,
     if fcalls >= maxfun:
         print 'Quit because number of function calls exceeded %d'%maxfun
     if full_output:
-        return x, fval, iterations
+        return x, fval, all_fvals, niter, fcalls
     else:
         return x
         
         
+
