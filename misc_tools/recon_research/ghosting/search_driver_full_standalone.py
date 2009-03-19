@@ -186,10 +186,10 @@ def search_axes_full(epi, grad, seeds, axes, cons=None, l=1.0,
     # f(x) is usually bottoming out on the order of 1e-3.. so let's
     # make sure the optimization ftol is 1e-6
     # the values of x are from 1 to 1e-3 or 1e-4, so default xtol should be ok
-    r = optimize.fmin(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
+    r = eutils.fmin(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
                                                     chan, vol, r3, l,
                                                     cons, mask, cache),
-                      maxiter=150, full_output=1, disp=1,
+                      maxiter=150, full_output=1, disp=1, retall=1,
                       ftol=1e-6, xtol=1e-4)
 ##     r = eutils.fmin_powell(evalND_full_wrap, seed, args=(axes, epi, grad, coefs,
 ##                                                          chan, vol, r3, l,
@@ -317,7 +317,6 @@ def search_coefs(epi, l=1.0, seeds=None, mask=None,
                  axes=range(4), status_str=''):
     coefs = np.zeros((epi.n_chan, epi.n_slice, 4))
     # range over vol and slice, search indicated axes (default all)
-    #axes = range(4)
     try:
         sfunc = search_axes_full if len(axes)>1 else search_axis_full
     except TypeError:
@@ -328,13 +327,7 @@ def search_coefs(epi, l=1.0, seeds=None, mask=None,
     grad = util.grad_from_epi(epi)
     s_cache = SolnCache(epi.n_chan, epi.n_slice)
     for c in range(epi.n_chan):
-    #for c in [0]:
-    #for c in [6, 7, 9, 10, 11]:
-    #for c in [0,1]:
-        #sll = [0,1] if c==5 else [7,8,9]
         for s in range(epi.n_slice):
-        #for s in [0]:
-        #for s in sll:
             print "searching", (c, s)
             if seeds is None:
                 cf_s1 = simple_sig1_line_search(epi,grad,l=l,chan=c,sl=s)
