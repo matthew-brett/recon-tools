@@ -262,3 +262,55 @@ def search_coefs_simultaneous(epi_path, gm_path='', l=1.0, seeds=None,
         for i, idx in enumerate(job_idc):
             coefs[idx][axes] = rlist[i][0]
     return coefs
+
+tstring = """\
+sfunc = sdf.inner_loop_section(epi, grad, axes, cons, l, job_idx, gmask=mask)
+x = sfunc.run()
+"""
+def search_coefs_simultaneous_balanced(epi_path, gm_path='', l=1.0, seeds=None,
+                                       axes=None, status_str='',
+                                       alt_indexing=None):
+    if not axes:
+        axes = range(4)
+    mec = client.MultiEngineClient()
+    tc = client.TaskClient()
+    
+    P = len(mec.get_ids())
+    def cons(vec):
+        allpos = (vec >= 0).all()
+        xterms_small = (vec[1:] < .25).all()
+        return allpos and xterms_small
+    print 'setup mec'
+    mec_setup(mec, epi_path, gm_path, l=l, axes=axes,
+              fmin_func='fmin', cons_func=cons)
+    print 'pushing cache'
+    mec.push(dict(cache=None))
+    allkeys = mec.keys()    
+    for k in ('epi', 'grad', 'cons', 'l', 'mask', 'cache'):
+        for mkeys in allkeys:
+            assert k in mkeys, 'multi-engine client missing key: %s'%k    
+    mec.execute('t = epi.n_chan, epi.n_vol, epi.n_slice')
+    t = mec['t'][0]
+    coefs = np.zeros(t+(4,), 'd')
+    seed_mask = np.zeros(4)
+    seed_mask[axes] = 1.
+    if not alt_indexing:
+        nd_idx = np.lib.index_tricks.ndindex(t)
+        n_planes = nd_idx.total
+    else:
+        nd_idx = iter(alt_indexing)
+        n_planes = len(alt_indexing)
+
+    print 'stacking up tasks'
+    task_ids = []
+    for job_idx in nd_idx:
+        t = client.StringTask(tstring, push=dict(job_idx=job_idx),
+                              pull=('x','job_idx'))
+        task_ids.append(tc.run(t))
+    print 'waiting for tasks'
+    tc.barrier(task_ids)
+    for tid in task_ids:
+        res = tc.get_task_result(tid)
+        coefs[res['job_idx']][axes] = res['x']
+    return tc, coefs
+        

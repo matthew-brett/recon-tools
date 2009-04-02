@@ -373,6 +373,45 @@ def search_coefs(epi, l=1.0, seeds=None, mask=None,
                 open(status_str+'_coefs_%d_%d'%(c,s), 'wb').write(r[0].tostring())
                 #open('coefs_%d_%d'%(c,s),'wb').write(r[0].tostring())
     return coefs, rlist, s_cache
+
+class inner_loop_section(object):
+    def __init__(self, epi, grad, axes, cons, lmbda, job_idx,
+                 gmask=None, seed=None, cache=None):
+        self.epi = epi
+        self.grad = grad
+        self.axes = axes
+        self.cons = cons
+        self.lmbda = lmbda
+        self.gmask = gmask
+        self.seed = seed
+        self.cache = cache
+        self.chan, self.vol, self.sl = job_idx
+
+    def run(self):
+        # this basically finds the sigma 1 seed and runs the search over
+        # given axes for (chan, vol, slice) in job_idx
+        
+        if self.seed is None:
+            s1_cons = lambda x: x[0]>=0
+            x = 0.5
+            s1 = optimize.brent(corr_func, args=(self.epi, self.grad, self.chan,
+                                                 self.vol, self.sl, self.lmbda,
+                                                 s1_cons, 0),
+                                brack=(0,x,3), maxiter=500.)
+            self.seed = np.concatenate( ([s1], np.random.rand(3)*.1) )
+        seed = np.asarray(self.seed)
+        coefs = np.zeros_like(seed)
+        coefs[self.axes] = seed[self.axes]
+        seed = coefs[self.axes]
+        r = eutils.fmin(evalND_full_wrap, seed, args=(self.axes, self.epi,
+                                                      self.grad, coefs,
+                                                      self.chan, self.vol,
+                                                      self.sl, self.lmbda,
+                                                      self.cons, self.gmask,
+                                                      self.cache),
+                        maxiter=150, full_output=1, disp=1, retall=1)
+        return r[0]
+
             
 def feval_from_coefs(epi, coefs, l=1.0, mask=None):
     grad = util.grad_from_epi(epi)

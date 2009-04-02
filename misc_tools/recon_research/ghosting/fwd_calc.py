@@ -113,6 +113,33 @@ def patch_fmap(fmap, patch_region, patch_blending=5, order=5):
             y_patch = np.polyval(p, x_patch)
             fmap[sl,x_patch,col] = y_patch
             
+def distortion_kernel(fmap_pln, t_n2, n2_ax, m=None):
+    # fmap_pln is (N2' x N1), compute IDFT from N2' to Q2' at [-N2/2, N2/2)
+    # (the frequencies supporting the image kspace grid)
+    fm_s = fmap_pln.transpose().copy()
+
+    N2p = fm_s.shape[1]
+    if N2p == len(n2_ax):
+        idft_func = lambda x: util.ifft1(x, shift=True)
+    else:
+        def idft_func(arr):
+            util.ifft1(arr, shift=True, inplace=True)
+            n2_idx = (n2_ax + N2p/2).astype('i')
+            arr_xf = arr[...,n2_idx].copy()
+            return arr_xf
+
+    
+    q2_ax = np.linspace(-N2p/2, N2p/2-1, N2p)
+    fm = np.exp(1j*(t_n2[None,:,None]*fm_s[:,None,:]))
+    fm *= np.exp(-1j*2*np.pi*n2_ax[:,None]*q2_ax[None,:]/N2p)
+    if m is not None:
+        # m comes in shaped (Q2,N1)
+        fm *= m.transpose()[:,None,:]
+    # fm is (q1,n2,q2) --> (q1,n2,n2')
+    fm = idft_func(fm)
+    return fm
+            
+
         
 # sig1: 0.72864776906742923
 # sig01: 0.050122199999999999
@@ -213,16 +240,17 @@ def perturb_image_noghosts_constFE(img, fmap, **kw):
     Tl = kw.get('Tl', 500.)
     pe_offset = kw.get('pe_offset', 0)
     #acs_mode = kw.get('acs_mode', False)
-    if 'n2_freqs' not in kw and N2==Q2:
-        idft_func = lambda x: util.ifft1(x, shift=True)
-    else:
-        def idft_func(arr):
-            util.ifft1(arr, shift=True, inplace=True)
-            # n2 in {-N2/2,...,N2/2} corresponds to indices of
-            # n2i in {-N2/2+Q2/2, ..., N2/2+Q2/2}
-            n2_idx = (n2_ax + Q2/2).astype('i')
-            arr_xf = arr[...,n2_idx].copy()
-            return arr_xf
+
+##     if 'n2_freqs' not in kw and N2==Q2:
+##         idft_func = lambda x: util.ifft1(x, shift=True)
+##     else:
+##         def idft_func(arr):
+##             util.ifft1(arr, shift=True, inplace=True)
+##             # n2 in {-N2/2,...,N2/2} corresponds to indices of
+##             # n2i in {-N2/2+Q2/2, ..., N2/2+Q2/2}
+##             n2_idx = (n2_ax + Q2/2).astype('i')
+##             arr_xf = arr[...,n2_idx].copy()
+##             return arr_xf
 ##     if not acs_offset and accel > 1:
 ##         # in accelerated case, the first measured line is always 1,
 ##         # so force t_n2[1] = 0
@@ -240,11 +268,12 @@ def perturb_image_noghosts_constFE(img, fmap, **kw):
     util.ifft1(img, inplace=True, shift=True)
     for s in xrange(Q3):
         print "sl:",s
-        fm_s = fmap[s,:,:].transpose().copy()
-        fm = np.exp(1j*(t_n2[None,:,None]*fm_s[:,None,:]))
-        fm *= np.exp(-1j*2*np.pi*n2_ax[:,None]*q2_ax[None,:]/Q2)
-        # fm is (q1,n2,q2) --> (q1,n2,n2')
-        fm = idft_func(fm)
+##         fm_s = fmap[s,:,:].transpose().copy()
+##         fm = np.exp(1j*(t_n2[None,:,None]*fm_s[:,None,:]))
+##         fm *= np.exp(-1j*2*np.pi*n2_ax[:,None]*q2_ax[None,:]/Q2)
+##         # fm is (q1,n2,q2) --> (q1,n2,n2')
+##         fm = idft_func(fm)
+        fm = distortion_kernel(fmap[s], t_n2, n2_ax)
         for q1 in xrange(N1):
             S = img[:,:,s,:,q1].transpose(2,0,1).copy()
             S.shape = (N2,n_chan*n_vol)

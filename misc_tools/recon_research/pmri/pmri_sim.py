@@ -2,7 +2,7 @@ from recon import util
 from recon.operations.InverseFFT import InverseFFT
 from recon.operations.ReadoutWindow import ReadoutWindow
 from recon.pmri import grappa_recon as gr
-from ghosting.fwd_calc import perturb_image_noghosts_constFE
+from ghosting.fwd_calc import perturb_image_noghosts_constFE, distortion_kernel
 import numpy as np
 import os
 from recon.imageio import readImage
@@ -98,10 +98,10 @@ def grappa_sample_gre(gre, accel, n_acs=24, xleave_acs=False,
     if distort:
         print 'distorting parallel acquired data'
         # now apply a simulated distortion for parallel acquisition..
-        # acq. always starts on row=1, so set pe_offset=-1 (such that tn[1]=0)
+        # acq. always starts on row=1, so set pe_offset=-1/R (such that tn[1]=0)
         dist_kw['accel'] = accel
         perturb_image_noghosts_constFE(gre.cdata[:], fmap,
-                                       pe_offset=-1, **dist_kw)
+                                       pe_offset=-1.0/accel, **dist_kw)
         
     n2_sampling = slice(samp_lines[0], samp_lines[-1]+1, accel)
     clear_sl = [slice(None)] * len(full_shape)
@@ -117,10 +117,11 @@ def grappa_sample_gre(gre, accel, n_acs=24, xleave_acs=False,
     gre.use_membuffer(0)
     return
 
-def grappa_recon_sim(nblocks, sliding, ft, *args, **kwargs):
+def grappa_recon_sim(nblocks, *args, **kwargs):
     grappa_sample_gre(*args, **kwargs)
     gre = args[0]
-    gr.GrappaSynthesize(nblocks=nblocks, sliding=sliding, ft=ft).run(gre)
+    #gr.GrappaSynthesize(nblocks=nblocks, sliding=False, ft=False).run(gre)
+    gr.basic_grappa_1D(gre, nblocks)
     InverseFFT().run(gre)
     gre.combine_channels()
     if not (gre.isize==gre.jsize or gre.idim==gre.jdim):
@@ -156,3 +157,30 @@ def plot_all_errs(directory, sl=10, mask=None, pct=True):
     plist.remove(os.path.join(directory, 'reference.nii'))
     plot_errs(plist, sl=sl, mask=mask, pct=pct)
                  
+
+def undistort_grappa(img, fmap, Tl=500., mask=False):
+    if mask:
+        m = np.ones_like(fmap)
+        np.putmask(m, fmap==0, 0)
+    else:
+        m = None
+    n_chan, n_vol, n_slice, N2, N1 = img.cdata.shape
+    R = float(img.accel)
+    n2_ax = np.linspace(-N2/2, N2/2-1, N2)
+    t_n2 = (-1/R + np.arange(N2)/R) * Tl * 1e-6
+    print t_n2
+    util.ifft1(img.cdata, inplace=True, shift=True)
+    for s in xrange(n_slice):
+        print 'undistorting slice', s
+        fm = distortion_kernel(fmap[s], t_n2, n2_ax, m=(m[s] if mask else None))
+        for q1 in xrange(N1):
+            S = img.cdata[:,:,s,:,q1].transpose(2,0,1).copy()
+            S.shape = (N2,n_chan*n_vol)
+##             St = np.linalg.solve(fm[q1], S)
+##             St = np.linalg.lstsq(fm[q1], S, rcond=.01)[0]
+            fm_pinv = np.linalg.pinv(fm[q1], rcond=.01)
+            St = np.dot(fm_pinv, S)
+##             St = util.regularized_solve(fm[q1], S, 2.0)
+            St.shape = (N2, n_chan, n_vol)
+            img.cdata[:,:,s,:,q1] = St.transpose(1,2,0)
+    util.fft1(img.cdata, inplace=True, shift=True)
