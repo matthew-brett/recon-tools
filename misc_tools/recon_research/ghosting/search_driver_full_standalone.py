@@ -5,6 +5,10 @@ import pylab as P
 from scipy import optimize
 from time import time
 
+def centered_ifft2(arr):
+    chk = util.checkerboard(*arr.shape[-2:])
+    return chk * np.fft.ifftn(chk*arr, axes=(-2,-1))
+
 def kernels_full(image, grad, r3, coefs):
     sig1, sig11, sig21, a0 = coefs
     N2 = image.n_pe
@@ -155,7 +159,8 @@ def eval_deghost_full(epi, grad, coefs, chan, vol, r3,
 
     k_pln = deghost_full(epi, grad, coefs, chan, vol, r3, l)
 
-    util.ifft2(k_pln, inplace=True, shift=True)
+    #util.ifft2(k_pln, inplace=True, shift=True)
+    k_pln = centered_ifft2(k_pln)
     g_nrg = ((np.abs(k_pln)*ghost_mask)**2).sum()
     print 'f(',coefs,') =',g_nrg
     if cache:
