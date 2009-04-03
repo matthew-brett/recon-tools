@@ -1,7 +1,7 @@
 from recon import util
 import eddy_corr_utils as eutils
 import numpy as np
-import pylab as P
+## import pylab as P
 from scipy import optimize
 from time import time
 
@@ -275,25 +275,25 @@ def corr_func(xv, epi, grad, chan, vol, sl, l, constraints, validate):
     rneg_fix = util.regularized_solve(snc_neg, rneg, l)
     invcorrcoef = 1.0/(np.abs(rneg_fix) * np.abs(rpos_fix)).sum()
     print 'f(',xv,') =',invcorrcoef
-    if validate:
-        #P.subplot(211)
-        P.plot(np.abs(rpos_fix), 'b', label='pos grad')
-        #P.plot(np.abs(rpos), 'b--')
-        P.plot(np.abs(rneg_fix), 'g', label='neg grad')
-        #P.plot(np.abs(rneg), 'g--')
-##         P.subplot(212)
-##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
-##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
-##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
-##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
-##         P.plot(np.abs(rpos_fix), 'b')
-##         P.plot(np.abs(rpos), 'b--')
-##         P.plot(np.abs(rneg_fix), 'g')
-##         P.plot(np.abs(rneg), 'g--')
+##     if validate:
+##         #P.subplot(211)
+##         P.plot(np.abs(rpos_fix), 'b', label='pos grad')
+##         #P.plot(np.abs(rpos), 'b--')
+##         P.plot(np.abs(rneg_fix), 'g', label='neg grad')
+##         #P.plot(np.abs(rneg), 'g--')
+## ##         P.subplot(212)
+## ##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
+## ##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
+## ##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
+## ##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
+## ##         P.plot(np.abs(rpos_fix), 'b')
+## ##         P.plot(np.abs(rpos), 'b--')
+## ##         P.plot(np.abs(rneg_fix), 'g')
+## ##         P.plot(np.abs(rneg), 'g--')
         
-        P.legend()
-        P.title('slice %d'%sl)
-        P.show()
+##         P.legend()
+##         P.title('slice %d'%sl)
+##         P.show()
     return invcorrcoef
 
 def simple_sig1_line_search(epi, grad, l=1, chan=0, vol=0, sl=0):
@@ -428,21 +428,21 @@ def feval_from_coefs(epi, coefs, l=1.0, mask=None):
                                           s, l, cons, mask, None)
     return fvals
 
-def plot_means(coefs):
-    cf_names = ['sig1', 'sig11', 'sig21', 'sig31']
-    x_ax = np.arange(coefs.shape[1])
-    for axis in range(4):
-        P.subplot(400+10+(axis+1))
-        y_ax = coefs[:,:,axis].mean(axis=0)
-        y_er = coefs[:,:,axis].std(axis=0)
-        P.errorbar(x_ax, y_ax, y_er, fmt='ro')
-        for c in range(12):
-            P.plot(coefs[c,:,axis], '--')
-        if axis==3:
-            m,b,r = util.lin_regression(coefs[:,:,axis].mean(axis=0))
-            P.plot(np.arange(22)*m[0]+b[0], 'kD')
-        P.gca().set_title(cf_names[axis])
-    P.show()
+## def plot_means(coefs):
+##     cf_names = ['sig1', 'sig11', 'sig21', 'sig31']
+##     x_ax = np.arange(coefs.shape[1])
+##     for axis in range(4):
+##         P.subplot(400+10+(axis+1))
+##         y_ax = coefs[:,:,axis].mean(axis=0)
+##         y_er = coefs[:,:,axis].std(axis=0)
+##         P.errorbar(x_ax, y_ax, y_er, fmt='ro')
+##         for c in range(12):
+##             P.plot(coefs[c,:,axis], '--')
+##         if axis==3:
+##             m,b,r = util.lin_regression(coefs[:,:,axis].mean(axis=0))
+##             P.plot(np.arange(22)*m[0]+b[0], 'kD')
+##         P.gca().set_title(cf_names[axis])
+##     P.show()
 
 def energy_measures(epi, mask, chan=0):
     N2,N1 = epi.shape[-2:]

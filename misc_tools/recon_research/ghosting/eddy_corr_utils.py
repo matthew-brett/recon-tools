@@ -1,21 +1,21 @@
 import search_driver_full_standalone as fullcorr
 import search_driver_standalone as litecorr
 import numpy as np
-import pylab as P
-from recon.simulation import newghosts as ng
+## import pylab as P
+## from recon.simulation import newghosts as ng
 from recon import util
 
 def sigma1(a1, grad):
     return a1 / (grad.gmaG0*grad.dx)
 
 
-def special_unwrap(phs, n=10):
-    for i in range(n):
-        pu = np.unwrap(phs[...,i::n])
-        P.plot(np.arange(pu.shape[-1]), pu[0])
-        phs[...,i::n] = pu
-    P.show()
-    return phs #np.unwrap(phs)
+## def special_unwrap(phs, n=10):
+##     for i in range(n):
+##         pu = np.unwrap(phs[...,i::n])
+##         P.plot(np.arange(pu.shape[-1]), pu[0])
+##         phs[...,i::n] = pu
+##     P.show()
+##     return phs #np.unwrap(phs)
 
 #def simple_unbal_phase_ramp(epi, chan, vol, sl):
 def simple_unbal_phase_ramp(rdata, nramp, nflat, plot=False):
@@ -67,13 +67,13 @@ def simple_unbal_phase_ramp(rdata, nramp, nflat, plot=False):
     m,b,r = util.lin_regression(ref_phs/4, mask=simple_q1_mask)
     m = m[0]; b = b[0]
     #m,b,r = util.medfit(ref_phs[q1_pts]/4, x=q1_pts)
-    if plot:
-        P.plot(q1_pts, pos_neg_diff[q1_pts])
-        P.plot(q1_pts, -neg_pos_diff[q1_pts])
-        P.plot(q1_pts, ref_phs[q1_pts]/2)
-        P.plot(q1_pts, (pos_neg_diff-neg_pos_diff)[q1_pts]/2, 'r--')
-        P.plot(q1_pts, (2*m*np.arange(len(ref_phs))+2*b)[q1_pts], 'k--')
-        P.show()
+##     if plot:
+##         P.plot(q1_pts, pos_neg_diff[q1_pts])
+##         P.plot(q1_pts, -neg_pos_diff[q1_pts])
+##         P.plot(q1_pts, ref_phs[q1_pts]/2)
+##         P.plot(q1_pts, (pos_neg_diff-neg_pos_diff)[q1_pts]/2, 'r--')
+##         P.plot(q1_pts, (2*m*np.arange(len(ref_phs))+2*b)[q1_pts], 'k--')
+##         P.show()
     return m
 
 
@@ -83,10 +83,10 @@ def compare_search_derived(epi, cf, chan):
     for s in range(epi.n_slice):
         phs_ramp = simple_unbal_phase_ramp(epi, chan, 0, s)
         s1_der[s] = sigma1(phs_ramp, grad)
-    P.plot(cf[chan,:,0], label='searched')
-    P.plot(s1_der, label='derived')
-    P.legend()
-    P.show()
+##     P.plot(cf[chan,:,0], label='searched')
+##     P.plot(s1_der, label='derived')
+##     P.legend()
+##     P.show()
     
     
 def simple_slice_recon(epi, grad, chan, vol, sl, coefs, l):
@@ -116,17 +116,17 @@ def simple_volume_recon_planar(epi, chan, vol):
         #util.apply_phase_correction(epi.cref_data[chan,vol,s], phs[1:4])
     epi.use_membuffer(chan)
 
-def drive_searches_full(epi, l=1.0):
-    coefs = [0]*4
-    a1 = ng.solve_coefs_l1(epi, pct=50.)[0]
-    grad = litecorr.UBPC.Gradient(epi.T_ramp, epi.T_flat, epi.T0,
-                                  epi.n_pe, epi.N1, epi.fov_x)
-    s1_seed = sigma1(a1, grad)
-    coefs[0] = s1_seed
-    for ax in [0,1,2]:
-        r = fullcorr.search_axis_full(epi, coefs, ax, l=l)
-        coefs[ax] = r[0]
-    return coefs
+## def drive_searches_full(epi, l=1.0):
+##     coefs = [0]*4
+##     a1 = ng.solve_coefs_l1(epi, pct=50.)[0]
+##     grad = litecorr.UBPC.Gradient(epi.T_ramp, epi.T_flat, epi.T0,
+##                                   epi.n_pe, epi.N1, epi.fov_x)
+##     s1_seed = sigma1(a1, grad)
+##     coefs[0] = s1_seed
+##     for ax in [0,1,2]:
+##         r = fullcorr.search_axis_full(epi, coefs, ax, l=l)
+##         coefs[ax] = r[0]
+##     return coefs
 
 def drive_searches_short(epi, l=1.0, recon=True):
     allcoefs = []
@@ -181,11 +181,11 @@ def map_sig1_sig11_space(epi, sig1_range, sig11_range, sl=0):
                                                           coefs, 0, 0, sl+s,
                                                           1.0, cons)
     i = np.indices((s1p, s11p))
-    for s in range(n_sl):
-        P.imshow(z[s])
-        P.contour(i[0], i[1], z[s], 20, hold=True, cmap=P.cm.jet)
-        P.title("slice=%d"%(sl+s))
-        P.show()
+##     for s in range(n_sl):
+##         P.imshow(z[s])
+##         P.contour(i[0], i[1], z[s], 20, hold=True, cmap=P.cm.jet)
+##         P.title("slice=%d"%(sl+s))
+##         P.show()
     return z
 
 def map_single_coef_space(epi, coef_range, axis, cf,
@@ -226,25 +226,25 @@ def filter_fevals(fv):
     m = np.median(fv)
     return fv[(fv <= 1.25*m) & (fv > 0)]
 
-def plot_fevals(fv):
-    fvf = filter_fevals(fv)
-    mn = fvf.min()
-    P.plot(fvf)
-    P.plot(mn*np.ones_like(fvf), 'r--')
-    P.show()
+## def plot_fevals(fv):
+##     fvf = filter_fevals(fv)
+##     mn = fvf.min()
+##     P.plot(fvf)
+##     P.plot(mn*np.ones_like(fvf), 'r--')
+##     P.show()
 
-def plot_increments(fv):
-    fvf = fv[fv>0]
-    pct = (fvf-fvf[0])/fvf[0]
-    improvements = [pct[0]]
-    where = [0]
-    for p in xrange(1,len(pct)):
-        if pct[p] < improvements[-1]:
-            improvements.append(pct[p])
-            where.append(p)
-    P.plot(np.array(where), 100*np.array(improvements))
-    P.plot(np.array(where), 100*np.array(improvements), 'bo')    
-    P.show()
+## def plot_increments(fv):
+##     fvf = fv[fv>0]
+##     pct = (fvf-fvf[0])/fvf[0]
+##     improvements = [pct[0]]
+##     where = [0]
+##     for p in xrange(1,len(pct)):
+##         if pct[p] < improvements[-1]:
+##             improvements.append(pct[p])
+##             where.append(p)
+##     P.plot(np.array(where), 100*np.array(improvements))
+##     P.plot(np.array(where), 100*np.array(improvements), 'bo')    
+##     P.show()
 
 
 class RetrospectiveMovingAverage (object):

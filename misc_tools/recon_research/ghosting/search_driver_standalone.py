@@ -1,6 +1,6 @@
 from recon import util
 import numpy as np
-import pylab as P
+## import pylab as P
 from scipy import optimize
 from time import time
 
@@ -337,25 +337,25 @@ def corr_func(xv, epi, grad, chan, vol, sl, l, constraints, validate):
     rneg_fix = util.regularized_solve(snc_neg, rneg, l)
     invcorrcoef = 1.0/(np.abs(rneg_fix) * np.abs(rpos_fix)).sum()
     print 'f(',xv,') =',invcorrcoef
-    if validate:
-        #P.subplot(211)
-        P.plot(np.abs(rpos_fix), 'b', label='pos grad')
-        #P.plot(np.abs(rpos), 'b--')
-        P.plot(np.abs(rneg_fix), 'g', label='neg grad')
-        #P.plot(np.abs(rneg), 'g--')
-##         P.subplot(212)
-##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
-##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
-##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
-##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
-##         P.plot(np.abs(rpos_fix), 'b')
-##         P.plot(np.abs(rpos), 'b--')
-##         P.plot(np.abs(rneg_fix), 'g')
-##         P.plot(np.abs(rneg), 'g--')
+##     if validate:
+##         #P.subplot(211)
+##         P.plot(np.abs(rpos_fix), 'b', label='pos grad')
+##         #P.plot(np.abs(rpos), 'b--')
+##         P.plot(np.abs(rneg_fix), 'g', label='neg grad')
+##         #P.plot(np.abs(rneg), 'g--')
+## ##         P.subplot(212)
+## ##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
+## ##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
+## ##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
+## ##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
+## ##         P.plot(np.abs(rpos_fix), 'b')
+## ##         P.plot(np.abs(rpos), 'b--')
+## ##         P.plot(np.abs(rneg_fix), 'g')
+## ##         P.plot(np.abs(rneg), 'g--')
         
-        P.legend()
-        P.title('slice %d'%sl)
-        P.show()
+##         P.legend()
+##         P.title('slice %d'%sl)
+##         P.show()
     return invcorrcoef
 
 def simple_sig1_line_search(epi, l=1, chan=0, vol=0):
@@ -440,27 +440,27 @@ def feval_from_coefs(epi, coefs, l=1.0):
                                           s, l, 64, cons)
     return fvals
 
-def plot_means(coefs):
-    cf_names = ['sig1', 'sig11', 'sig21', 'a0']
-    x_ax = np.arange(coefs.shape[1])
-    for axis in range(4):
-        P.subplot(400+10+(axis+1))
-        y_ax = coefs[:,:,axis].mean(axis=0)
-        y_er = coefs[:,:,axis].std(axis=0)
-        P.errorbar(x_ax, y_ax, y_er, elinewidth=1.5, fmt='ro')
-        P.plot(x_ax, y_ax, 'r--', linewidth=2, label='cross channel mean')
-        for c in range(12):
-            P.plot(coefs[c,:,axis], '-.')
-        if axis==3:
-            m,b,r = util.lin_regression(coefs[:,:,axis].mean(axis=0))
-            P.plot(np.arange(22)*m[0]+b[0], 'kD', label='linear fit')
-            P.plot(np.arange(22)*m[0]+b[0], 'k', linewidth=1)
-        P.gca().set_title(cf_names[axis])
+## def plot_means(coefs):
+##     cf_names = ['sig1', 'sig11', 'sig21', 'a0']
+##     x_ax = np.arange(coefs.shape[1])
+##     for axis in range(4):
+##         P.subplot(400+10+(axis+1))
+##         y_ax = coefs[:,:,axis].mean(axis=0)
+##         y_er = coefs[:,:,axis].std(axis=0)
+##         P.errorbar(x_ax, y_ax, y_er, elinewidth=1.5, fmt='ro')
+##         P.plot(x_ax, y_ax, 'r--', linewidth=2, label='cross channel mean')
+##         for c in range(12):
+##             P.plot(coefs[c,:,axis], '-.')
+##         if axis==3:
+##             m,b,r = util.lin_regression(coefs[:,:,axis].mean(axis=0))
+##             P.plot(np.arange(22)*m[0]+b[0], 'kD', label='linear fit')
+##             P.plot(np.arange(22)*m[0]+b[0], 'k', linewidth=1)
+##         P.gca().set_title(cf_names[axis])
 
-    foo = P.plot(coefs[c,:,axis], 'b-.', label='per channel trace')[0]
-    P.legend(loc=4)
-    foo.set_visible(False)
-    ylim = P.gca().get_ylim()
-    # make room for legend()
-    P.gca().set_ylim(-ylim[1]*.5, ylim[1])
-    P.show()
+##     foo = P.plot(coefs[c,:,axis], 'b-.', label='per channel trace')[0]
+##     P.legend(loc=4)
+##     foo.set_visible(False)
+##     ylim = P.gca().get_ylim()
+##     # make room for legend()
+##     P.gca().set_ylim(-ylim[1]*.5, ylim[1])
+##     P.show()
