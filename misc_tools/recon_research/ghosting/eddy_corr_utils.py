@@ -1,7 +1,7 @@
 import search_driver_full_standalone as fullcorr
 import search_driver_standalone as litecorr
 import numpy as np
-## import pylab as P
+import pylab as P
 ## from recon.simulation import newghosts as ng
 from recon import util
 
@@ -57,7 +57,6 @@ def simple_unbal_phase_ramp(rdata, nramp, nflat, plot=False):
     rdata_peak = np.abs(ref).max()
     simple_q1_mask = np.where(np.abs(ref) > 0.1*rdata_peak, 1, 0)
     q1_pts = simple_q1_mask.nonzero()[0]
-
     var = (np.diff(ref_funcs_phs, n=2, axis=-1)**2).sum(axis=0)
     simple_var_mask = var < 1.5*np.median(var[q1_pts])
     q1_pts = np.intersect1d(q1_pts, 2+simple_var_mask.nonzero()[0])
@@ -67,13 +66,13 @@ def simple_unbal_phase_ramp(rdata, nramp, nflat, plot=False):
     m,b,r = util.lin_regression(ref_phs/4, mask=simple_q1_mask)
     m = m[0]; b = b[0]
     #m,b,r = util.medfit(ref_phs[q1_pts]/4, x=q1_pts)
-##     if plot:
-##         P.plot(q1_pts, pos_neg_diff[q1_pts])
-##         P.plot(q1_pts, -neg_pos_diff[q1_pts])
-##         P.plot(q1_pts, ref_phs[q1_pts]/2)
-##         P.plot(q1_pts, (pos_neg_diff-neg_pos_diff)[q1_pts]/2, 'r--')
-##         P.plot(q1_pts, (2*m*np.arange(len(ref_phs))+2*b)[q1_pts], 'k--')
-##         P.show()
+    if plot:
+        P.plot(q1_pts, pos_neg_diff[q1_pts])
+        P.plot(q1_pts, -neg_pos_diff[q1_pts])
+        P.plot(q1_pts, ref_phs[q1_pts]/2)
+        P.plot(q1_pts, (pos_neg_diff-neg_pos_diff)[q1_pts]/2, 'r--')
+        P.plot(q1_pts, (2*m*np.arange(len(ref_phs))+2*b)[q1_pts], 'k--')
+        P.show()
     return m
 
 
@@ -108,8 +107,10 @@ def simple_volume_recon_planar(epi, chan, vol):
     Q3,N2,N1 = epi.shape[-3:]
     q1_ax = np.linspace(-N1/2., N1/2., N1, endpoint=False)
     n2sign = util.checkerline(N2)
+    n_ramp, n_flat = epi.n_ramp, epi.n_flat
     for s in range(Q3):
-        s1 = simple_unbal_phase_ramp(epi, chan, vol, s)
+        s1 = simple_unbal_phase_ramp(epi.cref_data[chan,vol,s].copy(),
+                                     n_ramp, n_flat)
         soln_pln = n2sign[:,None] * (s1*q1_ax)
         phs = np.exp(-1j*soln_pln)
         util.apply_phase_correction(epi.cdata[chan,vol,s], phs)

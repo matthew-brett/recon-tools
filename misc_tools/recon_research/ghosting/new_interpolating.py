@@ -1,9 +1,48 @@
 import numpy as np
 import pylab as P
 from scipy.optimize import fminbound
+from scipy import linalg
 from recon import util
 import time
 
+class NegSvalError(Exception): pass
+
+def simple_kernel(grad, ts, sig1, a0):
+    N1 = len(ts)
+    dk = 1.0/(N1*grad.dx)
+    n1ax = np.arange(-N1/2, N1/2)
+    kxt = grad.kxt(ts - sig1) * grad.gmaG0/(2*np.pi)
+    g1t = grad.gxt(ts - sig1)
+    a0_xterms = np.exp(1j*a0*g1t)
+    snc_op = np.dot(np.diag(a0_xterms), np.sinc(kxt[:,None]/dk - n1ax[None,:]))
+    
+    return snc_op
+
+def diff_op(P, n=1, dt='d'):
+    L = np.zeros((P-n, P), dtype=dt)
+    pulse = np.zeros((2*n+1), 'd')
+    pulse[n] = 1.
+    h = np.diff(pulse, n=n)
+    lh = len(h)
+    for i in xrange(P-n):
+        L[i,i:i+lh].real = h
+    return L
+
+def svd_or_else(A):
+    u, s, vt = None, None, None
+    try:
+        u, s, vt = linalg.svd(A, compute_uv=True)
+        if (s<0).any():
+            raise NegSvalError
+    except:
+        try:
+            u, s, vt = linalg.svd(A, compute_uv=True, fast_svd=False)
+            if (s<0).any():
+                raise NegSvalerror
+        except:
+            raise Exception("No SVD!")
+    return u, s, vt
+    
 def find_tols(ksp_pln, grad, tn0, Tl, sig1):
     N2, N1 = ksp_pln.shape
     dk = 1.0/(N1*grad.dx)
@@ -21,7 +60,10 @@ def find_tols(ksp_pln, grad, tn0, Tl, sig1):
         return pct-.001
     
     svd_fail = []
-    tols = np.zeros(N2)
+    svd_negs = []
+    stable_svd_fail = []
+    stable_svd_negs = []
+    tols = np.zeros(2)
     search_time = 0.
     for n2 in [0,1]:
         #print 'trying',n2
@@ -30,9 +72,27 @@ def find_tols(ksp_pln, grad, tn0, Tl, sig1):
         aref = np.abs(np.trapz(ksp_pln[n2_sl].sum(axis=0), x=k1t))
         snc_op = np.sinc(k1t[:,None]/dk - n1ax[None,:])
         try:
-            [u, s, vt] = np.linalg.svd(snc_op, 1, 1)
-        except:
+            [u, s, vt] = linalg.svd(snc_op)
+            if (s<0).any():
+                raise NegSvalError("neg svals")
+        except linalg.LinAlgError:
             svd_fail.append(n2)
+            s = None
+        except NegSvalError:
+            svd_negs.append(n2)
+            s = None
+            #continue
+        finally:
+            if s is None:
+                try:
+                    [u, s, vt] = linalg.svd(snc_op, fast_svd=False)
+                    if (s<0).any():
+                        raise NegSvalError("neg stable svals")
+                except np.linalg.LinAlgError:
+                    stable_svd_fail.append(n2)
+                except NegSvalError:
+                    stable_svd_negs.append(n2)
+        if s is None:
             continue
         t = time.time()
         tols[n2] = fminbound(eval_area, 1e-10, 1e-1, xtol=1e-5,
@@ -41,8 +101,44 @@ def find_tols(ksp_pln, grad, tn0, Tl, sig1):
         #print reduce(lambda x,y: x+y, ['-']*40)
     if svd_fail:
         print 'svd failed on:', svd_fail
+    if svd_negs:
+        print 'neg svals on:', svd_negs
+    if stable_svd_fail:
+        print 'stable svd failed on:', stable_svd_fail
+    if stable_svd_negs:
+        print 'neg stable svals on:', stable_svd_negs
     #print "search time:", search_time
     return tols
+
+def inv_op_lcurve_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0,
+                       down_samp=True, diff_order=0):
+    N2, N1 = epi.shape[-2:]
+    Tl = 2*grad.Tr + grad.Tf
+    delT = (Tl-2*grad.T0)/(N1-1)
+    ts = np.arange(N1)*delT + grad.T0
+    b = epi.cdata[chan,vol,sl]
+    L = diff_op(N1, n=diff_order, dt=b.dtype) if diff_order else None
+    xreg = np.zeros_like(b)
+    for n2 in [0,1]:
+        op = simple_kernel(grad, ts + n2*Tl, sig1, a0)
+        if diff_order:
+            [u,u2,vt,c,s] = linalg.gsvd_matlab(op, L)
+            alpha = c.real.diagonal()[diff_order:]
+            beta = s[:,diff_order:].real.diagonal()
+            s = np.array([alpha, beta])
+        else:
+            [u,s,vt] = svd_or_else(op)
+        
+        for xrow, brow in zip(xreg[n2::2], b[n2::2]):
+            norm_est = np.dot(brow, brow.conj()).real ** .5
+            xrow[:],_ = util.regularized_solve_lcurve(op,brow,L=L,
+                                                      u=u,s=s,vt=vt,
+                                                      max_lx_norm=5*norm_est)
+    if down_samp:
+        return xreg[:,::2]
+    else:
+        return xreg
+    
 
 def inv_op_svdreg_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0,
                        down_samp=True, plotting=False):
@@ -53,7 +149,7 @@ def inv_op_svdreg_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0,
     dk = 1.0/(N1*grad.dx)
     Tl = 2*grad.Tr+grad.Tf
     delT = (Tl-2*grad.T0)/(N1-1)
-    tsamps = np.arange(128)*delT + grad.T0    
+    tsamps = np.arange(N1)*delT + grad.T0    
     tols = find_tols(epi.cdata[chan,vol,sl], grad, tsamps, Tl, sig1)
     ksp_pln = np.zeros((N2,N1_out), epi.cdata.dtype)
     #for n2 in xrange(N2):
@@ -63,12 +159,24 @@ def inv_op_svdreg_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0,
         snc_op = np.sinc(k1t[:,None]/dk - n1ax[None,:])
         n2_sl = slice(n2,N2,2)
         try:
-            [u,s,vt] = np.linalg.svd(snc_op, 1, 1)
-        except:
+            [u,s,vt] = linalg.svd(snc_op)
+            if (s<0).any():
+                raise linalg.LinAlgError("negative svals")
+        except linalg.LinAlgError, err:
             print "no svd for",(chan,sl,n2),"sig1=",sig1
-            raise Exception
-        #si = np.where(s < tols[n2], 0, 1/s)
-        si = np.where(s < 1e-2, 0, 1/s)
+            print err.args
+            try:
+                [u,s,vt] = linalg.svd(snc_op, fast_svd=False)
+                if (s<0).any():
+                    raise NegSvalError
+            except linalg.LinAlgError:
+                print "stable svd failed for",(chan,sl,n2),"sig1=",sig1
+                raise Exception
+            except NegSvalError:
+                print 'stable svd gave neg svals for',(chan,sl,n2),'sig1=',sig1
+                raise Exception
+        si = np.where(s < tols[n2], 0, 1/s)
+        #si = np.where(s < 1e-2, 0, 1/s)
         Hpinv = np.dot(vt.conjugate().transpose(),
                        si[:,None]*u.conjugate().transpose())
 
@@ -79,7 +187,7 @@ def inv_op_svdreg_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0,
         ksp_pln[n2_sl] = np.dot(partcorr_echos, Hpinv.T)
     if plotting:
         P.figure()
-        P.imshow(np.abs(util.ifft2(ksp_fix)))
+        P.imshow(np.abs(util.ifft2(ksp_pln)))
     return ksp_pln
 
 def tn_regrid(T0, Tr, Tf, N1, nr, nf):
@@ -127,7 +235,7 @@ def forward_op_corr(epi, grad, sig1, a0, chan=0, vol=0, sl=0, down_samp=True):
 def deghost_epi_fwdops(epi, grad, cf, down_samp=True):
     if down_samp:
         cdata = util.TempMemmapArray((epi.n_chan, epi.n_vol,
-                                      epi.n_sl, epi.n_pe, epi.N1/2),
+                                      epi.n_slice, epi.n_pe, epi.N1/2),
                                      epi.cdata.dtype)
     else:
         cdata = epi.cdata
@@ -135,7 +243,7 @@ def deghost_epi_fwdops(epi, grad, cf, down_samp=True):
         for s in range(epi.n_slice):
             ksp_pln = forward_op_corr(epi, grad, cf[c,s,0], cf[c,s,3],
                                       chan=c, vol=0, sl=s, down_samp=down_samp)
-            epi.cdata[c,0,s] = ksp_pln
+            cdata[c,0,s] = ksp_pln
 
     if down_samp:
         del epi.cdata
@@ -146,7 +254,7 @@ def deghost_epi_fwdops(epi, grad, cf, down_samp=True):
 def deghost_epi_invops_svdreg(epi, grad, cf, down_samp=True):
     if down_samp:
         cdata = util.TempMemmapArray((epi.n_chan, epi.n_vol,
-                                      epi.n_sl, epi.n_pe, epi.N1/2),
+                                      epi.n_slice, epi.n_pe, epi.N1/2),
                                      epi.cdata.dtype)
     else:
         cdata = epi.cdata
@@ -161,4 +269,25 @@ def deghost_epi_invops_svdreg(epi, grad, cf, down_samp=True):
         epi.cdata = cdata
         epi.N1 /= 2
     epi.use_membuffer(0)
+
+def deghost_epi_invops_lcurve(epi, grad, cf, diff_order=0, down_samp=True):
+    if down_samp:
+        cdata = util.TempMemmapArray((epi.n_chan, epi.n_vol,
+                                      epi.n_slice, epi.n_pe, epi.N1/2),
+                                     epi.cdata.dtype)
+    else:
+        cdata = epi.cdata
+    for c in range(epi.n_chan):
+        for s in range(epi.n_slice):
+            ksp_pln = inv_op_lcurve_corr(epi, grad, cf[c,s,0], cf[c,s,3],
+                                         chan=c, vol=0, sl=s,
+                                         diff_order=diff_order,
+                                         down_samp=down_samp)
+            cdata[c,0,s] = ksp_pln
+    if down_samp:
+        del epi.cdata
+        epi.cdata = cdata
+        epi.N1 /= 2
+    epi.use_membuffer(0)
+    
             

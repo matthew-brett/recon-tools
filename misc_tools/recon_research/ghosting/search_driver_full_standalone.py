@@ -1,7 +1,7 @@
 from recon import util
 import eddy_corr_utils as eutils
 import numpy as np
-## import pylab as P
+import pylab as P
 from scipy import optimize
 from time import time
 
@@ -258,8 +258,8 @@ def corr_func(xv, epi, grad, chan, vol, sl, l, constraints, validate):
     a1 = grad.gmaG0*epi.fov_x*sig11/(2*np.pi)
     rneg = epi.cref_data[chan,vol,sl,0].copy()
     rpos = epi.cref_data[chan,vol,sl,1].copy()
-    tn_neg = Tl + np.arange(128)*delT + T0
-    tn_pos = np.arange(128)*delT + T0
+    tn_neg = Tl + np.arange(N1)*delT + T0
+    tn_pos = np.arange(N1)*delT + T0
 ##     k_neg = UBPC.gtranslate(grad.kx, tn_neg - sig1) * grad.gmaG0/(2*np.pi)
 ##     g_neg = UBPC.gtranslate(grad.gx, tn_neg - sig1)
 ##     k_pos = UBPC.gtranslate(grad.kx, tn_pos - sig1) * grad.gmaG0/(2*np.pi)
@@ -275,25 +275,25 @@ def corr_func(xv, epi, grad, chan, vol, sl, l, constraints, validate):
     rneg_fix = util.regularized_solve(snc_neg, rneg, l)
     invcorrcoef = 1.0/(np.abs(rneg_fix) * np.abs(rpos_fix)).sum()
     print 'f(',xv,') =',invcorrcoef
-##     if validate:
-##         #P.subplot(211)
-##         P.plot(np.abs(rpos_fix), 'b', label='pos grad')
-##         #P.plot(np.abs(rpos), 'b--')
-##         P.plot(np.abs(rneg_fix), 'g', label='neg grad')
-##         #P.plot(np.abs(rneg), 'g--')
-## ##         P.subplot(212)
-## ##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
-## ##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
-## ##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
-## ##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
-## ##         P.plot(np.abs(rpos_fix), 'b')
-## ##         P.plot(np.abs(rpos), 'b--')
-## ##         P.plot(np.abs(rneg_fix), 'g')
-## ##         P.plot(np.abs(rneg), 'g--')
+    if validate:
+        #P.subplot(211)
+        P.plot(np.abs(rpos_fix), 'b', label='pos grad')
+        P.plot(np.abs(rpos), 'b--')
+        P.plot(np.abs(rneg_fix), 'g', label='neg grad')
+        P.plot(np.abs(rneg), 'g--')
+##         P.subplot(212)
+##         rneg = epi.cdata[chan,vol,sl,N2/2-1].copy()
+##         rpos = epi.cdata[chan,vol,sl,N2/2].copy()
+##         rneg_fix = util.regularized_solve(snc_neg, rneg, l)
+##         rpos_fix = util.regularized_solve(snc_pos, rpos, l)
+##         P.plot(np.abs(rpos_fix), 'b')
+##         P.plot(np.abs(rpos), 'b--')
+##         P.plot(np.abs(rneg_fix), 'g')
+##         P.plot(np.abs(rneg), 'g--')
         
-##         P.legend()
-##         P.title('slice %d'%sl)
-##         P.show()
+        P.legend()
+        P.title('slice %d'%sl)
+        P.show()
     return invcorrcoef
 
 def simple_sig1_line_search(epi, grad, l=1, chan=0, vol=0, sl=0):
@@ -319,7 +319,7 @@ def simple_sig1_line_search(epi, grad, l=1, chan=0, vol=0, sl=0):
 ## but what are the constraints?????
 
 def search_coefs(epi, l=1.0, seeds=None, mask=None,
-                 axes=range(4), status_str=''):
+                 axes=range(4), status_str='', sl=-1):
     coefs = np.zeros((epi.n_chan, epi.n_slice, 4))
     # range over vol and slice, search indicated axes (default all)
     try:
@@ -330,9 +330,11 @@ def search_coefs(epi, l=1.0, seeds=None, mask=None,
     seed_mask[axes] = 1.
     rlist = []
     grad = util.grad_from_epi(epi)
+    max_s1 = epi.dwell_time / 1e3
     s_cache = SolnCache(epi.n_chan, epi.n_slice)
+    srange = xrange(epi.n_slice) if sl < 0 else [sl]
     for c in range(epi.n_chan):
-        for s in range(epi.n_slice):
+        for s in srange:
             print "searching", (c, s)
             if seeds is None:
                 cf_s1 = simple_sig1_line_search(epi,grad,l=l,chan=c,sl=s)
@@ -341,10 +343,11 @@ def search_coefs(epi, l=1.0, seeds=None, mask=None,
             def cons(vec):
                 allpos = (vec >= 0).all()
                 # bound sigma1 by +/- 5% -- could go tighter perhaps
-                #s1_bounds = (sig1_midpt * .85, sig1_midpt * 1.15)
-                #s1_bounds = (sig1_midpt * .95, sig1_midpt * 1.05)
-                #s1_bounded = (vec[0]>s1_bounds[0] and vec[0]<s1_bounds[1])
-                s1_bounded = True
+##                 s1_bounds = (sig1_midpt * .85, sig1_midpt * 1.15)
+##                 s1_bounds = (sig1_midpt * .95, sig1_midpt * 1.05)
+##                 s1_bounded = (vec[0]>s1_bounds[0] and vec[0]<s1_bounds[1])
+##                 s1_bounded = True
+                s1_bounded = (vec[0] < max_s1)
                 xterms_small = (vec[1:] < .2).all()
                 return allpos and xterms_small and s1_bounded
             if seeds is None:

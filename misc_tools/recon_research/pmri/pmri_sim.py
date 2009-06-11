@@ -6,7 +6,7 @@ from ghosting.fwd_calc import perturb_image_noghosts_constFE, distortion_kernel
 import numpy as np
 import os
 from recon.imageio import readImage
-from ghosting.eddy_corr_ana import plot_diffs, arr2str
+from ghosting.eddy_corr_ana import plot_rows_of_slices, arr2str
 from glob import glob
 
 def grappa_sampling(n_pe, a, n_acs):
@@ -150,7 +150,7 @@ def plot_errs(plist, sl=10, mask=None, pct=True):
         if mask is not None:
             p_diffs[-1] *= mask
         p_names.append(os.path.splitext(os.path.split(p)[-1])[0]+ ': '+rrms_str)
-    return plot_diffs(p_diffs, p_names)
+    return plot_rows_of_slices(p_diffs, p_names)
 
 def plot_all_errs(directory, sl=10, mask=None, pct=True):
     plist = glob(os.path.join(directory, '*.nii'))
@@ -158,7 +158,7 @@ def plot_all_errs(directory, sl=10, mask=None, pct=True):
     plot_errs(plist, sl=sl, mask=mask, pct=pct)
                  
 
-def undistort_grappa(img, fmap, Tl=500., mask=False):
+def undistort_grappa(img, fmap, Tl=500., mask=True):
     if mask:
         m = np.ones_like(fmap)
         np.putmask(m, fmap==0, 0)
@@ -176,11 +176,50 @@ def undistort_grappa(img, fmap, Tl=500., mask=False):
         for q1 in xrange(N1):
             S = img.cdata[:,:,s,:,q1].transpose(2,0,1).copy()
             S.shape = (N2,n_chan*n_vol)
-##             St = np.linalg.solve(fm[q1], S)
-##             St = np.linalg.lstsq(fm[q1], S, rcond=.01)[0]
-            fm_pinv = np.linalg.pinv(fm[q1], rcond=.01)
-            St = np.dot(fm_pinv, S)
-##             St = util.regularized_solve(fm[q1], S, 2.0)
+            St = util.regularized_solve(fm[q1], S, 2.0)
+##             S = img.cdata[:,:,s,:,q1].copy()
+##             S.shape = (n_chan*n_vol,N2)
+##             if (fm[q1]*fm[q1].conjugate()).real.sum() == 0:
+##                 St = S
+##             else:
+##                 [u,s,vt] = np.linalg.svd(fm[q1], 0, 1)
+##                 St = np.array([util.regularized_solve_lcurve(fm[q1],Sc,u=u,s=s)
+##                                for Sc in S])
+##             img.cdata[:,:,s,:,q1] = St.reshape(n_chan, n_vol, N2)
+            St.shape = (N2, n_chan, n_vol)
+            img.cdata[:,:,s,:,q1] = St.transpose(1,2,0)
+            
+    util.fft1(img.cdata, inplace=True, shift=True)
+
+def undistort_reg(img, fmap, Tl=500., mask=True, sl=-1):
+    if mask:
+        m = np.ones_like(fmap)
+        np.putmask(m, fmap==0, 0)
+    else:
+        m = None
+    n_chan, n_vol, n_slice, N2, N1 = img.cdata.shape
+    n2_ax = np.linspace(-N2/2, N2/2-1, N2)
+    t_n2 = np.arange(N2) * Tl * 1e-6
+    print t_n2
+    util.ifft1(img.cdata, inplace=True, shift=True)
+    srange = xrange(n_slice) if sl < 0 else [sl]
+    for s in srange:
+        print 'undistorting slice', s
+        fm = distortion_kernel(fmap[s], t_n2, n2_ax, m=(m[s] if mask else None))
+        for q1 in xrange(N1):
+            S = img.cdata[:,:,s,:,q1].transpose(2,0,1).copy()
+            S.shape = (N2,n_chan*n_vol)
+            St = util.regularized_solve(fm[q1], S, 2)
+##             S = img.cdata[:,:,s,:,q1].copy()
+##             S.shape = (n_chan*n_vol,N2)
+##             if (fm[q1]*fm[q1].conjugate()).real.sum() == 0:
+##                 St = S
+##             else:
+##                 [u,sv,vt] = np.linalg.svd(fm[q1], 0, 1)
+##                 St = np.array([util.regularized_solve_lcurve(fm[q1],Sc,u=u,s=sv,vt=vt)
+##                                for Sc in S])
+##             img.cdata[:,:,s,:,q1] = St.reshape(n_chan, n_vol, N2)
             St.shape = (N2, n_chan, n_vol)
             img.cdata[:,:,s,:,q1] = St.transpose(1,2,0)
     util.fft1(img.cdata, inplace=True, shift=True)
+    

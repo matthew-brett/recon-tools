@@ -62,13 +62,31 @@ def ghost_decibel_by_slice(ref, vols, tags, gmask):
 
 
 def arr2str(a):
-    aup = 10*a
+    """return the stringified version of a with 2 significant digits
+    """
+    if (a==0).all():
+        return ['0.0']*len(a)
+
+    # want the max to lie between 10 and 100, so that rounding to an integer
+    # is 2 digits
+    if abs(a.max()) > 10:
+        alpha = 1/10.
+        compare = lambda x: x >= 100
+        ex = 'e+'
+        pwr_mod = lambda x: x+1
+    else:
+        alpha = 10.
+        compare = lambda x: x <= 10
+        ex = 'e-'
+        pwr_mod = lambda x: x-1
+    
+    ascl = alpha*a
     pwr = 1
-    while (aup.max()<=10):
-        aup *= 10
+    while compare(abs(ascl.max())):
+        ascl *= alpha
         pwr += 1
-    aup = np.round(aup).astype('i')
-    s = [str(p) for p in aup]
+    ascl = np.round(ascl).astype('i')
+    s = [str(p) for p in ascl]
     s2 = []
     for p in s:
         if len(p)>1:
@@ -76,13 +94,13 @@ def arr2str(a):
         else:
             sn = '0.'+p
         if pwr>1:
-            sn += 'e-'+str(pwr-1)
+            sn += ex+str(pwr_mod(pwr))
         s2.append(sn)
     #s = [(p[:-1] + '.' + p[-1]) if len(p)>1 else '0.'+p for p in s]
     return s2
 
 
-def plot_diffs(diffs, names, max_col=4):
+def plot_rows_of_slices(diffs, names, max_col=4):
     dpi = 50.
     nd = len(diffs)
     wpix = hpix = 128.
