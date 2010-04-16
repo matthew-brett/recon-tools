@@ -19,7 +19,7 @@ from recon.imageio import readImage, ReconImage
 from recon.inplane_xforms import compose_xform
 from recon.slicerimage import SlicerImage
 from recon.visualization import *
-from odict import odict
+from recon.odict import odict
 
 ui_info = \
 '''<ui>

@@ -1,6 +1,6 @@
 from ConfigParser import SafeConfigParser
 from optparse import OptionParser
-from odict import odict
+from recon.odict import odict
 from recon import import_from
 
 tool_map = odict((

@@ -2,7 +2,7 @@
 import numpy as np
 import struct
 import sys
-from odict import odict
+from recon.odict import odict
 from recon import struct_unpack, struct_pack, NATIVE, LITTLE_ENDIAN, BIG_ENDIAN
 from recon.util import Quaternion, range_exceeds, integer_ranges
 from recon.imageio import ReconImage

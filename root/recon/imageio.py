@@ -1,6 +1,6 @@
 import numpy as np
 from os import path
-from odict import odict
+from recon.odict import odict
 from recon import import_from
 from recon.inplane_xforms import compose_xform
 from recon.util import Quaternion, integer_ranges, scale_data

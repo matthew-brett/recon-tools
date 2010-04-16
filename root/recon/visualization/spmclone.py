@@ -16,7 +16,7 @@ from recon.imageio import readImage
 from recon.slicerimage import SlicerImage
 from recon.visualization import *
 from recon import util
-from odict import odict
+from recon.odict import odict
 
 ui_info = \
 '''<ui>

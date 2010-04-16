@@ -4,7 +4,7 @@ import struct
 import exceptions
 import sys
 
-from odict import odict
+from recon.odict import odict
 from recon import struct_unpack, struct_pack, NATIVE
 from recon.util import range_exceeds, integer_ranges, Quaternion
 from recon.imageio import ReconImage
