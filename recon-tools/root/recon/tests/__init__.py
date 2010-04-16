@@ -1,2 +1,0 @@
-from numpy.testing import *
-

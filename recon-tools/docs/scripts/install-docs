@@ -1,7 +1,0 @@
-#!/bin/sh
-doc_source=${1}
-doc_dest=${2}
-
-mkdir -p $doc_dest
-cp  $doc_source/tool-usage.txt $doc_dest/
-cp -r $doc_source/api $doc_dest/
