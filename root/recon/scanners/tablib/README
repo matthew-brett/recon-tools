@@ -1,0 +1,83 @@
+This directory contains the Varian phase-encode tables which have been 
+modified for use with recon. The first line contains the acquisition 
+order of the k-space lines. Any navigator echos are 
+assumed to be acquired at the beginning of a segment and are therefore
+not assigned a line number.
+
+
+One of the first chores of recon is to organize the data into a conventional 
+ordering of the data so that various operations may be performed upon the data 
+in a manner independent of the order of collection of the phase-encode lines of 
+data.
+
+Because Python does not allow indices of arrays (or lists) to start at negative 
+values the convention in recon is to number the phase-encode lines as 0 
+through 2N-1 where we assume there are 2N phase encode lines (2N = n_pe_true). 
+With this convention the phase-encode gradient has zero magnitude at line N. 
+The following diagram makes this convention clear for the first and second slices 
+within a volume (block) of slices:
+
+
+                          Recon Line Numbering Convention
+                       ===================================== 
+
+         recon line                                          k-space k_pe value
+      ----------------                                      --------------------
+
+         ^                             ^
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :                                
+          \ ____                       | 
+          /                            |
+         | 4N - 1  <-------------------|------------------->  k_pe = (N-1)*del_k
+         |                             |
+         | 4N - 2  <-------------------|------------------->  k_pe = (N-2)*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   N     <-------------------|------------------->  k_pe = 0
+         |                             |
+slice 1 -| N - 1   <-------------------|------------------->  k_pe = -del_k
+         |                             |
+         | N - 2   <-------------------|------------------->  k_pe = -2*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         | 2N + 1  <-------------------|------------------->  k_pe = -(N-1)*del_k
+         |                             |
+         |   2N    <-------------------|------------------->  k_pe = -N*del_k
+          \___                         |
+          /                            |
+         | 2N - 1  <-------------------|------------------->  k_pe = (N-1)*del_k
+         |                             |
+         | 2N - 2  <-------------------|------------------->  k_pe = (N-2)*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   N     <-------------------|------------------->  k_pe = 0
+         |                             |
+slice 0 -| N - 1   <-------------------|------------------->  k_pe = -del_k
+         |                             |
+         | N - 2   <-------------------|------------------->  k_pe = -2*del_k
+         |                    :        |        :
+         |                    :        |        :
+         |                    :        |        :
+         |   1     <-------------------|------------------->  k_pe = -(N-1)*del_k
+         |                             |
+         |   0     <-------------------|------------------->  k_pe = -N*del_k
+          \___                         |
+                                       |
+                                       v
+
+
+The phase-encode-tables used by recon are created by hand from the scanner-
+vendor's phase-encode-table files. While we could use the vendors phase-encode-
+tables directly a coding simplification is acheived by using our own file format 
+for the phase-encode-tables. Since this need be done only once it is of no great 
+cost given benefits. The recon phase-encode-table files are stored in a 
+directory named "tablib" under the recon.scanners.varian package.
+
+The different vendors will store their phase-encode tables in different system 
+directories. The Varian scanner has the phase-encode tables stored in a directory 
+named tablib. 

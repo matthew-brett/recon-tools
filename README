@@ -1,0 +1,63 @@
+##############################################################################
+COPYRIGHT: University of California Berkeley 2006-2007
+EMAIL: support@cirl.berkeley.edu
+
+Recon Tools:
+
+A collection of tools and libraries for reconstructing and undistorting MR 
+image data developed at the University of California Berkeley's Helen Wills 
+Neuroscience Institute Brain Imaging Center.
+For documentation, see https://cirl.berkeley.edu/view/BIC/ImagingTools
+
+#-----------------------------------------------------------------------------
+SUMMARY:
+
+The Recon Tools package provides a number of command-line tools for
+manipulating MR image data, as well as a code library of reusable components.
+The central types of objects in the recon-tools system are data readers,
+transformers, and writers.  Image manipulation tools can be created by
+composing appropriate combinations of these core objects into a pipeline
+beginning with a reader, followed by a sequence of transformers (called
+Operations), and ending with a writer.  Image data in the pipeline is
+represented by an Image object conforming to a conventional Image interface.
+
+#-----------------------------------------------------------------------------
+LIBRARY DEPENDENCIES:
+Recon Tools is written in Python 2.4, making use these additional libraries:
+
+numpy > 1.0
+matplotlib > 0.87
+
+#-----------------------------------------------------------------------------
+BUILDING/INSTALLING THE PYTHON WAY
+It is necessary to compile the phase surface unwrapping module included 
+with Recon Tools before installing. To do so, type:
+
+python setup.py build
+sudo python setup.py install
+
+#-----------------------------------------------------------------------------
+USING MAKE (the iffy way):
+
+make install:       installs tools, library, and documentation
+make tools-rpm:     build an RPM for installing the tools and library
+make docs:          generate some documentation from code
+make install-docs:  install documentation (/usr/share/doc/recon-tools)
+make docs-rpm:      build an RPM for install the documentation
+make test:          run test suite
+make clean:         remove all generated files
+
+#-----------------------------------------------------------------------------
+TESTING:
+
+To test your installation, a collection of example datasets and oplists is 
+available at the CIRL wiki:
+
+https://cirl.berkeley.edu/twiki/pub/BIC/ReconTools/testsuite.tar.bz2
+
+To use the testing util, type:
+
+tar jxf testsuite.tar.bz2
+cd testsuite
+./test.sh
+
