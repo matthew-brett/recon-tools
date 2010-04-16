@@ -1,6 +1,6 @@
 from __future__ import division
 
-from from.odict import odict
+from recon.odict import odict
 import struct
 import cStringIO
 import os
