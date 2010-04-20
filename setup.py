@@ -100,11 +100,6 @@ setup(
     'recon.visualization',],
 
   scripts=[
-    'scripts/dumpheader',
-    'scripts/getparam',
-    'scripts/fdf2img',
-    'scripts/viewimage',
-    'scripts/viewortho',
     'scripts/recon',
     'scripts/recon_gui'],
   
