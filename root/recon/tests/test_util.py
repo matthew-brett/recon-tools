@@ -107,8 +107,14 @@ class test_lin_regression(TestCase):
             for n in range(coef_shape[1]):
                 sl = [m,n]
                 sl.insert(len(gshape)+axis, slice(0,gshape[axis]))
-                sig = sigma if sigma is None else sigma[sl]
-                msk = mask if mask is None else mask[sl]
+                if sigma is None:
+                    sig = sigma
+                else:
+                    sig = sigma[sl]
+                if mask is None:
+                    msk = mask
+                else:
+                    msk = mask[sl]
                 (m1d[m,n],
                  b1d[m,n],
                  chi1d[m,n]) = ref_linear_regression(self.noisy_grad[sl],

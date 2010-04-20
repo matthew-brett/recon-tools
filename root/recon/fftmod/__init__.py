@@ -111,8 +111,8 @@ if sys.platform != 'win32':
     @loads_extension_on_call('fft_ext', locals())
     def _fftn(a, axes=(-1,), shift=1, inplace=0, fft_sign=-1):
         # integer-ize these parameters
-        shift = 1 if shift else 0
-        inplace = 1 if inplace else 0
+        shift = int(shift)
+        inplace = int(inplace)
 
         rank = len(a.shape)
         fname = '_fft_%s_%d'%(a.dtype.char, rank)
@@ -135,8 +135,11 @@ if sys.platform != 'win32':
 
 else:
     def _fftn(a, axes=(-1,), shift=1, inplace=0, fft_sign=-1):
-        fft_func = np.fft.fftn if fft_sign<0 else np.fft.ifftn
-        op_arr = a if inplace else a.copy()
+        fft_func = (fft_sign<0) and np.fft.fftn or np.fft.ifftn
+        if inplace:
+            op_arr = a
+        else:
+            op_arr = a.copy()
         if shift:
             for n, d in enumerate(a.shape):
                 updown = 1 - 2*(np.arange(d)%2)

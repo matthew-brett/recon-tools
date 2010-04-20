@@ -49,7 +49,7 @@ def checkerboard(rows, cols):
 ##     return np.fft.fftshift(b, axes=axes) if shift else b
 
 def reference_fftn(a, axes=(0,), shift=True):
-    dft_func = direct_dft_centered if shift else direct_dft
+    dft_func = shift and direct_dft_centered or direct_dft
     a_dft = a.copy()
     for ax in axes:
         b = np.rollaxis(a_dft, ax)
@@ -62,7 +62,7 @@ def reference_fftn(a, axes=(0,), shift=True):
 ##     return np.fft.fftshift(b, axes=axes) if shift else b
 
 def reference_ifftn(a, axes=(0,), shift=True):
-    dft_func = direct_idft_centered if shift else direct_idft
+    dft_func = shift and direct_idft_centered or direct_idft
     a_dft = a.copy()
     for ax in axes:
         b = np.rollaxis(a_dft, ax)
@@ -96,7 +96,7 @@ class TestFFT(np.testing.TestCase):
     def nrg_comp(self, a, b, err_msg=''):
         e = a.flat[:]-b.flat[:]
         # be a little lax with comparing different fft routines
-        d = 5 if e.dtype.char=='F' else 7
+        d = e.dtype.char=='F' and 5 or 7
         self.comp(np.dot(e,e.conj()).real, 0, err_msg=err_msg, decimal=d)
         
     @run_toggled_kwargs

@@ -161,7 +161,7 @@ def grappa_synthesize(Ssub, N, n2_sampling, weights=None,
     n1 = Ssub.shape[-1]
     # I guess Ssub.shape will always be (nc, nv, n2, n1) even if nv=1..
     # so this is not necessary
-    nv = Ssub.shape[1] if len(Ssub.shape) > 3 else 1
+    nv = len(Ssub.shape) > 3 and Ssub.shape[1] or 1
     n_harm, n_win, n_slides, n_ch, nblks = N.shape[:-1]
     if fixed_window:
         win_sz = n1/n_win
@@ -189,7 +189,7 @@ def grappa_synthesize(Ssub, N, n2_sampling, weights=None,
         #slides = -np.arange(-(nblks/2)+1, -(nblks/2)+1+nblks)
         slides = -np.arange(-((nblks+1)/2)+1, -((nblks+1)/2)+1+nblks)
     else:
-        slides = [0] if nblks>1 else [-1]
+        slides = nblks>1 and [0] or [-1]
 
     sys_slice = [slice(None)]*len(Ssub.shape)
     synth_slice = [slice(None)]*len(Ssub.shape)
@@ -289,7 +289,7 @@ def basic_grappa_1D(image, Nblk, sl=-1, regularize=False):
     Nu = len(syn_rows)
     Sacq = np.empty((Nv*Nu*Nx, Nblk*Nc), 'F')
 
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
 
     for s in sl_range:
         Dy_idx = tgt_rows[:,None] + blk_offsets
@@ -396,7 +396,7 @@ def basic_grappa_1D_prior(image, Nblk, sl=-1, lm=1e-2):
     L[:,slice(Nx*id_cols[0], Nx*(id_cols[-1]+1))] = np.diag(lm*np.ones(ncols))
     Pr = np.empty((npriors*Nx, Nc*(R-1)), 'F')
 
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
     for s in sl_range:
         Dy_idx = tgt_rows[:,None] + blk_offsets
         for r in range(R-1):
@@ -536,8 +536,7 @@ def grappa_segmented_x(image, Nblk, Nseg, sl=-1):
     syn_rows = np.arange(tgt_row0+1, acq_rowf, R)
     Nu = len(syn_rows)
     Sacq = np.empty((Nv*Nu*Nx, Nblk*Nc), 'F')
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
-
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
     for s in sl_range:
         for g in range(Nseg):
             Dy_idx = tgt_rows[:,None] + blk_offsets
@@ -632,7 +631,7 @@ def grappa_interpolated_x(image, Nblk, win_len, sl=-1):
 
     # the sparsely sampled coef array.. with buffer points at x=0 and x=N1
     W = np.zeros((Nseg+2, Nblk*Nc, (R-1)*Nc), 'F')
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
 
     for s in sl_range:
         for g in xrange(Nseg):
@@ -720,7 +719,7 @@ def grappa_smoothly_varying_x(image, Nblk, Ncx, sl=-1):
     syn_rows = np.arange(tgt_row0+1, acq_rowf, R)
     Nu = len(syn_rows)
     acq_pts = np.empty((Nx, Nv*Nu, Nc*Nblk), 'F')
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
 
     for s in sl_range:
         print 'slice:', s
@@ -887,7 +886,7 @@ for(m=0; m<(R-1); m++) {
   }
 }
 """
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
 
     for s in sl_range:
         print 'reconstructing slice', s
@@ -1053,7 +1052,8 @@ def ksp_calib_hybrid_synth(image, Ny_blk, Nx_blk, sl=-1):
     Sacq = np.empty((Nu*Nx*Nv, Nc*Ny_blk), 'F')
     Ssyn = np.empty((Nx, Nv*Nu, Nc*(R-1)), 'F')
 
-    sl_range = [sl] if sl>=0 else xrange(image.n_slice)
+    sl_range = sl>=0 and [sl] or xrange(image.n_slice)
+    
     W_list = []
     for s in sl_range:
         Dy_idx = tgt_rows[:,None] + yblk_offsets

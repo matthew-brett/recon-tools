@@ -30,7 +30,10 @@ def compose_xform(mat, view=True, square=True, prev_xform=None):
     if nd > 2 and not mat[2,2]:
         # want to change this to: if not mat.diagonal().any()
         raise ValueError("""Can't perform this transform\n"""+str(mat))
-    xpose = np.swapaxes if (view or not square) else square_xpose
+    if view or not square:
+        xpose = np.swapaxes
+    else:
+        xpose = square_xpose
     xform = prev_xform or (lambda x: x)
     if view:
         # a view only, don't mess with the memory

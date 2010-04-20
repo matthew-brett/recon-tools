@@ -14,14 +14,18 @@ class PlanarPhaseCorrection (Operation):
       )
     @ChannelIndependentOperation
     def run(self, image):
-        arrays = (image.data,
-                  image.acs_data if hasattr(image, 'acs_data') else None)
+        arrays = (image.data,)
+        refs = (image.ref_data,)
         samps = (image.n2_sampling, 
                  slice(None))
-        refs = (image.ref_data,
-                image.acs_ref_data if hasattr(image, 'acs_ref_data') else None)
+        if hasattr(image, 'acs_data'):
+            arrays += (image.acs_data,)
+            refs += (image.acs_ref_data,)
         a,b = grappa_sampling(image.shape[-2], int(image.accel), image.n_acs)
-        init_acs_dir = (-1.0) ** (a.tolist().index(b[0])) if len(b) else 1
+        if len(b):
+            init_acs_dir = (-1.0) ** (a.tolist().index(b[0]))
+        else:
+            init_acs_dir = 1
         polarities = (1.0, init_acs_dir)
         nr = image.n_ramp
         nf = image.n_flat

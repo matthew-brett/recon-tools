@@ -135,12 +135,18 @@ def sum_sqrs(S, axis=0):
     sshape = list(S.shape)
     s_slice = [slice(None)]*len(sshape)
     dim_len = sshape.pop(axis)
-    ssq = np.zeros(sshape, 'd') if sshape else np.zeros((1,), 'd')
+    if sshape:
+        ssq = np.zeros(sshape, 'd')
+    else:
+        ssq = np.zeros((1,), 'd')
     for c in range(dim_len):
         s_slice[axis] = c
         ssq += (S[s_slice].real**2 + S[s_slice].imag**2)
     np.sqrt(ssq, ssq)
-    ssq.shape = () if not sshape else sshape
+    if sshape:
+        ssq.shape = sshape
+    else:
+        ssq.shape = ()
     return ssq
 
 def find_weighting(errs):
@@ -208,7 +214,7 @@ def sparsify_epi_data(S, a=2, acs_rep=1):
     sub_samp = [slice(None)] * len(S.shape)
     sub_samp[-2] = slice(sub_lines[0], sub_lines[-1]+1, a)
     Ssub[sub_samp] = S[sub_samp]
-    acs_start = acs_lines[0] if acs_lines[0] in sub_lines else acs_lines[0]-1
+    acs_start = acs_lines[0] in sub_lines and acs_lines[0] or acs_lines[0]-1
     sub_samp[-2] = slice(acs_start, acs_lines[-1]+1, 1)
     Sacs[:] = S[sub_samp]
     return Ssub, Sacs
@@ -239,7 +245,7 @@ def smash_coefs(Ssub, a=2, acs_rep=1, cols=[], n1_window=None):
             n_win = n1 - win_sz + 1
         else:
             assert type(n1_window)==type(1), "n1_window argument not understood: "+str(n1_window)
-            win_sz = min(n1, n1_window) if n1_window>0 else 1
+            win_sz = n1_window>0 and min(n1, n1_window) or 1
             n_win = n1 - win_sz + 1
     else:
         # choose all read-out points
@@ -343,7 +349,7 @@ def grappa_coefs_noblocks(acs_blk, a=2, acs_rep=1, n1_window=None,
             n_win = n1 - win_sz + 1
         else:
             assert type(n1_window)==type(1), "n1_window argument not understood: "+str(n1_window)
-            win_sz = min(n1, n1_window) if n1_window>0 else 1
+            win_sz = n1_window>0 and min(n1, n1_window) or 1
             n_win = n1 - win_sz + 1
     else:
         # choose all read-out points

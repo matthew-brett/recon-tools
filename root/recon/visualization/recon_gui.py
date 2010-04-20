@@ -379,8 +379,10 @@ class recon_gui (gtk.Window):
             self.plotter.externalUpdate(self.image)
 
     def append_op_to_list(self, opname, params=None, after_row=None):
-        row = self.ops_store.insert_after(None, after_row) \
-              if after_row else self.ops_store.append(None)
+        if after_row:
+            row = self.ops_store.insert_after(None, after_row)
+        else:
+            row = self.ops_store.append(None)
         self.ops_store.set(row, 0, opname, 1, False)
         if params:
             for item, val in params.items():

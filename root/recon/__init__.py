@@ -47,7 +47,10 @@ def find_extensions(build=False):
         for fnm in fnames:
             if fnm.endswith('.py'):
                 pth = dirname.split(base_path)[1]
-                mod = fnm[:-3] if fnm != '__init__.py' else ''
+                if fnm != '__init__.py':
+                    mod = fnm[:-3]
+                else:
+                    mod = ''
                 modstr = 'recon'+pth.replace(path.sep,'.')
                 if mod:
                     modstr += '.'+mod

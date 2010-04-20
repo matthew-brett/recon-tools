@@ -374,8 +374,7 @@ def lin_regression(y, x=None, sigma=None, mask=None, axis=-1):
     else:
         has_mask = 1
 
-    [x, sigma, mask] = [a if a.dtype==yt else a.astype(yt)
-                        for a in [x, sigma, mask]]
+    [x, sigma, mask] = [a.astype(yt) for a in [x, sigma, mask]]
     
     ax_len = yshape.pop(caxis)
     m = np.zeros(yshape, np.float64)
@@ -402,7 +401,8 @@ def medfit(y, x=None):
     if npt < 2:
         print "impossible to solve"
         return (0.,0.,1e30)
-    x = x if x is not None else np.arange(npt)
+    if x is None:
+        x = np.arange(npt)
     (mm,b1,chisq) = lin_regression(y, x=x)
     mm = mm[0]
     b1 = b1[0]
@@ -974,11 +974,17 @@ def regularized_solve(A, b, l):
     x = (A' + l**2*I)^-1 * (A'b), where A' is the Hermitian transpose of A
     """
     cplx = A.dtype.char in ['F', 'D']
-    A2 = np.dot(A.conjugate().T, A) if cplx else np.dot(A.T, A)
+    if cplx:
+        A2 = np.dot(A.conjugate().T, A)
+    else:
+        A2 = np.dot(A.T, A)
     n = A2.shape[0]
     l = l*l
     A2.flat[0:n*n:n+1] += l
-    b2 = np.dot(A.conjugate().T, b) if cplx else np.dot(A.T, b)
+    if cplx:
+        b2 = np.dot(A.conjugate().T, b)
+    else:
+        b2 = np.dot(A.T, b)
     return np.linalg.solve(A2,b2)
 
     
@@ -1231,7 +1237,10 @@ def regularized_inverse(A, lm):
     cplx = A.dtype.char in ['F', 'D']
     # Ah is NxM 
     Ah = np.empty((n,m), A.dtype)
-    Ah[:] = A.conjugate().T if cplx else A.T
+    if cplx:
+        Ah[:] = A.conjugate().T
+    else:
+        Ah[:] = A.T
 
     # A2 is NxN
     A2 = np.dot(Ah,A)
@@ -1242,11 +1251,14 @@ def regularized_inverse(A, lm):
 
     # A viewed as column major is considered to be NxNRHS (NxM)...
     # the solution will be NxNRHS too, and is stored in A
-    solver = lapack_lite.zgesv if cplx else lapack_lite.dgesv
+    solver = lapack_lite.zgesv and cplx or lapack_lite.dgesv
     results = solver(n, m, A2, n, pivots, A, n, 0)
     
     # put conjugate solution into row-major (MxN) by hermitian transpose
-    Ah[:] = A.conjugate().T if cplx else A.T
+    if cplx:
+        Ah[:] = A.conjugate().T
+    else:
+        Ah[:] = A.T
     return Ah
 
 def regularized_inverse_smooth(A, lm):
@@ -1254,7 +1266,10 @@ def regularized_inverse_smooth(A, lm):
     m,n = A.shape
     cplx = A.dtype.char in ['F', 'D']
     Ah = np.empty((n,m), A.dtype)
-    Ah[:] = A.conjugate().T if cplx else A.T
+    if cplx:
+        Ah[:] = A.conjugate().T
+    else:
+        Ah[:] = A.T
 
     # B is a forward differencing operator
     B = np.zeros((n-1,n))
@@ -1267,10 +1282,13 @@ def regularized_inverse_smooth(A, lm):
 
     pivots = np.zeros(n, np.intc)
 
-    solver = lapack_lite.zgesv if cplx else lapack_lite.dgesv
+    solver = lapack_lite.zgesv and cplx or lapack_lite.dgesv    
     results = solver(n, m, A2, n, pivots, A, n, 0)
 
-    Ah[:] = A.conjugate().T if cplx else A.T
+    if cplx:
+        Ah[:] = A.conjugate().T
+    else:
+        Ah[:] = A.T
     return Ah
     
 #-----------------------------------------------------------------------------

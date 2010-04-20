@@ -312,7 +312,10 @@ class ReconImage (object):
         (self.x0, self.y0, self.z0) = r0_prime
         if self.shape[-1] != self.shape[-2]:
             func = compose_xform(Tvx, view=False, square=False)
-            new_shape = (self.tdim,) if self.tdim else ()
+            if self.tdim:
+                new_shape = (self.tdim,)
+            else:
+                new_shape = ()
             new_shape += tuple(np.dot(Tvx_abs, self.shape[::-1]).astype('i'))[::-1]
             temp = func(self[:])
             self.resize(new_shape)

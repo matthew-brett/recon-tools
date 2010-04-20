@@ -8,7 +8,7 @@ def nearest_simple_transform(M):
     rotations and axis reflections.
     """
     # if det(M) < 0, then M has some reflections going on (which is still fine)
-    tag = -1 if np.linalg.det(M) < 0 else 1
+    tag = np.linalg.det(M) < 0 and -1 or 1
     M[:,2] *= tag
     (theta, psi, phi) = decompose_rot(M)
     angs = np.array([theta, psi, phi])

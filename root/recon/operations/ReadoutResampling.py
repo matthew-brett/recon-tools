@@ -68,7 +68,7 @@ class ReadoutResampling(Operation):
                 for s in xrange(image.n_slice):
                     r = image.cref_data[c,v,s].copy()
                     # polarity is -1 if the first ref was on a neg gradient
-                    polarity = -1 if ref_rev[0]==0 else +1
+                    polarity = ref_rev[0]==0 and -1 or +1
                     m = sm_utils.simple_unbal_phase_ramp(r, nr, nf, polarity,
                                                          self.fov_lim,
                                                          self.mask_noise)
@@ -131,7 +131,7 @@ class ReadoutResampling(Operation):
 
 
                         rd = image.cacs_ref_data[c,r,s,g*n_refs:(g+1)*n_refs].copy()
-                        polarity = -1 if acs_ref_rev[g,0]==0 else +1
+                        polarity = acs_ref_rev[g,0]==0 and -1 or +1
                         m = sm_utils.simple_unbal_phase_ramp(rd, nr, nf,
                                                              polarity,
                                                              self.fov_lim,

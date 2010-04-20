@@ -206,7 +206,7 @@ class SiemensImage(ScannerImage):
 
     def _load_data(self, use_mmap, vrange, loud=True):            
 
-        array_creator = TempMemmapArray if use_mmap else np.empty
+        array_creator = use_mmap and TempMemmapArray or np.empty
         ref_sampling = []
         ref_rev = []
 
@@ -307,8 +307,10 @@ class SiemensImage(ScannerImage):
         n_pe_ref = len(ref_sampling)
 
         data = array_creator((n_chan, n_vol, n_slice, self.n_pe, N1), 'F')
-        ref = array_creator((n_chan, n_vol, n_slice, n_pe_ref, N1), 'F') \
-              if n_pe_ref else None
+        if n_pe_ref:
+            ref = array_creator((n_chan, n_vol, n_slice, n_pe_ref, N1), 'F')
+        else:
+            ref = None
 
         if acs_sampling:
             n_acs = int(self.n_acs)
