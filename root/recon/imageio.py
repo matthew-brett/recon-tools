@@ -269,7 +269,9 @@ class ReconImage (object):
         Tr = self.orientation_xform.tomatrix()
         Tvx = np.linalg.solve(new_mapping, Tr)
         Tvxp = nearest_simple_transform(Tvx)
-        if not np.allclose(Tvxp, Tvx):
+        # allow a goodly amount of wiggle room for each element of the
+        # rotation matrix
+        if not np.allclose(Tvxp, Tvx, atol=1e-4):
             # Tvxp might be a good choice in this case.. so could suggest
             # Tnew'*Tvxp = Tr
             # (Tvxp^T * Tnew'^T) = Tr^T
@@ -286,6 +288,10 @@ class ReconImage (object):
                 """\nbut lying about the final mapping."""
                 #new_mapping = Tnew_suggest
                 Tvx = Tvxp
+        else:
+            # if Tvx is adequately close to its trimmed version,
+            # let's go ahead and use the simple transform
+            Tvx = Tvxp
         if not Tvx[-1,-1]:
             raise ValueError("This operation only makes in-plane rotations. "\
                              "EG you cannot use the sagittal transform for "\

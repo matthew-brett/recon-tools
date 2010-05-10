@@ -44,10 +44,10 @@ class RotPlane (Operation):
             self.log("no xform available for %s"%self.orient_target)
             return
         if self.orient_target == "recon_epi":
-            # always swap -x to +y, and -y to +x
+            # always swap -x to +y, and -y to +x, and reflect in z
             Ts = np.array([[ 0.,-1., 0.],
                            [-1., 0., 0.],
-                           [ 0., 0., 1.],])
+                           [ 0., 0.,-1.],])
             dest_xform = np.dot(image.orientation_xform.tomatrix(),
                                 np.linalg.inv(Ts))
         else:

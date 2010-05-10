@@ -285,13 +285,16 @@ class ProcParImageMixin (object):
     def acq_order(self):
         "the mapping of acquisition sequence to physical slice ordering"
         # +z in terms of the INFERIOR/SUPERIOR axis actually maps to
-        # -z in the Varian scanner -- so, goal is to find where
-        # slice_positions{i} occur in a monotonically decreasing set
+        # -z in the Varian scanner
+        # BUT, do not correct this here, nor in ReorderSlices.
+        # Let this be taken care of at the user's specification,
+        # eg in RotPlane
+
         if self.ismpflash_like:
             return np.arange(self.n_slice)
         else:
             pss = self.slice_positions.copy()
-            pss.sort()
+            pss.sort() # this goes from low z to high z
             acq_order = [(pss==p).nonzero()[0][0]
                          for p in self.slice_positions]
             return np.asarray(acq_order)
